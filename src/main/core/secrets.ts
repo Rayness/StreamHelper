@@ -12,10 +12,22 @@ export interface OAuthToken {
   login?: string;
 }
 
+/** Kawaki refresh tokens rotate: every refresh returns a new pair and burns the old one. */
+export interface KawakiSession {
+  accessToken: string;
+  accessExpiresAt: number;
+  refreshToken: string;
+  refreshExpiresAt: number;
+  userId: string;
+  username: string;
+  avatarUrl?: string;
+}
+
 export interface SecretsData {
   twitch?: OAuthToken;
   twitchBot?: OAuthToken;
   donationalerts?: OAuthToken;
+  kawaki?: KawakiSession;
   streamlabsSocketToken?: string;
   obsPassword?: string;
 }

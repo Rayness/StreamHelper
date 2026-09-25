@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import { init, useApp } from './store';
 import './styles.css';
+import './features.css';
 
 function Root() {
   const ready = useApp((d) => d.ready);

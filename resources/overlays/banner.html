@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>StreamHelper — Banner</title>
+    <style>
+      :root {
+        --text: #fff;
+        --bg: rgba(12, 12, 18, 0.78);
+        --accent: #9b6bff;
+        --size: 28px;
+      }
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        background: transparent;
+      }
+      #root {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        padding: 12px;
+        box-sizing: border-box;
+        color: var(--text);
+        font-size: var(--size);
+      }
+      #root.align-left {
+        justify-content: flex-start;
+      }
+      #root.align-center {
+        justify-content: center;
+      }
+      #root.align-right {
+        justify-content: flex-end;
+      }
+
+      /* ---- shared show / hide ---- */
+      .banner {
+        opacity: 0;
+        transform: translateY(24px);
+        transition:
+          opacity 0.45s cubic-bezier(0.22, 1, 0.36, 1),
+          transform 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      .banner.shown {
+        opacity: 1;
+        transform: none;
+      }
+
+      /* ---- card ---- */
+      .card {
+        display: flex;
+        align-items: center;
+        gap: 0.6em;
+        max-width: 100%;
+        padding: 0.55em 0.9em;
+        border-radius: 0.55em;
+        background: var(--bg);
+        box-shadow:
+          0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent),
+          0 10px 30px rgba(0, 0, 0, 0.35);
+        font-weight: 700;
+        line-height: 1.25;
+      }
+      .card .dot {
+        flex: none;
+        width: 0.42em;
+        height: 0.42em;
+        border-radius: 50%;
+        background: var(--accent);
+        box-shadow: 0 0 0.6em var(--accent);
+      }
+      .slides {
+        position: relative;
+        display: grid;
+      }
+      .slide {
+        grid-area: 1 / 1;
+        display: flex;
+        align-items: center;
+        gap: 0.5em;
+        opacity: 0;
+        transform: translateY(0.6em);
+        transition:
+          opacity 0.4s ease,
+          transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+        text-shadow: 0 2px 4px rgba(0, 0, 0, 0.45);
+        overflow-wrap: anywhere;
+      }
+      .slide.active {
+        opacity: 1;
+        transform: none;
+      }
+      .slide.leaving {
+        opacity: 0;
+        transform: translateY(-0.6em);
+      }
+      .slide img {
+        height: 1.6em;
+        width: auto;
+        border-radius: 0.2em;
+      }
+
+      /* ---- lower third ---- */
+      .lower {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.2em;
+        max-width: 100%;
+      }
+      .lower .tag {
+        font-size: 0.55em;
+        font-weight: 800;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        padding: 0.3em 0.8em;
+        border-radius: 0.3em 0.3em 0.3em 0;
+        background: var(--accent);
+        color: #fff;
+      }
+      .lower .body {
+        padding: 0.45em 0.9em;
+        border-radius: 0 0.4em 0.4em 0.4em;
+        background: var(--bg);
+        font-weight: 700;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+      }
+
+      /* ---- ticker ---- */
+      .ticker {
+        width: 100%;
+        height: 1.9em;
+        display: flex;
+        align-items: center;
+        overflow: hidden;
+        background: var(--bg);
+        border-radius: 0.35em;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+        font-weight: 700;
+        white-space: nowrap;
+        -webkit-mask-image: linear-gradient(90deg, transparent, #000 4%, #000 96%, transparent);
+        mask-image: linear-gradient(90deg, transparent, #000 4%, #000 96%, transparent);
+      }
+      .track {
+        display: inline-flex;
+        will-change: transform;
+      }
+      @keyframes ticker {
+        to {
+          transform: translateX(var(--shift));
+        }
+      }
+      .item {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45em;
+        padding-right: 1.4em;
+      }
+      .item::after {
+        content: '';
+        width: 0.35em;
+        height: 0.35em;
+        margin-left: 1em;
+        transform: rotate(45deg);
+        background: var(--accent);
+      }
+      .item img {
+        height: 1.3em;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script src="/overlay/assets/common.js"></script>
+    <script>
+      const root = document.getElementById('root');
+      let banner = null;
+      let layoutKey = '';
+      let slideIndex = 0;
+      let slideTimer = null;
+
+      function slideNode(s, cls) {
+        const node = SH.el('div', cls);
+        if (s.image) {
+          const img = document.createElement('img');
+          img.src = s.image;
+          node.appendChild(img);
+        }
+        if (s.text) node.appendChild(SH.el('span', '', s.text));
+        return node;
+      }
+
+      function build() {
+        clearInterval(slideTimer);
+        root.innerHTML = '';
+        if (!banner) return;
+        let box;
+        let track = null;
+        if (banner.layout === 'ticker') {
+          box = SH.el('div', 'banner ticker');
+          track = SH.el('div', 'track');
+          box.appendChild(track);
+        } else if (banner.layout === 'lowerThird') {
+          box = SH.el('div', 'banner lower');
+          box.appendChild(SH.el('div', 'tag', banner.name));
+          const body = SH.el('div', 'body slides');
+          box.appendChild(body);
+          fillSlides(body);
+        } else {
+          box = SH.el('div', 'banner card');
+          box.appendChild(SH.el('span', 'dot'));
+          const body = SH.el('div', 'slides');
+          box.appendChild(body);
+          fillSlides(body);
+        }
+        root.appendChild(box);
+        // The ticker is measured, so it can only be filled once it's in the document.
+        if (track) fillTicker(track);
+        requestAnimationFrame(() => box.classList.toggle('shown', banner.shown));
+      }
+
+      function fillSlides(body) {
+        body.innerHTML = '';
+        banner.slides.forEach((s, i) => body.appendChild(slideNode(s, 'slide' + (i === slideIndex % banner.slides.length ? ' active' : ''))));
+        if (banner.slides.length > 1) {
+          slideTimer = setInterval(() => {
+            const nodes = body.children;
+            const cur = nodes[slideIndex % nodes.length];
+            slideIndex = (slideIndex + 1) % nodes.length;
+            const next = nodes[slideIndex];
+            cur.classList.remove('active');
+            cur.classList.add('leaving');
+            setTimeout(() => cur.classList.remove('leaving'), 500);
+            next.classList.add('active');
+          }, Math.max(2, banner.intervalSec) * 1000);
+        }
+      }
+
+      function fillTicker(track) {
+        track.innerHTML = '';
+        const make = () => banner.slides.forEach((s) => track.appendChild(slideNode(s, 'item')));
+        make();
+        // Repeat the content until it is at least twice the visible width, so the loop is seamless.
+        const viewport = root.clientWidth || 1920;
+        let guard = 0;
+        while (track.scrollWidth < viewport * 2 && guard++ < 20 && banner.slides.length) make();
+        // A CSS animation runs on the compositor: far cheaper for OBS than moving it from JS every frame.
+        // The content is doubled, so shifting by half of it loops seamlessly.
+        const half = track.scrollWidth / 2;
+        track.style.setProperty('--shift', `-${half}px`);
+        if (!SH.reducedMotion && half > 0) track.style.animation = `ticker ${half / Math.max(10, banner.tickerSpeed)}s linear infinite`;
+      }
+
+      function applyStyle() {
+        SH.useFont(root, banner.fontFamily);
+        root.style.setProperty('--size', banner.fontSize + 'px');
+        root.style.setProperty('--text', banner.textColor);
+        root.style.setProperty('--bg', banner.background);
+        root.style.setProperty('--accent', banner.accentColor);
+        root.className = 'align-' + (banner.layout === 'ticker' ? 'left' : banner.align);
+      }
+
+      SH.connect('banner', (msg) => {
+        if (msg.type !== 'banner') return;
+        const prev = banner;
+        banner = msg.banner;
+        if (!banner) return build();
+        // The in-app preview always shows the banner, even while it's switched off on stream.
+        if (SH.preview) banner.shown = true;
+        applyStyle();
+        // Rebuild only when the content or layout changed; a pure show/hide just animates.
+        const key = JSON.stringify([banner.layout, banner.slides, banner.name, banner.intervalSec]);
+        if (key !== layoutKey || !root.firstChild) {
+          layoutKey = key;
+          build();
+        } else if (prev && prev.shown !== banner.shown) {
+          root.firstChild.classList.toggle('shown', banner.shown);
+        }
+      });
+    </script>
+  </body>
+</html>

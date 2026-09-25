@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>StreamHelper — Giveaway</title>
+    <style>
+      :root {
+        --accent: #ffb547;
+      }
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: transparent;
+        overflow: hidden;
+      }
+      #g {
+        position: absolute;
+        inset: 10px;
+        display: grid;
+        place-items: center;
+        color: #fff;
+        text-align: center;
+      }
+      .card {
+        min-width: 60%;
+        max-width: 100%;
+        padding: 22px 30px 24px;
+        border-radius: 18px;
+        background: rgba(12, 12, 18, 0.84);
+        box-shadow:
+          0 0 0 2px color-mix(in srgb, var(--accent) 60%, transparent),
+          0 18px 44px rgba(0, 0, 0, 0.45);
+        opacity: 0;
+        transform: translateY(24px) scale(0.97);
+        transition:
+          opacity 0.4s ease,
+          transform 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      .card.on {
+        opacity: 1;
+        transform: none;
+      }
+      .title {
+        font-size: 20px;
+        font-weight: 800;
+        letter-spacing: 0.04em;
+        color: var(--accent);
+      }
+      .main {
+        margin-top: 8px;
+        font-size: 34px;
+        font-weight: 900;
+        line-height: 1.15;
+        overflow-wrap: anywhere;
+      }
+      .main .kw {
+        color: var(--accent);
+      }
+      .sub {
+        margin-top: 8px;
+        font-size: 18px;
+        font-weight: 600;
+        opacity: 0.8;
+      }
+      .slot {
+        height: 1.3em;
+        overflow: hidden;
+        font-size: 44px;
+        font-weight: 900;
+        margin-top: 10px;
+      }
+      .slot div {
+        height: 1.3em;
+        line-height: 1.3em;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .winner {
+        font-size: 52px;
+        color: var(--accent);
+        text-shadow: 0 0 24px color-mix(in srgb, var(--accent) 60%, transparent);
+        animation: pop 0.7s cubic-bezier(0.22, 1.4, 0.36, 1);
+      }
+      @keyframes pop {
+        from {
+          transform: scale(0.4);
+          opacity: 0;
+        }
+      }
+      .confetti {
+        position: fixed;
+        top: -20px;
+        width: 10px;
+        height: 16px;
+        border-radius: 2px;
+        pointer-events: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="g"><div class="card"></div></div>
+    <script src="/overlay/assets/common.js"></script>
+    <script>
+      const card = document.querySelector('.card');
+      let lastStatus = null;
+      let rolling = null;
+
+      function confetti(color) {
+        if (SH.reducedMotion) return;
+        const colors = [color, '#ffffff', '#ff5d8f', '#3fa7ff', '#37d399'];
+        for (let i = 0; i < 90; i++) {
+          const c = SH.el('div', 'confetti');
+          c.style.left = Math.random() * 100 + 'vw';
+          c.style.background = colors[i % colors.length];
+          document.body.appendChild(c);
+          const dx = (Math.random() - 0.5) * 300;
+          c.animate(
+            [
+              { transform: 'translate(0,0) rotate(0deg)' },
+              { transform: `translate(${dx}px, ${innerHeight + 40}px) rotate(${Math.random() * 720}deg)` },
+            ],
+            { duration: 2200 + Math.random() * 1800, delay: Math.random() * 400, easing: 'cubic-bezier(0.25, 0.4, 0.6, 1)', fill: 'both' },
+          ).onfinish = () => c.remove();
+        }
+      }
+
+      /** Slot machine: names flick by, slowing down, and stop on the winner. */
+      function roll(names, winner) {
+        const slot = SH.el('div', 'slot');
+        const line = SH.el('div', '', names[0] || '…');
+        slot.appendChild(line);
+        card.appendChild(slot);
+        const start = performance.now();
+        const total = 4300;
+        let next = 0;
+        const step = (now) => {
+          const t = (now - start) / total;
+          if (t >= 1) return;
+          if (now >= next) {
+            line.textContent = names[Math.floor(Math.random() * names.length)];
+            // 50ms between names at the start, ~400ms at the end.
+            next = now + 50 + 350 * t * t;
+          }
+          rolling = requestAnimationFrame(step);
+        };
+        rolling = requestAnimationFrame(step);
+      }
+
+      SH.connect('giveaway', (msg) => {
+        if (msg.type !== 'giveaway') return;
+        const { style, lang } = msg;
+        const state = msg.state.status === 'idle' && SH.preview ? { status: 'open', count: 12, names: [], winner: null } : msg.state;
+        SH.useFont(card, style.fontFamily);
+        card.style.setProperty('--accent', style.accentColor);
+        document.documentElement.style.setProperty('--accent', style.accentColor);
+        const statusChanged = state.status !== lastStatus;
+        lastStatus = state.status;
+        card.classList.toggle('on', state.status !== 'idle');
+        if (state.status === 'idle') return;
+        if (!statusChanged && state.status === 'rolling') return;
+        cancelAnimationFrame(rolling);
+        card.innerHTML = '';
+        card.appendChild(SH.el('div', 'title', style.title));
+        const entrants = `${state.count} ${SH.tr(lang, SH.plural(state.count, 'участник', 'участника', 'участников'), state.count === 1 ? 'entrant' : 'entrants')}`;
+        if (state.status === 'open') {
+          const main = SH.el('div', 'main');
+          main.append(SH.tr(lang, 'Пишите ', 'Type '), SH.el('span', 'kw', style.keyword), SH.tr(lang, ' в чат', ' in chat'));
+          card.append(main, SH.el('div', 'sub', entrants));
+        } else if (state.status === 'closed') {
+          card.append(SH.el('div', 'main', SH.tr(lang, 'Приём заявок закрыт', 'Entries closed')), SH.el('div', 'sub', entrants));
+        } else if (state.status === 'rolling') {
+          card.appendChild(SH.el('div', 'sub', SH.tr(lang, 'Выбираем победителя…', 'Picking a winner…')));
+          roll(state.names, state.winner);
+        } else if (state.status === 'done') {
+          card.append(SH.el('div', 'sub', SH.tr(lang, 'Победитель', 'Winner')), SH.el('div', 'main winner', state.winner || ''));
+          if (statusChanged) confetti(style.accentColor);
+        }
+      });
+    </script>
+  </body>
+</html>

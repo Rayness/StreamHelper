@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>StreamHelper — Label</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        background: transparent;
+        overflow: hidden;
+      }
+      #label {
+        padding: 6px 10px;
+        font-weight: 700;
+        line-height: 1.2;
+        white-space: nowrap;
+        text-shadow:
+          0 2px 4px rgba(0, 0, 0, 0.75),
+          0 0 12px rgba(0, 0, 0, 0.35);
+      }
+      #label span {
+        display: inline-block;
+      }
+      .swap {
+        animation: swap 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      @keyframes swap {
+        from {
+          opacity: 0;
+          transform: translateY(0.5em);
+          filter: blur(3px);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="label"><span></span></div>
+    <script src="/overlay/assets/common.js"></script>
+    <script>
+      const root = document.getElementById('label');
+      const span = root.firstChild;
+      SH.connect('label', (msg) => {
+        if (msg.type !== 'label') return;
+        const l = msg.label;
+        if (!l) return (span.textContent = '');
+        SH.useFont(root, l.fontFamily);
+        root.style.fontSize = l.fontSize + 'px';
+        root.style.color = l.textColor;
+        root.style.textAlign = l.align;
+        if (span.textContent !== l.text) {
+          const first = span.textContent === '';
+          span.textContent = l.text;
+          if (!first && !SH.reducedMotion) {
+            span.classList.remove('swap');
+            void span.offsetWidth;
+            span.classList.add('swap');
+          }
+        }
+      });
+    </script>
+  </body>
+</html>

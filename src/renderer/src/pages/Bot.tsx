@@ -3,9 +3,10 @@ import { uid } from '@shared/defaults';
 import { ALERT_TYPES, type BotCommand, type BotSettings, type BotTimer, type ModAction, type ModFilter, type Permission } from '@shared/types';
 import { Button, Card, Empty, Field, IconButton, LinesInput, NumberInput, PageHeader, Select, Tabs, TextArea, TextInput, Toggle } from '../components/ui';
 import { useT, type TFn } from '../i18n';
-import { saveSettings, useApp } from '../store';
+import { saveSettings, useApp, useSub } from '../store';
 
 type Tab = 'commands' | 'builtins' | 'timers' | 'counters' | 'moderation' | 'events';
+const TABS: Tab[] = ['commands', 'builtins', 'timers', 'counters', 'moderation', 'events'];
 const PERMISSIONS: Permission[] = ['everyone', 'subscriber', 'vip', 'moderator', 'broadcaster'];
 
 const permOptions = (t: TFn) => PERMISSIONS.map((p) => ({ value: p, label: t(`perm.${p}`) }));
@@ -13,7 +14,7 @@ const permOptions = (t: TFn) => PERMISSIONS.map((p) => ({ value: p, label: t(`pe
 export function Bot() {
   const t = useT();
   const bot = useApp((d) => d.settings!.bot);
-  const [tab, setTab] = useState<Tab>('commands');
+  const [tab, setTab] = useSub<Tab>('bot', 'commands', TABS);
   const save = (patch: Partial<BotSettings>) => saveSettings('bot', { ...bot, ...patch });
   return (
     <div className="page">

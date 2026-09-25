@@ -91,6 +91,61 @@ export function saveSettings<K extends SettingsKey>(key: K, value: Settings[K]):
   void call('settings:set', key, value).finally(() => pendingSaves--);
 }
 
+// ---------- navigation ----------
+
+export type Page = 'dashboard' | 'interactive' | 'alerts' | 'overlays' | 'bot' | 'obs' | 'kawaki' | 'connections' | 'settings';
+
+interface NavState {
+  page: Page;
+  /** Last open tab / item per page, so coming back lands where you left. */
+  sub: Partial<Record<Page, string>>;
+}
+
+function readNav(): NavState {
+  try {
+    const raw = JSON.parse(localStorage.getItem('nav') ?? 'null');
+    if (raw && typeof raw.page === 'string') return { page: raw.page, sub: raw.sub ?? {} };
+  } catch {
+    /* private mode, corrupted value */
+  }
+  return { page: 'dashboard', sub: {} };
+}
+
+let nav: NavState = readNav();
+const navListeners = new Set<() => void>();
+
+function setNav(next: NavState): void {
+  nav = next;
+  try {
+    localStorage.setItem('nav', JSON.stringify(nav));
+  } catch {
+    /* ignore */
+  }
+  navListeners.forEach((l) => l());
+}
+
+export function navigate(page: Page, sub?: string): void {
+  setNav({ page, sub: sub === undefined ? nav.sub : { ...nav.sub, [page]: sub } });
+}
+
+export function useNav(): NavState {
+  return useSyncExternalStore(
+    (l) => {
+      navListeners.add(l);
+      return () => navListeners.delete(l);
+    },
+    () => nav,
+  );
+}
+
+/** A page's remembered tab. Unknown stored values fall back to `fallback`. */
+export function useSub<T extends string>(page: Page, fallback: T, allowed?: readonly T[]): [T, (v: T) => void] {
+  const n = useNav();
+  const raw = n.sub[page] as T | undefined;
+  const value = raw && (!allowed || allowed.includes(raw)) ? raw : fallback;
+  return [value, (v: T) => setNav({ ...nav, sub: { ...nav.sub, [page]: v } })];
+}
+
 export async function init(): Promise<void> {
   window.api.on('state', (state) => set({ state }));
   window.api.on('settings', (settings) => {

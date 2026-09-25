@@ -102,6 +102,9 @@ const STEP_TYPES: ActionStep['type'][] = [
   'timerToggle',
   'timerAdd',
   'goalAdd',
+  'wheelSpin',
+  'bannerToggle',
+  'emoteBurst',
   'wait',
 ];
 
@@ -128,6 +131,10 @@ function newStep(type: ActionStep['type']): ActionStep {
       return { type, goalId: '', amount: 1 };
     case 'wait':
       return { type, ms: 1000 };
+    case 'wheelSpin':
+      return { type, wheelId: '' };
+    case 'bannerToggle':
+      return { type, bannerId: '' };
     default:
       return { type } as ActionStep;
   }
@@ -138,6 +145,8 @@ function StepEditor({ step, onChange, t }: { step: ActionStep; onChange: (s: Act
   const timers = useApp((d) => d.settings!.timers);
   const goals = useApp((d) => d.settings!.goals);
   const counters = useApp((d) => d.settings!.bot.counters);
+  const wheels = useApp((d) => d.settings!.wheels);
+  const banners = useApp((d) => d.settings!.banners);
   const withCurrent = (list: string[], v: string) => (v && !list.includes(v) ? [v, ...list] : list);
   const opts = (list: string[], v: string, placeholder: string) => [{ value: '', label: placeholder }, ...withCurrent(list, v).map((x) => ({ value: x, label: x }))];
   const modes = (['toggle', 'start', 'stop'] as const).map((m) => ({ value: m, label: t(`stepMode.${m}`) }));
@@ -187,6 +196,14 @@ function StepEditor({ step, onChange, t }: { step: ActionStep; onChange: (s: Act
       );
     case 'wait':
       return <NumberInput value={step.ms} min={0} max={60000} step={100} onChange={(ms) => onChange({ ...step, ms })} />;
+    case 'wheelSpin':
+      return (
+        <Select value={step.wheelId} onChange={(wheelId) => onChange({ ...step, wheelId })} options={[{ value: '', label: t('step.pickWheel') }, ...wheels.map((w) => ({ value: w.id, label: w.name }))]} />
+      );
+    case 'bannerToggle':
+      return (
+        <Select value={step.bannerId} onChange={(bannerId) => onChange({ ...step, bannerId })} options={[{ value: '', label: t('step.pickBanner') }, ...banners.map((b) => ({ value: b.id, label: b.name }))]} />
+      );
     default:
       return null;
   }
@@ -243,6 +260,9 @@ function Actions() {
               </Field>
               <Field label={t('actions.onDashboard')}>
                 <Toggle checked={a.showOnDashboard} onChange={(showOnDashboard) => update(a.id, { showOnDashboard })} />
+              </Field>
+              <Field label={t('actions.redemption')} hint={t('actions.redemptionHint')} wide>
+                <TextInput value={a.redemptionTitle ?? ''} onChange={(redemptionTitle) => update(a.id, { redemptionTitle })} placeholder={t('actions.redemptionPh')} />
               </Field>
             </div>
             <h4 className="sub-head">{t('actions.steps')}</h4>

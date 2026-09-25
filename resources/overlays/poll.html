@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>StreamHelper — Poll</title>
+    <style>
+      :root {
+        --bar: #9b6bff;
+        --text: #fff;
+      }
+      html,
+      body {
+        margin: 0;
+        background: transparent;
+        overflow: hidden;
+      }
+      #poll {
+        margin: 10px;
+        padding: 18px 20px 20px;
+        border-radius: 16px;
+        background: rgba(12, 12, 18, 0.82);
+        box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4);
+        color: var(--text);
+        opacity: 0;
+        transform: translateY(20px) scale(0.98);
+        transition:
+          opacity 0.4s ease,
+          transform 0.55s cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      #poll.on {
+        opacity: 1;
+        transform: none;
+      }
+      .head {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 14px;
+      }
+      .q {
+        flex: 1;
+        font-size: 24px;
+        font-weight: 800;
+        line-height: 1.2;
+      }
+      .timer {
+        flex: none;
+        min-width: 58px;
+        padding: 5px 10px;
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--bar) 25%, transparent);
+        font-weight: 800;
+        font-size: 18px;
+        text-align: center;
+        font-variant-numeric: tabular-nums;
+      }
+      .timer.done {
+        background: var(--bar);
+      }
+      .opt {
+        position: relative;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        height: 44px;
+        padding: 0 14px;
+        margin-top: 8px;
+        border-radius: 10px;
+        background: rgba(255, 255, 255, 0.07);
+        overflow: hidden;
+        font-size: 19px;
+        font-weight: 700;
+      }
+      .fill {
+        position: absolute;
+        inset: 0 auto 0 0;
+        width: 0;
+        background: color-mix(in srgb, var(--bar) 55%, transparent);
+        transition: width 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      .opt.lead .fill {
+        background: var(--bar);
+      }
+      .num,
+      .label,
+      .pct {
+        position: relative;
+      }
+      .num {
+        width: 26px;
+        height: 26px;
+        display: grid;
+        place-items: center;
+        flex: none;
+        border-radius: 7px;
+        background: rgba(0, 0, 0, 0.35);
+        font-size: 15px;
+      }
+      .label {
+        flex: 1;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .pct {
+        font-variant-numeric: tabular-nums;
+      }
+      .pct small {
+        opacity: 0.7;
+        font-weight: 600;
+        margin-left: 6px;
+      }
+      .foot {
+        margin-top: 12px;
+        font-size: 15px;
+        opacity: 0.75;
+        font-weight: 600;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="poll">
+      <div class="head"><div class="q"></div><div class="timer"></div></div>
+      <div class="opts"></div>
+      <div class="foot"></div>
+    </div>
+    <script src="/overlay/assets/common.js"></script>
+    <script>
+      const root = document.getElementById('poll');
+      const opts = root.querySelector('.opts');
+      const timerEl = root.querySelector('.timer');
+      let poll = null;
+      let lang = 'ru';
+      let skew = 0;
+
+      function render() {
+        if (!poll) return;
+        root.querySelector('.q').textContent = poll.question;
+        if (opts.children.length !== poll.options.length) {
+          opts.innerHTML = '';
+          poll.options.forEach((o, i) => {
+            const row = SH.el('div', 'opt');
+            row.append(SH.el('div', 'fill'), SH.el('div', 'num', String(i + 1)), SH.el('div', 'label'), SH.el('div', 'pct'));
+            opts.appendChild(row);
+          });
+        }
+        poll.options.forEach((o, i) => {
+          const row = opts.children[i];
+          const pct = poll.total ? Math.round((o.votes / poll.total) * 100) : 0;
+          row.querySelector('.label').textContent = o.label;
+          row.querySelector('.fill').style.width = pct + '%';
+          row.querySelector('.pct').innerHTML = `${pct}%<small>${o.votes}</small>`;
+          row.classList.toggle('lead', poll.leaders.includes(i));
+        });
+        const ended = poll.status === 'ended';
+        root.querySelector('.foot').textContent = ended
+          ? SH.tr(lang, `Голосование окончено · ${poll.total} ${SH.plural(poll.total, 'голос', 'голоса', 'голосов')}`, `Poll closed · ${poll.total} votes`)
+          : SH.tr(lang, `Пишите номер в чат · ${poll.total} ${SH.plural(poll.total, 'голос', 'голоса', 'голосов')}`, `Type a number in chat · ${poll.total} votes`);
+        tickTimer();
+      }
+
+      function tickTimer() {
+        if (!poll) return;
+        const ended = poll.status === 'ended';
+        timerEl.classList.toggle('done', ended);
+        if (ended) timerEl.textContent = SH.tr(lang, 'Итог', 'Result');
+        else if (poll.endsAt) timerEl.textContent = SH.formatClock(poll.endsAt - (Date.now() + skew));
+        else timerEl.textContent = '∞';
+      }
+
+      SH.connect('poll', (msg) => {
+        if (msg.type !== 'poll') return;
+        poll = msg.poll;
+        lang = msg.lang;
+        if (!poll && SH.preview) {
+          // Sample so the streamer can style the poll before running one.
+          const labels = msg.style.options.filter((o) => o.trim()).slice(0, 6);
+          const votes = labels.map((_, i) => [12, 7, 4, 2, 1, 1][i] || 1);
+          const total = votes.reduce((a, b) => a + b, 0);
+          poll = { question: msg.style.question, options: labels.map((label, i) => ({ label, votes: votes[i] })), total, status: 'running', endsAt: msg.now + 45000, leaders: [0] };
+        }
+        skew = msg.now - Date.now();
+        const s = msg.style;
+        SH.useFont(root, s.fontFamily);
+        root.style.setProperty('--bar', s.barColor);
+        root.style.setProperty('--text', s.textColor);
+        root.classList.toggle('on', !!poll);
+        render();
+      });
+      setInterval(tickTimer, 250);
+    </script>
+  </body>
+</html>

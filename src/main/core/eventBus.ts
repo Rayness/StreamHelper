@@ -1,4 +1,4 @@
-import type { ChatMessage, SettingsKey, StreamEvent, StreamInfo } from '@shared/types';
+import type { ChatMessage, KawakiNowWatching, SettingsKey, StreamEvent, StreamInfo } from '@shared/types';
 
 export interface BusEvents {
   'chat:message': ChatMessage;
@@ -11,6 +11,8 @@ export interface BusEvents {
   'settings:changed': SettingsKey;
   /** Something in RuntimeState changed; the state hub debounces and pushes it to the UI. */
   'state:dirty': void;
+  /** What's playing on Kawaki changed (or the account logged out). */
+  'kawaki:now': KawakiNowWatching | null;
 }
 
 type Handler<T> = (payload: T) => void;

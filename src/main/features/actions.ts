@@ -15,6 +15,9 @@ export interface ActionTargets {
   timerToggle(timerId: string): void;
   timerAdd(timerId: string, seconds: number): void;
   goalAdd(goalId: string, amount: number): void;
+  wheelSpin(wheelId: string): void;
+  bannerToggle(bannerId: string): void;
+  emoteBurst(): void;
 }
 
 /** Runs dashboard buttons / global hotkeys. Each step is independent: one failing step doesn't stop the rest. */
@@ -27,6 +30,14 @@ export class ActionRunner {
   ) {
     ctx.bus.on('settings:changed', (key) => {
       if (key === 'actions') this.registerHotkeys();
+    });
+    // Channel-points rewards can run an action: "spin the wheel", "switch scene"...
+    ctx.bus.on('event', (e) => {
+      if (e.type !== 'redemption') return;
+      const title = e.rewardTitle.trim().toLowerCase();
+      for (const a of ctx.settings.get('actions')) {
+        if (a.redemptionTitle?.trim() && a.redemptionTitle.trim().toLowerCase() === title) void this.run(a.id);
+      }
     });
   }
 
@@ -70,6 +81,12 @@ export class ActionRunner {
         return t.timerAdd(s.timerId, s.seconds);
       case 'goalAdd':
         return t.goalAdd(s.goalId, s.amount);
+      case 'wheelSpin':
+        return t.wheelSpin(s.wheelId);
+      case 'bannerToggle':
+        return t.bannerToggle(s.bannerId);
+      case 'emoteBurst':
+        return t.emoteBurst();
       case 'wait':
         return new Promise((r) => setTimeout(r, Math.max(0, Math.min(60_000, s.ms))));
     }

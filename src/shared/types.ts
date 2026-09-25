@@ -152,6 +152,7 @@ export interface ObsState extends ConnectionState {
 
 export interface RuntimeState {
   twitch: ConnectionState & { deviceCode?: DeviceCodePrompt };
+  kawaki: KawakiState;
   twitchBot: ConnectionState & { deviceCode?: DeviceCodePrompt };
   donationalerts: ConnectionState;
   streamlabs: ConnectionState;
@@ -160,6 +161,14 @@ export interface RuntimeState {
   alerts: { paused: boolean; queueLength: number; current: string | null };
   overlayUrl: string;
   overlayClients: number;
+  /** Connected overlays per kind, so the UI can show "in OBS" next to each overlay. */
+  overlayKinds: Partial<Record<OverlayKind, number>>;
+  wheel: { spinning: boolean; wheelId: string | null; lastResult: { wheelId: string; label: string; at: number } | null };
+  poll: PollState | null;
+  giveaway: GiveawayState;
+  quiz: QuizState;
+  /** Banners currently on screen (manual toggle or schedule). */
+  bannersShown: string[];
 }
 
 // ---------- Settings ----------
@@ -180,7 +189,7 @@ export interface BotCommand {
   reply: boolean;
 }
 
-export type BuiltinCommandId = 'uptime' | 'title' | 'game' | 'followage' | 'shoutout' | 'counter' | 'commands' | 'permit';
+export type BuiltinCommandId = 'uptime' | 'title' | 'game' | 'followage' | 'shoutout' | 'counter' | 'commands' | 'permit' | 'anime';
 
 export interface BuiltinCommand {
   id: BuiltinCommandId;
@@ -320,6 +329,9 @@ export type ActionStep =
   | { type: 'timerToggle'; timerId: string }
   | { type: 'timerAdd'; timerId: string; seconds: number }
   | { type: 'goalAdd'; goalId: string; amount: number }
+  | { type: 'wheelSpin'; wheelId: string }
+  | { type: 'bannerToggle'; bannerId: string }
+  | { type: 'emoteBurst' }
   | { type: 'wait'; ms: number };
 
 export interface QuickAction {
@@ -329,7 +341,256 @@ export interface QuickAction {
   /** Electron accelerator, e.g. "Ctrl+Shift+1". Empty = no global hotkey. */
   hotkey: string;
   showOnDashboard: boolean;
+  /** Run when a channel-points reward with this title is redeemed. Empty = off. */
+  redemptionTitle?: string;
   steps: ActionStep[];
+}
+
+// ---------- Banners, labels, stats ----------
+
+export type BannerLayout = 'card' | 'ticker' | 'lowerThird';
+
+export interface BannerSlide {
+  id: string;
+  /** Template: {title}, {game}, {lastfollower}, {anime}... */
+  text: string;
+  image: string | null;
+}
+
+export interface Banner {
+  id: string;
+  name: string;
+  /** Manual on/off. With a schedule, "on" means "pop up every N minutes". */
+  visible: boolean;
+  layout: BannerLayout;
+  slides: BannerSlide[];
+  /** Seconds each slide stays before the next one (card / lower third). */
+  intervalSec: number;
+  /** Ticker speed, px per second. */
+  tickerSpeed: number;
+  /** 0 = stays on screen while visible; otherwise pops up every N minutes for `scheduleShowSec`. */
+  scheduleEveryMin: number;
+  scheduleShowSec: number;
+  fontFamily: string;
+  fontSize: number;
+  textColor: string;
+  background: string;
+  accentColor: string;
+  align: 'left' | 'center' | 'right';
+}
+
+export interface Label {
+  id: string;
+  name: string;
+  template: string;
+  fontFamily: string;
+  fontSize: number;
+  textColor: string;
+  align: 'left' | 'center' | 'right';
+}
+
+export interface StatEntry {
+  name: string;
+  amount: number;
+  currency?: string;
+}
+
+/** "Last follower", "top donation"... Survives restarts; reset per stream from the UI. */
+export interface StreamStats {
+  lastFollower: string;
+  lastSubscriber: string;
+  lastCheer: StatEntry | null;
+  lastRaid: StatEntry | null;
+  lastDonation: StatEntry | null;
+  topDonation: StatEntry | null;
+  topCheer: StatEntry | null;
+  follows: number;
+  subs: number;
+  bits: number;
+  donations: number;
+  since: number;
+}
+
+export type EmoteRainStyle = 'rain' | 'rise' | 'bounce';
+
+export interface EmoteRainSettings {
+  fromChat: boolean;
+  maxPerMessage: number;
+  size: number;
+  durationSec: number;
+  style: EmoteRainStyle;
+  /** Shower of recent chat emotes on subs, raids, donations and cheers. */
+  burstOnEvents: boolean;
+  burstCount: number;
+}
+
+// ---------- Interactive: wheel, poll, giveaway, quiz ----------
+
+export interface WheelSegment {
+  id: string;
+  label: string;
+  color: string;
+  /** Relative chance. 0 = never lands here (still drawn). */
+  weight: number;
+}
+
+export interface Wheel {
+  id: string;
+  name: string;
+  segments: WheelSegment[];
+  spinSec: number;
+  /** Remove the winning segment afterwards (elimination rounds). */
+  removeWinner: boolean;
+  /** Chat message after the spin, {result} / {user}. Empty = silent. */
+  announce: string;
+  /** Chat command that spins it (without prefix). Empty = off. */
+  command: string;
+  commandPermission: Permission;
+  commandCooldownSec: number;
+  /** Channel-points reward title that spins it. Empty = off. */
+  redemptionTitle: string;
+  fontFamily: string;
+  tickSound: boolean;
+  winSound: string | null;
+  volume: number;
+  /** 0 = wheel always on screen; otherwise it appears for a spin and hides N seconds after the result. */
+  hideAfterSec: number;
+}
+
+export interface WheelSpin {
+  spinId: string;
+  wheelId: string;
+  winnerId: string;
+  winnerLabel: string;
+  /** Final rotation of the wheel, degrees (clockwise). */
+  rotation: number;
+  durationMs: number;
+  segments: WheelSegment[];
+  by: string;
+}
+
+export interface PollSettings {
+  question: string;
+  options: string[];
+  durationSec: number;
+  allowChange: boolean;
+  /** Post start / result messages to chat. */
+  announce: boolean;
+  /** Keep the result on screen N seconds after the end. 0 = until cleared. */
+  resultSec: number;
+  barColor: string;
+  textColor: string;
+  fontFamily: string;
+}
+
+export interface PollState {
+  id: string;
+  question: string;
+  options: { label: string; votes: number }[];
+  total: number;
+  status: 'running' | 'ended';
+  endsAt: number | null;
+  /** Indexes of the leading options (several on a tie). */
+  leaders: number[];
+}
+
+export interface GiveawaySettings {
+  title: string;
+  /** Word to type in chat to enter, e.g. "!участвую". */
+  keyword: string;
+  eligible: Permission;
+  /** Tickets for subscribers (1 = same chance as everyone). */
+  subLuck: number;
+  announceOpen: string;
+  announceWinner: string;
+  accentColor: string;
+  fontFamily: string;
+}
+
+export interface GiveawayEntrant {
+  userId: string;
+  userName: string;
+  platform: Platform;
+  tickets: number;
+}
+
+export interface GiveawayState {
+  status: 'idle' | 'open' | 'closed' | 'rolling' | 'done';
+  entrants: GiveawayEntrant[];
+  winner: GiveawayEntrant | null;
+  /** What the winner wrote after being picked, so the streamer sees they are alive. */
+  winnerMessages: { text: string; at: number }[];
+}
+
+export type QuizDifficulty = 'easy' | 'normal' | 'hard';
+
+export interface QuizSettings {
+  rounds: number;
+  roundSec: number;
+  revealSec: number;
+  difficulty: QuizDifficulty;
+  /** Open letters of the answer as time runs out. */
+  hints: boolean;
+  announce: boolean;
+  accentColor: string;
+  fontFamily: string;
+}
+
+export interface QuizState {
+  status: 'idle' | 'loading' | 'question' | 'reveal' | 'finished' | 'error';
+  round: number;
+  rounds: number;
+  imageUrl: string | null;
+  hint: string;
+  endsAt: number | null;
+  answer: { title: string; posterUrl: string | null; url: string } | null;
+  winner: string | null;
+  leaderboard: { userName: string; points: number }[];
+  error?: string;
+}
+
+// ---------- Kawaki ----------
+
+export interface KawakiNowWatching {
+  animeId: string;
+  externalId: number;
+  title: string;
+  titleEn: string | null;
+  posterUrl: string | null;
+  episode: number | null;
+  episodesTotal: number | null;
+  progressSec: number | null;
+  durationSec: number | null;
+  url: string;
+  /** "live" = the Kawaki player is open right now; "list" = latest title from the Watching list. */
+  source: 'live' | 'list';
+}
+
+export interface KawakiPartner {
+  slug: string;
+  displayName: string;
+  liveUrl: string;
+}
+
+export interface KawakiState extends ConnectionState {
+  deviceCode?: DeviceCodePrompt;
+  nowWatching: KawakiNowWatching | null;
+  partner: KawakiPartner | null;
+}
+
+export interface KawakiSettings {
+  baseUrl: string;
+  /** Update the stream title when the anime or episode changes. */
+  autoTitle: boolean;
+  titleTemplate: string;
+  /** Reply of the !anime command. */
+  commandTemplate: string;
+  /** Keep showing the last title when nothing is playing. */
+  keepLast: boolean;
+  showPoster: boolean;
+  showProgress: boolean;
+  accentColor: string;
+  fontFamily: string;
 }
 
 export interface Settings {
@@ -346,6 +607,15 @@ export interface Settings {
   goals: Goal[];
   timers: OverlayTimer[];
   actions: QuickAction[];
+  banners: Banner[];
+  labels: Label[];
+  stats: StreamStats;
+  emoteRain: EmoteRainSettings;
+  wheels: Wheel[];
+  poll: PollSettings;
+  giveaway: GiveawaySettings;
+  quiz: QuizSettings;
+  kawaki: KawakiSettings;
   /** Main currency for donation totals (goals, subathon). */
   currency: string;
   minimizeToTray: boolean;
@@ -355,7 +625,20 @@ export type SettingsKey = keyof Settings;
 
 // ---------- Overlay wire protocol ----------
 
-export type OverlayKind = 'chat' | 'alerts' | 'goal' | 'timer' | 'events';
+export type OverlayKind = 'chat' | 'alerts' | 'goal' | 'timer' | 'events' | 'banner' | 'label' | 'emotes' | 'wheel' | 'poll' | 'giveaway' | 'kawaki' | 'quiz';
+
+export interface RenderedBanner extends Omit<Banner, 'slides'> {
+  slides: { id: string; text: string; image: string | null }[];
+  shown: boolean;
+}
+
+export interface GiveawayOverlayState {
+  status: GiveawayState['status'];
+  count: number;
+  /** A sample of entrant names for the roll animation. */
+  names: string[];
+  winner: string | null;
+}
 
 export interface RenderedAlert {
   id: string;
@@ -385,6 +668,16 @@ export type OverlayMessage =
   | { type: 'timer'; timer: OverlayTimer | null; now: number }
   | { type: 'event'; event: StreamEvent }
   | { type: 'events'; events: StreamEvent[] }
+  | { type: 'banner'; banner: RenderedBanner | null }
+  | { type: 'label'; label: (Label & { text: string }) | null }
+  | { type: 'emoteConfig'; config: EmoteRainSettings }
+  | { type: 'emotes'; urls: string[]; burst?: boolean }
+  | { type: 'wheel'; wheel: Wheel | null; lastWinnerId: string | null }
+  | { type: 'wheelSpin'; spin: WheelSpin }
+  | { type: 'poll'; poll: PollState | null; style: PollSettings; now: number; lang: Language }
+  | { type: 'giveaway'; state: GiveawayOverlayState; style: GiveawaySettings; lang: Language }
+  | { type: 'kawaki'; now: KawakiNowWatching | null; style: KawakiSettings; lang: Language }
+  | { type: 'quiz'; quiz: QuizState; style: QuizSettings; now: number; lang: Language }
   | { type: 'reload' };
 
 // ---------- IPC ----------
@@ -428,6 +721,26 @@ export interface IpcInvoke {
   'alerts:replay': (eventId: string) => void;
   'actions:run': (actionId: string) => void;
   'timer:control': (timerId: string, op: 'start' | 'pause' | 'reset' | 'add', seconds?: number) => void;
+  'banner:showNow': (bannerId: string) => void;
+  'stats:reset': () => void;
+  'emotes:test': () => void;
+  'wheel:spin': (wheelId: string) => void;
+  'poll:start': () => void;
+  'poll:end': () => void;
+  'poll:clear': () => void;
+  'giveaway:open': () => void;
+  'giveaway:close': () => void;
+  'giveaway:roll': () => void;
+  'giveaway:reset': () => void;
+  'quiz:start': () => void;
+  'quiz:skip': () => void;
+  'quiz:stop': () => void;
+  'kawaki:login': () => void;
+  'kawaki:logout': () => void;
+  'kawaki:cancelLogin': () => void;
+  'kawaki:refresh': () => void;
+  /** Create a browser source in the current OBS scene. */
+  'obs:addBrowserSource': (name: string, url: string, width: number, height: number) => void;
   'media:import': () => MediaFile | null;
   'media:list': () => MediaFile[];
   'shell:openExternal': (url: string) => void;

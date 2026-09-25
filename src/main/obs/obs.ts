@@ -159,6 +159,38 @@ export class ObsService {
     await this.toggleSceneItem(scene, sceneItemId);
   }
 
+  /**
+   * One-click "Add to OBS": a browser source in the current scene with the right size and audio
+   * routed through OBS (alert sounds, TTS). If a browser source with this URL already exists,
+   * it's reused so the overlay isn't duplicated across scenes.
+   */
+  async addBrowserSource(name: string, url: string, width: number, height: number): Promise<'created' | 'added' | 'exists'> {
+    this.ensure();
+    const sceneName = this.ctx.state.current.obs.currentScene;
+    if (!sceneName) throw new Error('no current scene');
+    const { inputs } = await this.obs.call('GetInputList', { inputKind: 'browser_source' });
+    for (const input of inputs as { inputName: string }[]) {
+      const { inputSettings } = await this.obs.call('GetInputSettings', { inputName: input.inputName });
+      if ((inputSettings as { url?: string }).url !== url) continue;
+      const inScene = this.ctx.state.current.obs.sceneItems.some((i) => i.name === input.inputName);
+      if (inScene) return 'exists';
+      await this.obs.call('CreateSceneItem', { sceneName, sourceName: input.inputName, sceneItemEnabled: true });
+      return 'added';
+    }
+    const { inputs: all } = await this.obs.call('GetInputList');
+    const taken = new Set((all as { inputName: string }[]).map((i) => i.inputName));
+    let inputName = name;
+    for (let n = 2; taken.has(inputName); n++) inputName = `${name} ${n}`;
+    await this.obs.call('CreateInput', {
+      sceneName,
+      inputName,
+      inputKind: 'browser_source',
+      inputSettings: { url, width, height, reroute_audio: true, fps_custom: false },
+      sceneItemEnabled: true,
+    });
+    return 'created';
+  }
+
   async toggleMute(inputName: string): Promise<void> {
     this.ensure();
     await this.obs.call('ToggleInputMute', { inputName });

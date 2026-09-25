@@ -2,12 +2,14 @@
 (function () {
   const params = new URLSearchParams(location.search);
   const loadedFonts = new Set();
+  /** Rendered inside StreamHelper's own preview: show sample content instead of an empty screen. */
+  const preview = params.has('preview');
   const SYSTEM_FONTS = ['system-ui', 'arial', 'segoe ui', 'verdana', 'tahoma', 'times new roman', 'georgia', 'impact', 'consolas'];
 
   /** Connect to the app, reconnecting forever: the app may start after OBS. */
   function connect(kind, onMessage) {
     const id = params.get('id');
-    const url = `ws://${location.host}/ws?kind=${kind}${id ? `&id=${encodeURIComponent(id)}` : ''}`;
+    const url = `ws://${location.host}/ws?kind=${kind}${id ? `&id=${encodeURIComponent(id)}` : ''}${preview ? '&preview=1' : ''}`;
     let ws;
     const open = () => {
       ws = new WebSocket(url);
@@ -59,5 +61,32 @@
     return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
   }
 
-  window.SH = { params, connect, loadFont, fontStack, el, formatClock };
+  /** Load a font and apply it to an element. */
+  function useFont(node, family) {
+    loadFont(family);
+    node.style.fontFamily = fontStack(family);
+  }
+
+  /** Imported media are referenced by file name; the overlay server serves them under /media/. */
+  function mediaUrl(name) {
+    if (!name) return null;
+    return name.startsWith('/') || /^https?:/.test(name) ? name : `/media/${encodeURIComponent(name)}`;
+  }
+
+  function tr(lang, ru, en) {
+    return lang === 'en' ? en : ru;
+  }
+
+  /** Russian plural: plural(5, 'голос', 'голоса', 'голосов'). */
+  function plural(n, one, few, many) {
+    const m10 = n % 10;
+    const m100 = n % 100;
+    if (m10 === 1 && m100 !== 11) return one;
+    if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few;
+    return many;
+  }
+
+  const reducedMotion = params.has('reducedMotion');
+
+  window.SH = { params, connect, loadFont, fontStack, el, formatClock, useFont, mediaUrl, tr, plural, reducedMotion, preview };
 })();

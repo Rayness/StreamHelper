@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>StreamHelper — Wheel</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        background: transparent;
+      }
+      #stage {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        transition:
+          opacity 0.5s ease,
+          transform 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      #stage.hidden {
+        opacity: 0;
+        transform: scale(0.85);
+      }
+      #wrap {
+        position: relative;
+      }
+      canvas {
+        display: block;
+        filter: drop-shadow(0 12px 30px rgba(0, 0, 0, 0.45));
+      }
+      #pointer {
+        position: absolute;
+        left: 50%;
+        top: -2%;
+        width: 9%;
+        aspect-ratio: 0.8;
+        transform: translateX(-50%);
+        transform-origin: 50% 20%;
+        background: #fff;
+        clip-path: polygon(0 0, 100% 0, 50% 100%);
+        filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.6));
+      }
+      #pointer.kick {
+        animation: kick 0.12s ease-out;
+      }
+      @keyframes kick {
+        50% {
+          transform: translateX(-50%) rotate(-14deg);
+        }
+      }
+      #result {
+        font-family: 'Montserrat', 'Segoe UI', system-ui, sans-serif;
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        max-width: 86%;
+        padding: 0.45em 1em;
+        border-radius: 0.6em;
+        background: rgba(10, 10, 16, 0.88);
+        color: #fff;
+        font-weight: 800;
+        text-align: center;
+        line-height: 1.2;
+        box-shadow:
+          0 0 0 3px var(--win, #fff),
+          0 18px 40px rgba(0, 0, 0, 0.55);
+        transform: translate(-50%, -50%) scale(0.6);
+        opacity: 0;
+        transition:
+          opacity 0.3s ease,
+          transform 0.5s cubic-bezier(0.22, 1.4, 0.36, 1);
+        pointer-events: none;
+        overflow-wrap: anywhere;
+      }
+      #result.on {
+        opacity: 1;
+        transform: translate(-50%, -50%) scale(1);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="stage">
+      <div id="wrap">
+        <canvas id="c"></canvas>
+        <div id="pointer"></div>
+        <div id="result"></div>
+      </div>
+    </div>
+    <script src="/overlay/assets/common.js"></script>
+    <script>
+      const stage = document.getElementById('stage');
+      const canvas = document.getElementById('c');
+      const ctx = canvas.getContext('2d');
+      const pointer = document.getElementById('pointer');
+      const result = document.getElementById('result');
+
+      let wheel = null;
+      let segments = [];
+      let angle = 0;
+      let highlight = null;
+      let spinning = false;
+      let pending = null;
+      let hideTimer = null;
+      let resultTimer = null;
+      let audio = null;
+      let size = 0;
+
+      function resize() {
+        size = Math.floor(Math.min(innerWidth, innerHeight) * 0.94);
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width = size * dpr;
+        canvas.height = size * dpr;
+        canvas.style.width = canvas.style.height = size + 'px';
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        result.style.fontSize = Math.max(16, size * 0.065) + 'px';
+        draw();
+      }
+
+      function fitText(text, maxWidth) {
+        if (ctx.measureText(text).width <= maxWidth) return text;
+        let t = text;
+        while (t.length > 1 && ctx.measureText(t + '…').width > maxWidth) t = t.slice(0, -1);
+        return t + '…';
+      }
+
+      function draw() {
+        ctx.clearRect(0, 0, size, size);
+        if (!segments.length || !size) return;
+        const c = size / 2;
+        const r = c - size * 0.035;
+        const n = segments.length;
+        const slice = (Math.PI * 2) / n;
+        const base = -Math.PI / 2 + (angle * Math.PI) / 180;
+
+        // rim
+        ctx.beginPath();
+        ctx.arc(c, c, c - 1, 0, Math.PI * 2);
+        ctx.fillStyle = '#15151d';
+        ctx.fill();
+
+        segments.forEach((s, i) => {
+          const a0 = base + i * slice;
+          ctx.beginPath();
+          ctx.moveTo(c, c);
+          ctx.arc(c, c, r, a0, a0 + slice);
+          ctx.closePath();
+          ctx.fillStyle = s.color;
+          ctx.globalAlpha = highlight && highlight !== s.id ? 0.35 : 1;
+          ctx.fill();
+          ctx.globalAlpha = 1;
+          ctx.strokeStyle = 'rgba(0,0,0,0.28)';
+          ctx.lineWidth = Math.max(1, size * 0.004);
+          ctx.stroke();
+
+          // label along the radius, reading outwards
+          ctx.save();
+          ctx.translate(c, c);
+          ctx.rotate(a0 + slice / 2);
+          // Largest font the slice allows, shrunk until the label fits between the hub and the rim;
+          // only very long labels get an ellipsis.
+          const room = r * 0.7;
+          const maxPx = Math.max(10, Math.min(size * 0.05, r * Math.sin(slice / 2) * 0.62));
+          let fontPx = maxPx;
+          const family = SH.fontStack(wheel && wheel.fontFamily);
+          ctx.font = `800 ${fontPx}px ${family}`;
+          while (fontPx > maxPx * 0.55 && ctx.measureText(s.label).width > room) {
+            fontPx -= 1;
+            ctx.font = `800 ${fontPx}px ${family}`;
+          }
+          ctx.textAlign = 'right';
+          ctx.textBaseline = 'middle';
+          ctx.fillStyle = '#fff';
+          ctx.shadowColor = 'rgba(0,0,0,0.55)';
+          ctx.shadowBlur = 4;
+          ctx.fillText(fitText(s.label, room), r * 0.9, 0);
+          ctx.restore();
+        });
+
+        // rim lights
+        const lights = Math.max(12, n * 2);
+        for (let i = 0; i < lights; i++) {
+          const a = (i / lights) * Math.PI * 2 + (angle * Math.PI) / 180;
+          ctx.beginPath();
+          ctx.arc(c + Math.cos(a) * (r + size * 0.017), c + Math.sin(a) * (r + size * 0.017), size * 0.008, 0, Math.PI * 2);
+          ctx.fillStyle = i % 2 ? '#fff6' : '#fff';
+          ctx.fill();
+        }
+
+        // hub
+        ctx.beginPath();
+        ctx.arc(c, c, size * 0.075, 0, Math.PI * 2);
+        ctx.fillStyle = '#15151d';
+        ctx.fill();
+        ctx.lineWidth = size * 0.012;
+        ctx.strokeStyle = '#fff';
+        ctx.stroke();
+      }
+
+      function segmentAt(a) {
+        const n = segments.length;
+        const size = 360 / n;
+        const p = (((360 - (a % 360)) % 360) + 360) % 360;
+        return Math.min(n - 1, Math.floor(p / size));
+      }
+
+      function tick() {
+        pointer.classList.remove('kick');
+        void pointer.offsetWidth;
+        pointer.classList.add('kick');
+        if (!wheel || !wheel.tickSound) return;
+        try {
+          audio = audio || new AudioContext();
+          const o = audio.createOscillator();
+          const g = audio.createGain();
+          o.type = 'triangle';
+          o.frequency.value = 1400;
+          g.gain.setValueAtTime(0.25 * (wheel.volume ?? 0.5), audio.currentTime);
+          g.gain.exponentialRampToValueAtTime(0.0001, audio.currentTime + 0.05);
+          o.connect(g).connect(audio.destination);
+          o.start();
+          o.stop(audio.currentTime + 0.06);
+        } catch {}
+      }
+
+      function show(on) {
+        clearTimeout(hideTimer);
+        stage.classList.toggle('hidden', !on);
+      }
+
+      function applyWheel(w, lastWinnerId) {
+        wheel = w;
+        if (!w) {
+          segments = [];
+          show(false);
+          return draw();
+        }
+        segments = w.segments;
+        highlight = null;
+        SH.useFont(result, w.fontFamily);
+        if (w.hideAfterSec > 0 && !spinning && !SH.preview) show(false);
+        else show(true);
+        draw();
+      }
+
+      function spin(s) {
+        clearTimeout(resultTimer);
+        result.classList.remove('on');
+        spinning = true;
+        segments = s.segments;
+        highlight = null;
+        show(true);
+        const from = angle % 360;
+        const to = s.rotation;
+        const start = performance.now();
+        let lastSeg = segmentAt(from);
+        const ease = (t) => 1 - Math.pow(1 - t, 4);
+        const frame = (now) => {
+          const t = Math.min(1, (now - start) / s.durationMs);
+          angle = from + (to - from) * ease(t);
+          const seg = segmentAt(angle);
+          if (seg !== lastSeg) {
+            lastSeg = seg;
+            tick();
+          }
+          draw();
+          if (t < 1) return requestAnimationFrame(frame);
+          finish(s);
+        };
+        requestAnimationFrame(frame);
+      }
+
+      function finish(s) {
+        spinning = false;
+        highlight = s.winnerId;
+        draw();
+        const win = s.segments.find((x) => x.id === s.winnerId);
+        result.textContent = s.winnerLabel;
+        result.style.setProperty('--win', win ? win.color : '#fff');
+        result.classList.add('on');
+        if (wheel && wheel.winSound) {
+          const a = new Audio(SH.mediaUrl(wheel.winSound));
+          a.volume = wheel.volume ?? 0.5;
+          a.play().catch(() => {});
+        }
+        resultTimer = setTimeout(() => {
+          result.classList.remove('on');
+          highlight = null;
+          if (pending) {
+            const p = pending;
+            pending = null;
+            applyWheel(p.wheel, p.lastWinnerId);
+          } else draw();
+        }, 5000);
+        if (wheel && wheel.hideAfterSec > 0 && !SH.preview) hideTimer = setTimeout(() => show(false), 5000 + wheel.hideAfterSec * 1000);
+      }
+
+      SH.connect('wheel', (msg) => {
+        if (msg.type === 'wheel') {
+          // Don't swap segments under a spinning wheel (e.g. "remove winner"): apply after the result.
+          if (spinning || result.classList.contains('on')) pending = msg;
+          else applyWheel(msg.wheel, msg.lastWinnerId);
+        }
+        if (msg.type === 'wheelSpin') {
+          if (wheel && msg.spin.wheelId !== wheel.id) return;
+          spin(msg.spin);
+        }
+      });
+      addEventListener('resize', resize);
+      resize();
+    </script>
+  </body>
+</html>

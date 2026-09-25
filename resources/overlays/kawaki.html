@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>StreamHelper — Kawaki</title>
+    <style>
+      :root {
+        --accent: #ff4d4f;
+      }
+      html,
+      body {
+        margin: 0;
+        background: transparent;
+        overflow: hidden;
+      }
+      #k {
+        display: flex;
+        align-items: stretch;
+        gap: 16px;
+        margin: 10px;
+        padding: 14px;
+        border-radius: 16px;
+        background: rgba(12, 12, 18, 0.84);
+        box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+        color: #fff;
+        opacity: 0;
+        transform: translateX(-24px);
+        transition:
+          opacity 0.45s ease,
+          transform 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      #k.on {
+        opacity: 1;
+        transform: none;
+      }
+      .poster {
+        flex: none;
+        width: 92px;
+        aspect-ratio: 2 / 3;
+        border-radius: 10px;
+        object-fit: cover;
+        background: #222;
+        box-shadow: 0 6px 16px rgba(0, 0, 0, 0.5);
+      }
+      .poster.hide {
+        display: none;
+      }
+      .info {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: 6px;
+      }
+      .kicker {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 14px;
+        font-weight: 700;
+        opacity: 0.85;
+      }
+      .live {
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: var(--accent);
+        box-shadow: 0 0 10px var(--accent);
+        animation: blink 1.6s infinite;
+      }
+      @keyframes blink {
+        50% {
+          opacity: 0.4;
+        }
+      }
+      .brand {
+        margin-left: auto;
+        font-weight: 900;
+        letter-spacing: 0.02em;
+        color: var(--accent);
+      }
+      .title {
+        font-size: 24px;
+        font-weight: 800;
+        line-height: 1.15;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+      .ep {
+        font-size: 16px;
+        font-weight: 700;
+        opacity: 0.9;
+      }
+      .bar {
+        height: 6px;
+        border-radius: 3px;
+        background: rgba(255, 255, 255, 0.15);
+        overflow: hidden;
+      }
+      .bar.hide {
+        display: none;
+      }
+      .bar div {
+        height: 100%;
+        width: 0;
+        background: var(--accent);
+        transition: width 20s linear;
+      }
+      .swap {
+        animation: swap 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      @keyframes swap {
+        from {
+          opacity: 0;
+          transform: translateY(8px);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="k">
+      <img class="poster" alt="" />
+      <div class="info">
+        <div class="kicker"><span class="live"></span><span class="label"></span><span class="brand">kawaki</span></div>
+        <div class="title"></div>
+        <div class="ep"></div>
+        <div class="bar"><div></div></div>
+      </div>
+    </div>
+    <script src="/overlay/assets/common.js"></script>
+    <script>
+      const root = document.getElementById('k');
+      const poster = root.querySelector('.poster');
+      const bar = root.querySelector('.bar');
+      let lastKey = '';
+
+      SH.connect('kawaki', (msg) => {
+        if (msg.type !== 'kawaki') return;
+        const { style, lang } = msg;
+        const now =
+          msg.now ||
+          (SH.preview
+            ? { animeId: 'sample', title: SH.tr(lang, 'Провожающая в последний путь Фрирен', "Frieren: Beyond Journey's End"), episode: 12, episodesTotal: 28, posterUrl: null, progressSec: 610, durationSec: 1440 }
+            : null);
+        SH.useFont(root, style.fontFamily);
+        root.style.setProperty('--accent', style.accentColor);
+        root.classList.toggle('on', !!now);
+        if (!now) return;
+        const key = now.animeId + ':' + now.episode;
+        if (key !== lastKey && lastKey) {
+          root.querySelector('.info').classList.remove('swap');
+          void root.offsetWidth;
+          root.querySelector('.info').classList.add('swap');
+        }
+        lastKey = key;
+        root.querySelector('.label').textContent = SH.tr(lang, 'Сейчас смотрим', 'Now watching');
+        root.querySelector('.title').textContent = now.title;
+        const ep =
+          now.episode == null
+            ? ''
+            : SH.tr(lang, `Серия ${now.episode}`, `Episode ${now.episode}`) + (now.episodesTotal ? SH.tr(lang, ` из ${now.episodesTotal}`, ` of ${now.episodesTotal}`) : '');
+        root.querySelector('.ep').textContent = ep;
+        poster.classList.toggle('hide', !style.showPoster || !now.posterUrl);
+        if (now.posterUrl && poster.src !== now.posterUrl) poster.src = now.posterUrl;
+        const hasProgress = style.showProgress && now.progressSec != null && now.durationSec;
+        bar.classList.toggle('hide', !hasProgress);
+        if (hasProgress) {
+          // Progress arrives every ~20s; glide towards where it will be by the next update.
+          const pct = Math.min(100, ((now.progressSec + 20) / now.durationSec) * 100);
+          bar.firstChild.style.width = pct + '%';
+        }
+      });
+    </script>
+  </body>
+</html>

@@ -1,6 +1,8 @@
 import { timerAdd, timerPause, timerReset, timerStart } from '@shared/timer';
 import type { Goal, OverlayTimer, StreamEvent } from '@shared/types';
+import { emptyStats } from '@shared/defaults';
 import type { AppContext } from '../core/context';
+import { applyEventToStats } from './vars';
 
 /** How much an event moves a goal of the given kind. */
 export function goalIncrement(goal: Goal, e: StreamEvent): number {
@@ -52,7 +54,17 @@ export class ProgressTracker {
       if (e.source === 'test') return;
       this.applyToGoals(e);
       this.applyToTimers(e);
+      this.applyToStats(e);
     });
+  }
+
+  private applyToStats(e: StreamEvent): void {
+    const next = applyEventToStats(this.ctx.settings.get('stats'), e, this.ctx.settings.get('currency'));
+    if (next) this.ctx.settings.set('stats', next);
+  }
+
+  resetStats(): void {
+    this.ctx.settings.set('stats', emptyStats());
   }
 
   private applyToGoals(e: StreamEvent): void {

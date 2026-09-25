@@ -5,6 +5,7 @@ export function initialRuntimeState(): RuntimeState {
   const disconnected = { status: 'disconnected' as const };
   return {
     twitch: { ...disconnected },
+    kawaki: { ...disconnected, nowWatching: null, partner: null },
     twitchBot: { ...disconnected },
     donationalerts: { ...disconnected },
     streamlabs: { ...disconnected },
@@ -13,6 +14,12 @@ export function initialRuntimeState(): RuntimeState {
     alerts: { paused: false, queueLength: 0, current: null },
     overlayUrl: '',
     overlayClients: 0,
+    overlayKinds: {},
+    wheel: { spinning: false, wheelId: null, lastResult: null },
+    poll: null,
+    giveaway: { status: 'idle', entrants: [], winner: null, winnerMessages: [] },
+    quiz: { status: 'idle', round: 0, rounds: 0, imageUrl: null, hint: '', endsAt: null, answer: null, winner: null, leaderboard: [] },
+    bannersShown: [],
   };
 }
 

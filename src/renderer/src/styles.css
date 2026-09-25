@@ -20,6 +20,10 @@
   --radius-sm: 8px;
   --font: 'Segoe UI Variable Text', 'Segoe UI', Inter, system-ui, sans-serif;
   --mono: 'Cascadia Code', Consolas, ui-monospace, monospace;
+  --z-dropdown: 20;
+  --z-modal: 50;
+  --z-toast: 60;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   color-scheme: dark;
 }
 
@@ -201,24 +205,38 @@ p {
   margin-top: auto;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 12px;
+  gap: 2px;
+  padding: 8px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border);
   background: var(--panel);
-  color: var(--text-2);
-  font: inherit;
   font-size: 12.5px;
-  cursor: pointer;
-  text-align: left;
 }
-.side-status:hover {
-  border-color: #3a3a4a;
-}
-.side-status span {
+.side-status button {
   display: flex;
   align-items: center;
   gap: 8px;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.side-status button:hover {
+  background: var(--panel-2);
+  color: var(--text);
+}
+.side-overlays {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 6px 2px;
+  margin-top: 4px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
 }
 
 .content {
@@ -745,7 +763,7 @@ kbd {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  z-index: 100;
+  z-index: var(--z-toast);
   max-width: 420px;
 }
 .toast {
@@ -799,13 +817,39 @@ kbd {
   padding-bottom: 12px;
   border-bottom: 1px solid var(--border);
 }
-.dash-side {
+.dash-cols {
   display: flex;
   flex-direction: column;
   gap: 16px;
   overflow-y: auto;
   min-height: 0;
   padding-right: 2px;
+}
+.dash-col {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+/* A second monitor has room for three columns: chat | controls | feed. */
+@media (min-width: 1560px) {
+  .dashboard {
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1.6fr);
+  }
+  .dash-cols {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 0.85fr);
+    align-items: start;
+    overflow: hidden;
+  }
+  .dash-col {
+    max-height: 100%;
+    overflow-y: auto;
+    padding-right: 2px;
+  }
+  .dash-col:last-child {
+    height: 100%;
+  }
 }
 .dash-feed {
   flex: 1;
@@ -882,7 +926,7 @@ kbd {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   box-shadow: 0 12px 30px #000a;
-  z-index: 20;
+  z-index: var(--z-dropdown);
   max-height: 320px;
   overflow-y: auto;
 }
@@ -1677,7 +1721,7 @@ kbd {
   .dash-chat {
     height: 70vh;
   }
-  .dash-side {
+  .dash-cols {
     overflow: visible;
   }
 }

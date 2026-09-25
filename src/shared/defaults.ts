@@ -2,14 +2,22 @@ import type {
   AlertSettings,
   AlertType,
   AlertVariant,
+  Banner,
   BotSettings,
   BuiltinCommand,
   ChatOverlaySettings,
+  GiveawaySettings,
   Goal,
+  KawakiSettings,
+  Label,
   Language,
   OverlayTimer,
+  PollSettings,
   QuickAction,
+  QuizSettings,
   Settings,
+  StreamStats,
+  Wheel,
 } from './types';
 
 /**
@@ -85,6 +93,7 @@ export function defaultBuiltins(lang: Language): BuiltinCommand[] {
     { id: 'shoutout', enabled: true, trigger: 'so', permission: 'moderator' },
     { id: 'counter', enabled: true, trigger: 'count', permission: 'moderator' },
     { id: 'permit', enabled: true, trigger: 'permit', permission: 'moderator' },
+    { id: 'anime', enabled: true, trigger: ru ? 'аниме' : 'anime', permission: 'everyone' },
   ];
 }
 
@@ -245,6 +254,146 @@ export function defaultActions(lang: Language): QuickAction[] {
   ];
 }
 
+export const WHEEL_COLORS = ['#7c5cff', '#ff5d8f', '#ffb547', '#37d399', '#3fa7ff', '#ff7a45', '#c26bff', '#2ec4b6'];
+
+export function defaultBanner(lang: Language): Banner {
+  const ru = lang === 'ru';
+  return {
+    id: uid('banner_'),
+    name: ru ? 'Бегущая строка' : 'Ticker',
+    visible: false,
+    layout: 'ticker',
+    slides: [
+      { id: uid('slide_'), text: ru ? 'Последний фолловер: {lastfollower}' : 'Latest follower: {lastfollower}', image: null },
+      { id: uid('slide_'), text: ru ? 'Топ донат: {topdonor} — {topdonation}' : 'Top donation: {topdonor} — {topdonation}', image: null },
+      { id: uid('slide_'), text: ru ? 'Команды бота: !команды' : 'Bot commands: !commands', image: null },
+    ],
+    intervalSec: 8,
+    tickerSpeed: 90,
+    scheduleEveryMin: 0,
+    scheduleShowSec: 20,
+    fontFamily: 'Montserrat',
+    fontSize: 28,
+    textColor: '#ffffff',
+    background: 'rgba(12,12,18,0.78)',
+    accentColor: '#9b6bff',
+    align: 'left',
+  };
+}
+
+export function defaultLabel(lang: Language, template?: string, name?: string): Label {
+  const ru = lang === 'ru';
+  return {
+    id: uid('label_'),
+    name: name ?? (ru ? 'Последний фолловер' : 'Latest follower'),
+    template: template ?? (ru ? 'Последний фолловер: {lastfollower}' : 'Latest follower: {lastfollower}'),
+    fontFamily: 'Montserrat',
+    fontSize: 32,
+    textColor: '#ffffff',
+    align: 'left',
+  };
+}
+
+export function emptyStats(): StreamStats {
+  return {
+    lastFollower: '',
+    lastSubscriber: '',
+    lastCheer: null,
+    lastRaid: null,
+    lastDonation: null,
+    topDonation: null,
+    topCheer: null,
+    follows: 0,
+    subs: 0,
+    bits: 0,
+    donations: 0,
+    since: Date.now(),
+  };
+}
+
+export function defaultWheel(lang: Language): Wheel {
+  const ru = lang === 'ru';
+  const labels = ru
+    ? ['Приседания ×10', 'Спеть песню', 'Смена игры', 'Ничего', 'Хоррор-челлендж', 'Выбор чата']
+    : ['10 squats', 'Sing a song', 'Change game', 'Nothing', 'Horror challenge', "Chat's choice"];
+  return {
+    id: uid('wheel_'),
+    name: ru ? 'Колесо удачи' : 'Wheel of fortune',
+    segments: labels.map((label, i) => ({ id: uid('seg_'), label, color: WHEEL_COLORS[i % WHEEL_COLORS.length], weight: 1 })),
+    spinSec: 7,
+    removeWinner: false,
+    announce: ru ? 'Колесо выбрало: {result}!' : 'The wheel says: {result}!',
+    command: '',
+    commandPermission: 'moderator',
+    commandCooldownSec: 30,
+    redemptionTitle: '',
+    fontFamily: 'Montserrat',
+    tickSound: true,
+    winSound: null,
+    volume: 0.5,
+    hideAfterSec: 0,
+  };
+}
+
+export function defaultPoll(lang: Language): PollSettings {
+  const ru = lang === 'ru';
+  return {
+    question: ru ? 'Во что играем дальше?' : 'What do we play next?',
+    options: ru ? ['Хоррор', 'Инди', 'Шутер'] : ['Horror', 'Indie', 'Shooter'],
+    durationSec: 90,
+    allowChange: true,
+    announce: true,
+    resultSec: 20,
+    barColor: '#9b6bff',
+    textColor: '#ffffff',
+    fontFamily: 'Montserrat',
+  };
+}
+
+export function defaultGiveaway(lang: Language): GiveawaySettings {
+  const ru = lang === 'ru';
+  return {
+    title: ru ? 'Розыгрыш' : 'Giveaway',
+    keyword: ru ? '!участвую' : '!join',
+    eligible: 'everyone',
+    subLuck: 2,
+    announceOpen: ru ? 'Розыгрыш начался! Пишите {keyword}, чтобы участвовать' : 'Giveaway is open! Type {keyword} to enter',
+    announceWinner: ru ? 'Победитель розыгрыша — @{winner}! Поздравляем!' : 'The winner is @{winner}! Congratulations!',
+    accentColor: '#ffb547',
+    fontFamily: 'Montserrat',
+  };
+}
+
+export function defaultQuiz(): QuizSettings {
+  return {
+    rounds: 10,
+    roundSec: 40,
+    revealSec: 7,
+    difficulty: 'normal',
+    hints: true,
+    announce: true,
+    accentColor: '#ff5d6c',
+    fontFamily: 'Montserrat',
+  };
+}
+
+export const DEFAULT_KAWAKI_URL = 'https://kawaki.ru';
+
+export function defaultKawaki(lang: Language): KawakiSettings {
+  const ru = lang === 'ru';
+  return {
+    baseUrl: DEFAULT_KAWAKI_URL,
+    autoTitle: false,
+    titleTemplate: ru ? 'Смотрим {anime} — серия {episode} | kawaki.ru' : 'Watching {anime} — episode {episode} | kawaki.ru',
+    commandTemplate: ru ? 'Смотрим «{anime}», серия {episode}: {animeurl}' : 'Watching "{anime}", episode {episode}: {animeurl}',
+    keepLast: true,
+    showPoster: true,
+    showProgress: true,
+    accentColor: '#ff4d4f',
+    fontFamily: 'Montserrat',
+  };
+}
+
 export function defaultSettings(lang: Language): Settings {
   return {
     version: 1,
@@ -260,6 +409,18 @@ export function defaultSettings(lang: Language): Settings {
     goals: [defaultGoal(lang)],
     timers: [defaultTimer(lang)],
     actions: defaultActions(lang),
+    banners: [defaultBanner(lang)],
+    labels: [
+      defaultLabel(lang),
+      defaultLabel(lang, lang === 'ru' ? 'Топ донат: {topdonor} — {topdonation}' : 'Top donation: {topdonor} — {topdonation}', lang === 'ru' ? 'Топ донат' : 'Top donation'),
+    ],
+    stats: emptyStats(),
+    emoteRain: { fromChat: true, maxPerMessage: 5, size: 64, durationSec: 6, style: 'rain', burstOnEvents: true, burstCount: 40 },
+    wheels: [defaultWheel(lang)],
+    poll: defaultPoll(lang),
+    giveaway: defaultGiveaway(lang),
+    quiz: defaultQuiz(),
+    kawaki: defaultKawaki(lang),
     currency: lang === 'ru' ? 'RUB' : 'USD',
     minimizeToTray: true,
   };
@@ -268,6 +429,17 @@ export function defaultSettings(lang: Language): Settings {
 /** The Client ID to actually use: the user's override, or the built-in one. */
 export function twitchClientId(configured: string): string {
   return configured.trim() || DEFAULT_TWITCH_CLIENT_ID;
+}
+
+/**
+ * Upgrades that `mergeDefaults` can't do: it keeps stored arrays as-is, so list items added in a
+ * new version (like a new built-in command) have to be appended explicitly.
+ */
+export function migrateSettings(s: Settings): Settings {
+  const known = new Set(s.bot.builtins.map((b) => b.id));
+  const missing = defaultBuiltins(s.language).filter((b) => !known.has(b.id));
+  if (missing.length === 0) return s;
+  return { ...s, bot: { ...s.bot, builtins: [...s.bot.builtins, ...missing] } };
 }
 
 /** Fill missing keys (new settings added in later versions) without touching user values. */

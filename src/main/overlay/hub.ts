@@ -1,6 +1,7 @@
 import type { ChatMessage, ChatOverlaySettings, OverlayKind, OverlayMessage, Settings } from '@shared/types';
 import type { AppContext } from '../core/context';
 import type { AlertQueue } from '../features/alerts';
+import type { TextOverlays } from '../features/banners';
 import type { ChatHistory } from '../features/chatHistory';
 import type { OverlayServer } from './server';
 
@@ -11,13 +12,22 @@ export function showInChatOverlay(m: ChatMessage, cfg: ChatOverlaySettings, pref
   return !hidden.includes(m.userLogin.toLowerCase());
 }
 
+/** Current state of the stateful features, for overlays that connect mid-stream. */
+export interface HubSources {
+  alerts: () => AlertQueue;
+  text: () => TextOverlays;
+  poll: () => OverlayMessage;
+  giveaway: () => OverlayMessage;
+  quiz: () => OverlayMessage;
+}
+
 /** Wires bus events and settings changes to connected overlays. */
 export class OverlayHub {
   constructor(
     private ctx: AppContext,
     server: OverlayServer,
     private chat: ChatHistory,
-    private alerts: () => AlertQueue,
+    private sources: HubSources,
   ) {
     const { bus } = ctx;
     bus.on('chat:message', (message) => {
@@ -27,10 +37,14 @@ export class OverlayHub {
     bus.on('chat:clearUser', ({ userId }) => server.broadcast('chat', { type: 'chatClearUser', userId }));
     bus.on('chat:clear', () => server.broadcast('chat', { type: 'chatClear' }));
     bus.on('event', (event) => server.broadcast('events', { type: 'event', event }));
+    bus.on('kawaki:now', () => server.broadcast('kawaki', this.kawakiMessage()));
     bus.on('settings:changed', (key) => {
       if (key === 'chatOverlay') server.broadcast('chat', { type: 'chatConfig', config: this.settings.chatOverlay });
       if (key === 'goals') server.forEachClient('goal', (id) => this.goalMessage(id));
       if (key === 'timers') server.forEachClient('timer', (id) => this.timerMessage(id));
+      if (key === 'wheels') server.forEachClient('wheel', (id) => this.wheelMessage(id));
+      if (key === 'emoteRain') server.broadcast('emotes', { type: 'emoteConfig', config: this.settings.emoteRain });
+      if (key === 'kawaki') server.broadcast('kawaki', this.kawakiMessage());
     });
   }
 
@@ -48,6 +62,18 @@ export class OverlayHub {
     return { type: 'timer', timer: (id ? timers.find((t) => t.id === id) : timers[0]) ?? null, now: Date.now() };
   }
 
+  private wheelMessage(id: string | null): OverlayMessage {
+    const wheels = this.settings.wheels;
+    const wheel = (id ? wheels.find((w) => w.id === id) : wheels[0]) ?? null;
+    const last = this.ctx.state.current.wheel.lastResult;
+    const lastWinnerId = wheel && last?.wheelId === wheel.id ? (wheel.segments.find((s) => s.label === last.label)?.id ?? null) : null;
+    return { type: 'wheel', wheel, lastWinnerId };
+  }
+
+  private kawakiMessage(): OverlayMessage {
+    return { type: 'kawaki', now: this.ctx.state.current.kawaki.nowWatching, style: this.settings.kawaki, lang: this.settings.language };
+  }
+
   initialMessages(kind: OverlayKind, id: string | null): OverlayMessage[] {
     switch (kind) {
       case 'chat': {
@@ -63,9 +89,24 @@ export class OverlayHub {
       case 'timer':
         return [this.timerMessage(id)];
       case 'events':
-        return [{ type: 'events', events: this.alerts().recentEvents.slice(0, 20) }];
+        return [{ type: 'events', events: this.sources.alerts().recentEvents.slice(0, 20) }];
       case 'alerts':
         return [];
+      case 'banner':
+      case 'label':
+        return [this.sources.text().initial(kind, id)];
+      case 'emotes':
+        return [{ type: 'emoteConfig', config: this.settings.emoteRain }];
+      case 'wheel':
+        return [this.wheelMessage(id)];
+      case 'poll':
+        return [this.sources.poll()];
+      case 'giveaway':
+        return [this.sources.giveaway()];
+      case 'quiz':
+        return [this.sources.quiz()];
+      case 'kawaki':
+        return [this.kawakiMessage()];
     }
   }
 }

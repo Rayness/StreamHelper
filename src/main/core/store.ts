@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { defaultSettings, mergeDefaults } from '@shared/defaults';
+import { defaultSettings, mergeDefaults, migrateSettings } from '@shared/defaults';
 import type { Language, Settings, SettingsKey } from '@shared/types';
 import type { EventBus } from './eventBus';
 
@@ -26,7 +26,7 @@ export class SettingsStore {
       }
     }
     const lang = (stored as Partial<Settings> | undefined)?.language ?? systemLanguage;
-    this.data = mergeDefaults(defaultSettings(lang), stored);
+    this.data = migrateSettings(mergeDefaults(defaultSettings(lang), stored));
     if (!stored) this.flush();
   }
 

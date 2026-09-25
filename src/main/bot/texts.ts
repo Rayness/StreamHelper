@@ -19,6 +19,7 @@ const TEXTS = {
     counter: 'Счётчик {name}: {value}',
     permit: '@{login}, можешь отправить ссылку в течение {sec} сек.',
     failed: 'Не получилось: {error}',
+    animeNone: 'Сейчас ничего не смотрим',
   },
   en: {
     uptime: 'Stream has been live for {uptime}',
@@ -37,6 +38,7 @@ const TEXTS = {
     counter: 'Counter {name}: {value}',
     permit: '@{login}, you may post a link in the next {sec}s',
     failed: 'Failed: {error}',
+    animeNone: 'Not watching anything right now',
   },
 } satisfies Record<Language, Record<string, string>>;
 

@@ -5,7 +5,7 @@ import { Icon } from '../components/icons';
 import { MediaPicker } from '../components/MediaPicker';
 import { Button, Card, ColorInput, CopyField, Field, NumberInput, PageHeader, Select, TextInput, Toggle } from '../components/ui';
 import { useT } from '../i18n';
-import { call, saveSettings, useApp } from '../store';
+import { call, saveSettings, useApp, useSub } from '../store';
 
 const VARS: Record<AlertType, string> = {
   follow: '{user}',
@@ -22,7 +22,7 @@ export function Alerts() {
   const t = useT();
   const alerts = useApp((d) => d.settings!.alerts);
   const overlayUrl = useApp((d) => d.state!.overlayUrl);
-  const [selected, setSelected] = useState<AlertType>('follow');
+  const [selected, setSelected] = useSub<AlertType>('alerts', 'follow', ALERT_TYPES);
   const [previewKey, setPreviewKey] = useState(0);
   const v = alerts.types[selected];
 

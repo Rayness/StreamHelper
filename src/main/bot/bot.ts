@@ -2,6 +2,7 @@ import { eventVars } from '@shared/events';
 import { formatDuration, renderTemplate, renderTemplateAsync } from '@shared/template';
 import type { BotCommand, BotTimer, BuiltinCommand, ChatMessage, StreamEvent } from '@shared/types';
 import { errorMessage, type AppContext } from '../core/context';
+import { resolveStreamVar } from '../features/vars';
 import type { ChatPlatform, PlatformRegistry } from '../platforms/types';
 import { Cooldowns } from './cooldowns';
 import { Moderator, type Violation } from './moderation';
@@ -147,7 +148,8 @@ export class BotService {
           return at ? formatDuration(Date.now() - at, lang) : '—';
         }
         default:
-          return undefined;
+          // Stats ({lastfollower}, {topdonation}...) and Kawaki ({anime}, {animeurl}) are shared with overlays.
+          return resolveStreamVar(name, arg, this.ctx.settings.all, this.ctx.state.current);
       }
     });
   }
@@ -215,6 +217,12 @@ export class BotService {
           } else if (op === '++' || op === '+') value = this.addCounter(name, 1);
           else if (op === '--' || op === '-') value = this.addCounter(name, -1);
           return say('counter', { name, value });
+        }
+        case 'anime': {
+          const now = this.ctx.state.current.kawaki.nowWatching;
+          if (!now) return say('animeNone');
+          const s = this.ctx.settings.all;
+          return platform.sendMessage(renderTemplate(s.kawaki.commandTemplate, (name, arg) => resolveStreamVar(name, arg, s, this.ctx.state.current)));
         }
         case 'permit': {
           const login = normalizeLogin(args[0]);

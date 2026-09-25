@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>StreamHelper — Anime quiz</title>
+    <style>
+      :root {
+        --accent: #ff5d6c;
+      }
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: transparent;
+        overflow: hidden;
+      }
+      #q {
+        position: absolute;
+        inset: 12px;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 260px;
+        gap: 16px;
+        color: #fff;
+        opacity: 0;
+        transition: opacity 0.4s ease;
+      }
+      #q.on {
+        opacity: 1;
+      }
+      #q.solo {
+        grid-template-columns: minmax(0, 1fr);
+      }
+      .main {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        min-height: 0;
+      }
+      .top {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 16px;
+        border-radius: 12px;
+        background: rgba(12, 12, 18, 0.84);
+        font-weight: 800;
+        font-size: 20px;
+      }
+      .top .round {
+        margin-left: auto;
+        opacity: 0.8;
+        font-variant-numeric: tabular-nums;
+      }
+      .frame {
+        position: relative;
+        flex: 1;
+        min-height: 0;
+        border-radius: 14px;
+        overflow: hidden;
+        background: #0c0c12;
+        box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+      }
+      .frame img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        display: block;
+      }
+      .frame .img-in {
+        animation: in 0.6s ease;
+      }
+      @keyframes in {
+        from {
+          opacity: 0;
+          filter: blur(12px);
+        }
+      }
+      .time {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        height: 6px;
+        background: rgba(0, 0, 0, 0.4);
+      }
+      .time div {
+        height: 100%;
+        background: var(--accent);
+        transform-origin: left;
+      }
+      .reveal {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 22px;
+        padding: 24px;
+        background: rgba(8, 8, 12, 0.72);
+        backdrop-filter: blur(6px);
+        animation: in 0.5s ease;
+      }
+      .reveal img {
+        width: 150px;
+        height: auto;
+        aspect-ratio: 2/3;
+        object-fit: cover;
+        border-radius: 12px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+      }
+      .reveal .t {
+        font-size: 34px;
+        font-weight: 900;
+        line-height: 1.15;
+      }
+      .reveal .who {
+        margin-top: 10px;
+        font-size: 22px;
+        font-weight: 700;
+        color: var(--accent);
+      }
+      .hint {
+        padding: 10px 16px;
+        border-radius: 12px;
+        background: rgba(12, 12, 18, 0.84);
+        font-family: 'Cascadia Code', Consolas, monospace;
+        font-size: 26px;
+        font-weight: 700;
+        letter-spacing: 0.18em;
+        text-align: center;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+      .hint:empty {
+        display: none;
+      }
+      .board {
+        padding: 14px 16px;
+        border-radius: 14px;
+        background: rgba(12, 12, 18, 0.84);
+        align-self: start;
+      }
+      .board h4 {
+        margin: 0 0 10px;
+        font-size: 16px;
+        color: var(--accent);
+      }
+      .board ol {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .board li {
+        display: flex;
+        gap: 8px;
+        font-size: 18px;
+        font-weight: 700;
+      }
+      .board li span:first-child {
+        flex: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .final {
+        display: grid;
+        place-items: center;
+        text-align: center;
+      }
+      .final .t {
+        font-size: 40px;
+        font-weight: 900;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="q"></div>
+    <script src="/overlay/assets/common.js"></script>
+    <script>
+      const root = document.getElementById('q');
+      let quiz = null;
+      let lang = 'ru';
+      let skew = 0;
+      let roundMs = 40000;
+      let bar = null;
+      let lastImage = null;
+
+      function board(list, title) {
+        const b = SH.el('div', 'board');
+        b.appendChild(SH.el('h4', '', title));
+        const ol = document.createElement('ol');
+        list.slice(0, 8).forEach((r, i) => {
+          const li = document.createElement('li');
+          li.append(SH.el('span', '', `${i + 1}. ${r.userName}`), SH.el('span', '', String(r.points)));
+          ol.appendChild(li);
+        });
+        b.appendChild(ol);
+        return b;
+      }
+
+      function render() {
+        root.innerHTML = '';
+        bar = null;
+        const on = quiz && quiz.status !== 'idle';
+        root.classList.toggle('on', !!on);
+        if (!on) return;
+        const tr = (ru, en) => SH.tr(lang, ru, en);
+        if (quiz.status === 'finished' || quiz.status === 'error') {
+          root.classList.add('solo');
+          const f = SH.el('div', 'main final');
+          const wrap = SH.el('div');
+          wrap.appendChild(SH.el('div', 't', quiz.status === 'error' ? tr('Квиз остановлен', 'Quiz stopped') : tr('Итоги квиза', 'Quiz results')));
+          if (quiz.leaderboard.length) wrap.appendChild(board(quiz.leaderboard, tr('Лучшие', 'Top players')));
+          f.appendChild(wrap);
+          root.appendChild(f);
+          return;
+        }
+        root.classList.toggle('solo', quiz.leaderboard.length === 0);
+        const main = SH.el('div', 'main');
+        const top = SH.el('div', 'top');
+        top.append(SH.el('span', '', tr('Угадай аниме по кадру', 'Guess the anime')), SH.el('span', 'round', quiz.round ? `${quiz.round} / ${quiz.rounds}` : '…'));
+        main.appendChild(top);
+        const frame = SH.el('div', 'frame');
+        if (quiz.imageUrl) {
+          const img = document.createElement('img');
+          img.src = quiz.imageUrl;
+          if (quiz.imageUrl !== lastImage) img.className = 'img-in';
+          lastImage = quiz.imageUrl;
+          frame.appendChild(img);
+        }
+        if (quiz.status === 'question') {
+          const time = SH.el('div', 'time');
+          bar = SH.el('div');
+          time.appendChild(bar);
+          frame.appendChild(time);
+        }
+        if (quiz.status === 'reveal' && quiz.answer) {
+          const r = SH.el('div', 'reveal');
+          if (quiz.answer.posterUrl) {
+            const p = document.createElement('img');
+            p.src = quiz.answer.posterUrl;
+            r.appendChild(p);
+          }
+          const txt = SH.el('div');
+          txt.appendChild(SH.el('div', 't', quiz.answer.title));
+          txt.appendChild(SH.el('div', 'who', quiz.winner ? tr(`Угадал(а) ${quiz.winner}`, `${quiz.winner} got it`) : tr('Никто не угадал', 'Nobody got it')));
+          r.appendChild(txt);
+          frame.appendChild(r);
+        }
+        main.appendChild(frame);
+        if (quiz.status === 'question') main.appendChild(SH.el('div', 'hint', quiz.hint));
+        root.appendChild(main);
+        if (quiz.leaderboard.length) root.appendChild(board(quiz.leaderboard, tr('Счёт', 'Score')));
+        tick();
+      }
+
+      function tick() {
+        if (!bar || !quiz || !quiz.endsAt) return;
+        const left = Math.max(0, quiz.endsAt - (Date.now() + skew));
+        bar.style.transform = `scaleX(${left / roundMs})`;
+      }
+
+      SH.connect('quiz', (msg) => {
+        if (msg.type !== 'quiz') return;
+        quiz = msg.quiz;
+        lang = msg.lang;
+        if (quiz.status === 'idle' && SH.preview) {
+          quiz = { status: 'question', round: 3, rounds: 10, imageUrl: null, hint: '______ ______', endsAt: msg.now + 24000, answer: null, winner: null, leaderboard: [{ userName: 'akiko', points: 6 }, { userName: 'kuro_neko', points: 3 }, { userName: 'mikan', points: 1 }] };
+        }
+        skew = msg.now - Date.now();
+        roundMs = Math.max(10, msg.style.roundSec) * 1000;
+        SH.useFont(root, msg.style.fontFamily);
+        root.style.setProperty('--accent', msg.style.accentColor);
+        render();
+      });
+      setInterval(tick, 100);
+    </script>
+  </body>
+</html>

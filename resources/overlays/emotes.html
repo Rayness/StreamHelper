@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>StreamHelper — Emote rain</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        background: transparent;
+      }
+      img {
+        position: absolute;
+        left: 0;
+        top: 0;
+        will-change: transform, opacity;
+        pointer-events: none;
+      }
+    </style>
+  </head>
+  <body>
+    <script src="/overlay/assets/common.js"></script>
+    <script>
+      const MAX_ON_SCREEN = 220;
+      let cfg = { size: 64, durationSec: 6, style: 'rain' };
+      let alive = 0;
+
+      const rnd = (a, b) => a + Math.random() * (b - a);
+
+      function drop(url, delay) {
+        if (alive >= MAX_ON_SCREEN) return;
+        const img = document.createElement('img');
+        img.src = url;
+        const size = cfg.size * rnd(0.8, 1.25);
+        img.style.width = size + 'px';
+        const W = innerWidth;
+        const H = innerHeight;
+        const dur = cfg.durationSec * 1000 * rnd(0.75, 1.2);
+        let frames;
+        if (cfg.style === 'rise') {
+          const x = rnd(0, W - size);
+          const drift = rnd(-120, 120);
+          frames = [
+            { transform: `translate(${x}px, ${H}px) scale(0.6)`, opacity: 0 },
+            { transform: `translate(${x + drift * 0.3}px, ${H * 0.75}px) scale(1)`, opacity: 1, offset: 0.15 },
+            { transform: `translate(${x + drift}px, ${-size}px) scale(1.1)`, opacity: 0 },
+          ];
+        } else if (cfg.style === 'bounce') {
+          const fromLeft = Math.random() < 0.5;
+          const x0 = fromLeft ? -size : W;
+          const x1 = fromLeft ? rnd(W * 0.3, W * 0.9) : rnd(W * 0.1, W * 0.7);
+          const peak = rnd(H * 0.1, H * 0.45);
+          frames = [
+            { transform: `translate(${x0}px, ${H * 0.8}px) rotate(0deg)`, opacity: 1 },
+            { transform: `translate(${(x0 + x1) / 2}px, ${peak}px) rotate(${fromLeft ? 180 : -180}deg)`, opacity: 1, offset: 0.45, easing: 'ease-in' },
+            { transform: `translate(${x1}px, ${H + size}px) rotate(${fromLeft ? 360 : -360}deg)`, opacity: 1 },
+          ];
+        } else {
+          const x = rnd(0, W - size);
+          const spin = rnd(-40, 40);
+          frames = [
+            { transform: `translate(${x}px, ${-size}px) rotate(0deg)`, opacity: 1 },
+            { transform: `translate(${x + rnd(-60, 60)}px, ${H + size}px) rotate(${spin}deg)`, opacity: 1 },
+          ];
+        }
+        document.body.appendChild(img);
+        alive++;
+        const anim = img.animate(frames, { duration: dur, delay, easing: cfg.style === 'rain' ? 'cubic-bezier(0.4, 0, 0.9, 0.6)' : 'linear', fill: 'both' });
+        anim.onfinish = () => {
+          img.remove();
+          alive--;
+        };
+      }
+
+      SH.connect('emotes', (msg) => {
+        if (msg.type === 'emoteConfig') cfg = msg.config;
+        if (msg.type !== 'emotes' || SH.reducedMotion) return;
+        // A burst is spread over a couple of seconds so it reads as a shower, not a wall.
+        const spread = msg.burst ? 2200 : 400;
+        msg.urls.forEach((u, i) => drop(u, msg.burst ? Math.random() * spread : i * 120));
+      });
+    </script>
+  </body>
+</html>

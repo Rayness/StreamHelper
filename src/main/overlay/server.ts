@@ -24,12 +24,14 @@ const MIME: Record<string, string> = {
   '.woff2': 'font/woff2',
 };
 
-export const OVERLAY_KINDS: OverlayKind[] = ['chat', 'alerts', 'goal', 'timer', 'events'];
+export const OVERLAY_KINDS: OverlayKind[] = ['chat', 'alerts', 'goal', 'timer', 'events', 'banner', 'label', 'emotes', 'wheel', 'poll', 'giveaway', 'kawaki', 'quiz'];
 
 interface Client {
   ws: WebSocket;
   kind: OverlayKind;
   id: string | null;
+  /** The app's own preview iframe: gets every message but isn't counted as "in OBS". */
+  preview: boolean;
 }
 
 export interface OverlayServerOptions {
@@ -38,7 +40,7 @@ export interface OverlayServerOptions {
   mediaDir: string;
   /** Messages a freshly connected overlay needs to render its current state. */
   initialMessages: (kind: OverlayKind, id: string | null) => OverlayMessage[];
-  onClientsChanged: (count: number) => void;
+  onClientsChanged: (count: number, perKind: Partial<Record<OverlayKind, number>>) => void;
   /** Extra routes (OAuth callbacks). Return true if handled. */
   extraRoute?: (req: IncomingMessage, res: ServerResponse, url: URL) => boolean | Promise<boolean>;
 }
@@ -130,18 +132,29 @@ export class OverlayServer {
   private onConnection(ws: WebSocket, url: URL): void {
     const kind = url.searchParams.get('kind') as OverlayKind;
     if (!OVERLAY_KINDS.includes(kind)) return ws.close(1008, 'unknown overlay kind');
-    const client: Client = { ws, kind, id: url.searchParams.get('id') };
+    const client: Client = { ws, kind, id: url.searchParams.get('id'), preview: url.searchParams.has('preview') };
     this.clients.add(client);
-    this.opts.onClientsChanged(this.clients.size);
+    this.notifyClients();
     for (const m of this.opts.initialMessages(kind, client.id)) ws.send(JSON.stringify(m));
     // Keep NAT-less localhost connections alive and detect dead browser sources.
     const ping = setInterval(() => ws.readyState === ws.OPEN && ws.ping(), 30_000);
     ws.on('close', () => {
       clearInterval(ping);
       this.clients.delete(client);
-      this.opts.onClientsChanged(this.clients.size);
+      this.notifyClients();
     });
     ws.on('error', () => undefined);
+  }
+
+  private notifyClients(): void {
+    const perKind: Partial<Record<OverlayKind, number>> = {};
+    let total = 0;
+    for (const c of this.clients) {
+      if (c.preview) continue;
+      total++;
+      perKind[c.kind] = (perKind[c.kind] ?? 0) + 1;
+    }
+    this.opts.onClientsChanged(total, perKind);
   }
 
   private async handle(req: IncomingMessage, res: ServerResponse): Promise<void> {

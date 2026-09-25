@@ -1,8 +1,9 @@
 import { useCallback } from 'react';
 import { renderTemplate } from '@shared/template';
+import { enExtra, ruExtra } from './i18n.extra';
 import { useApp } from './store';
 
-const ru = {
+const ruBase = {
   'nav.dashboard': 'Панель',
   'nav.alerts': 'Алерты',
   'nav.overlays': 'Оверлеи',
@@ -399,9 +400,10 @@ const ru = {
   'toast.twitchSessionExpired': 'Сессия Twitch истекла — войдите снова',
 };
 
+const ru = { ...ruBase, ...ruExtra };
 export type TKey = keyof typeof ru;
 
-const en: Record<TKey, string> = {
+const enBase: Record<keyof typeof ruBase, string> = {
   'nav.dashboard': 'Dashboard',
   'nav.alerts': 'Alerts',
   'nav.overlays': 'Overlays',
@@ -797,6 +799,8 @@ const en: Record<TKey, string> = {
   'toast.twitchNoClientId': 'Twitch Client ID is not set (Settings → Advanced)',
   'toast.twitchSessionExpired': 'Twitch session expired — please log in again',
 };
+
+const en: Record<TKey, string> = { ...enBase, ...enExtra };
 
 const DICTS = { ru, en } as const;
 type Params = Record<string, string | number>;

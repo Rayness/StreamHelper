@@ -12,8 +12,16 @@ import { DonationAlertsService } from './donations/donationalerts';
 import { StreamlabsService } from './donations/streamlabs';
 import { ActionRunner } from './features/actions';
 import { AlertQueue, sampleEvent } from './features/alerts';
+import { TextOverlays } from './features/banners';
 import { ChatHistory, sampleChatMessage } from './features/chatHistory';
+import { EmoteRain } from './features/emotes';
+import { GiveawayService } from './features/giveaway';
+import { PollService } from './features/poll';
 import { ProgressTracker } from './features/progress';
+import { QuizService } from './features/quiz';
+import type { StageDeps } from './features/stage';
+import { WheelService } from './features/wheel';
+import { KawakiService } from './integrations/kawaki/service';
 import { push, registerIpc } from './ipc';
 import { ObsService } from './obs/obs';
 import { createAuthRoutes } from './overlay/authPages';
@@ -101,17 +109,41 @@ async function bootstrap(): Promise<void> {
     overlaysDir: join(resourcesDir(), 'overlays'),
     mediaDir,
     initialMessages: (kind, id) => hub.initialMessages(kind, id),
-    onClientsChanged: (count) => state.patch('overlayClients', count),
+    onClientsChanged: (count, perKind) => {
+      state.patch('overlayClients', count);
+      state.replace('overlayKinds', perKind);
+    },
     extraRoute: createAuthRoutes((token, expiresIn) => donationalerts.completeLogin(token, expiresIn)),
   });
-  hub = new OverlayHub(ctx, overlay, chatHistory, () => alerts);
 
-  const bot = new BotService(ctx, platforms, twitch);
   const sendToAllChats = async (text: string) => {
     const ready = platforms.ready();
     if (!ready.length) throw new Error('chat is not connected');
     await Promise.all(ready.map((p) => p.sendMessage(text)));
   };
+  const stage: StageDeps = {
+    broadcast: (kind, msg, id) => overlay.broadcast(kind, msg, id),
+    say: (text) => sendToAllChats(text).catch((err) => console.warn('[stage] chat', String(err?.message ?? err))),
+  };
+  const kawaki = new KawakiService(ctx, {
+    updateTitle: (title) => twitch.updateStream({ title }),
+    canUpdateTitle: () => state.current.twitch.status === 'connected',
+  });
+  const wheel = new WheelService(ctx, stage);
+  const poll = new PollService(ctx, stage);
+  const giveaway = new GiveawayService(ctx, stage);
+  const quiz = new QuizService(ctx, stage, kawaki);
+  const emotes = new EmoteRain(ctx, stage);
+  const text = new TextOverlays(ctx, () => overlay);
+  hub = new OverlayHub(ctx, overlay, chatHistory, {
+    alerts: () => alerts,
+    text: () => text,
+    poll: () => poll.overlayMessage(),
+    giveaway: () => giveaway.overlayMessage(),
+    quiz: () => quiz.overlayMessage(),
+  });
+
+  const bot = new BotService(ctx, platforms, twitch);
   const actions = new ActionRunner(ctx, {
     obsScene: (s) => obs.setScene(s),
     obsToggleSource: (scene, source) => obs.toggleSourceByName(scene, source),
@@ -125,6 +157,9 @@ async function bootstrap(): Promise<void> {
     timerToggle: (id) => progress.toggleTimer(id),
     timerAdd: (id, sec) => progress.controlTimer(id, 'add', sec),
     goalAdd: (id, amount) => progress.addToGoal(id, amount),
+    wheelSpin: (id) => wheel.spin(id),
+    bannerToggle: (id) => text.toggle(id),
+    emoteBurst: () => emotes.burst(),
   });
 
   // ---------- UI sync ----------
@@ -215,6 +250,28 @@ async function bootstrap(): Promise<void> {
     'alerts:replay': (id) => alerts.replay(id),
     'actions:run': (id) => actions.run(id),
     'timer:control': (id, op, sec) => progress.controlTimer(id, op, sec),
+    'banner:showNow': (id) => text.showNow(id),
+    'stats:reset': () => progress.resetStats(),
+    'emotes:test': () => emotes.burst(),
+    'wheel:spin': (id) => wheel.spin(id, state.current.twitch.account?.displayName ?? ''),
+    'poll:start': () => poll.start(),
+    'poll:end': () => poll.end(),
+    'poll:clear': () => poll.clear(),
+    'giveaway:open': () => giveaway.open(),
+    'giveaway:close': () => giveaway.close(),
+    'giveaway:roll': () => giveaway.roll(),
+    'giveaway:reset': () => giveaway.reset(),
+    'quiz:start': () => quiz.start(),
+    'quiz:skip': () => quiz.skip(),
+    'quiz:stop': () => quiz.stop(),
+    'kawaki:login': () => void kawaki.login(),
+    'kawaki:logout': () => kawaki.logout(),
+    'kawaki:cancelLogin': () => kawaki.cancelLogin(),
+    'kawaki:refresh': () => kawaki.refresh(),
+    'obs:addBrowserSource': async (name, url, width, height) => {
+      const result = await obs.addBrowserSource(name, url, width, height);
+      ctx.toast(result === 'exists' ? 'info' : 'success', `toast.obsSource_${result}`, { name, scene: state.current.obs.currentScene });
+    },
     'media:import': async () => {
       const res = await dialog.showOpenDialog(mainWindow!, {
         properties: ['openFile'],
@@ -242,12 +299,14 @@ async function bootstrap(): Promise<void> {
 
   // ---------- start ----------
   await startOverlay();
+  text.start();
   bot.start();
   actions.registerHotkeys();
   obs.start();
   void twitch.start();
   void donationalerts.start();
   streamlabs.start();
+  void kawaki.start();
 
   app.on('before-quit', () => {
     quitting = true;
@@ -256,6 +315,12 @@ async function bootstrap(): Promise<void> {
     twitch.stop();
     donationalerts.stop();
     streamlabs.stop();
+    kawaki.stop();
+    text.stop();
+    wheel.dispose();
+    poll.dispose();
+    giveaway.dispose();
+    quiz.dispose();
     bot.stop();
     void obs.disconnect();
     void overlay.stop();
