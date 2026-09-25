@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>StreamHelper — Recent events</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        background: transparent;
+        overflow: hidden;
+      }
+      #list {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        padding: 10px;
+        font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+        color: #fff;
+        font-size: 18px;
+      }
+      .row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        background: rgba(0, 0, 0, 0.45);
+        border-radius: 10px;
+        padding: 6px 12px;
+        animation: in 0.4s ease-out;
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+      }
+      .icon {
+        width: 1.4em;
+        text-align: center;
+      }
+      .name {
+        font-weight: 700;
+      }
+      .detail {
+        opacity: 0.85;
+        margin-left: auto;
+        font-variant-numeric: tabular-nums;
+      }
+      @keyframes in {
+        from {
+          opacity: 0;
+          transform: translateX(-20px);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="list"></div>
+    <script src="/overlay/assets/common.js"></script>
+    <script>
+      const list = document.getElementById('list');
+      const limit = Number(SH.params.get('limit')) || 5;
+      const types = (SH.params.get('types') || '').split(',').filter(Boolean);
+      const ICON = { follow: '❤', sub: '★', resub: '★', giftsub: '🎁', cheer: '◆', raid: '⚑', donation: '$', redemption: '✦' };
+
+      function detail(e) {
+        switch (e.type) {
+          case 'resub':
+            return `×${e.months}`;
+          case 'giftsub':
+            return `×${e.count}`;
+          case 'cheer':
+            return `${e.bits}`;
+          case 'raid':
+            return `${e.viewers}`;
+          case 'donation':
+            return `${e.amount} ${e.currency}`;
+          case 'redemption':
+            return e.rewardTitle;
+          default:
+            return '';
+        }
+      }
+
+      function row(e) {
+        const r = SH.el('div', 'row');
+        r.dataset.id = e.id;
+        r.appendChild(SH.el('span', 'icon', ICON[e.type] || '•'));
+        r.appendChild(SH.el('span', 'name', e.userName));
+        r.appendChild(SH.el('span', 'detail', detail(e)));
+        return r;
+      }
+
+      const wanted = (e) => e.source !== 'test' && (types.length === 0 || types.includes(e.type));
+
+      SH.connect('events', (msg) => {
+        if (msg.type === 'events') {
+          list.innerHTML = '';
+          msg.events.filter(wanted).slice(0, limit).forEach((e) => list.appendChild(row(e)));
+        } else if (msg.type === 'event' && wanted(msg.event)) {
+          list.prepend(row(msg.event));
+          while (list.children.length > limit) list.lastChild.remove();
+        }
+      });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,42 @@
+{
+  "name": "streamhelper",
+  "productName": "StreamHelper",
+  "version": "0.1.0",
+  "description": "Всё для стрима в одном приложении: оверлеи для OBS, чат-бот, объединённый чат, алерты донатов и управление трансляцией",
+  "main": "./out/main/index.js",
+  "author": "StreamHelper",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "typecheck:node": "tsc --noEmit -p tsconfig.node.json",
+    "typecheck:web": "tsc --noEmit -p tsconfig.web.json",
+    "typecheck": "npm run typecheck:node && npm run typecheck:web",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "dist": "electron-vite build && electron-builder --win",
+    "postinstall": "electron-builder install-app-deps"
+  },
+  "dependencies": {
+    "obs-websocket-js": "5.0.8",
+    "socket.io-client-v2": "npm:socket.io-client@2.5.0",
+    "ws": "8.21.3"
+  },
+  "devDependencies": {
+    "@types/node": "24.13.6",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@types/ws": "8.18.1",
+    "@vitejs/plugin-react": "5.2.0",
+    "electron": "44.4.5",
+    "electron-builder": "26.15.3",
+    "electron-vite": "5.0.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "typescript": "5.9.3",
+    "vite": "7.3.6",
+    "vitest": "5.0.1"
+  }
+}

@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>StreamHelper — Goal</title>
+    <style>
+      :root {
+        --bar: #9b6bff;
+        --text: #fff;
+      }
+      html,
+      body {
+        margin: 0;
+        background: transparent;
+        overflow: hidden;
+      }
+      #goal {
+        font-family: 'Montserrat', 'Segoe UI', system-ui, sans-serif;
+        color: var(--text);
+        padding: 12px;
+        display: none;
+      }
+      #goal.visible {
+        display: block;
+      }
+      .head {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 12px;
+        margin-bottom: 8px;
+        font-weight: 700;
+        text-shadow: 0 2px 4px rgba(0, 0, 0, 0.7);
+      }
+      .title {
+        font-size: 22px;
+      }
+      .numbers {
+        font-size: 18px;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+      }
+      .track {
+        position: relative;
+        height: 28px;
+        border-radius: 14px;
+        background: rgba(0, 0, 0, 0.45);
+        box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.12);
+        overflow: hidden;
+      }
+      .fill {
+        position: absolute;
+        inset: 0 auto 0 0;
+        width: 0;
+        border-radius: 14px;
+        background: linear-gradient(90deg, color-mix(in srgb, var(--bar) 75%, #000), var(--bar));
+        transition: width 1.2s cubic-bezier(0.2, 0.9, 0.3, 1);
+      }
+      .fill::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.35), transparent);
+        transform: translateX(-100%);
+        animation: shine 3s infinite;
+      }
+      .pct {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        font-weight: 800;
+        font-size: 15px;
+        text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+      }
+      .done .fill {
+        animation: pulse 1.5s infinite;
+      }
+      @keyframes shine {
+        60%,
+        100% {
+          transform: translateX(100%);
+        }
+      }
+      @keyframes pulse {
+        50% {
+          filter: brightness(1.3);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="goal">
+      <div class="head"><span class="title"></span><span class="numbers"></span></div>
+      <div class="track">
+        <div class="fill"></div>
+        <div class="pct"></div>
+      </div>
+    </div>
+    <script src="/overlay/assets/common.js"></script>
+    <script>
+      const root = document.getElementById('goal');
+      const fmt = (n) => (Number.isInteger(n) ? n.toLocaleString() : n.toLocaleString(undefined, { maximumFractionDigits: 2 }));
+
+      SH.connect('goal', (msg) => {
+        if (msg.type !== 'goal') return;
+        const g = msg.goal;
+        root.classList.toggle('visible', !!g);
+        if (!g) return;
+        root.style.setProperty('--bar', g.barColor);
+        root.style.setProperty('--text', g.textColor);
+        const pct = g.target > 0 ? Math.min(100, (g.current / g.target) * 100) : 0;
+        const unit = g.kind === 'donations' ? ' ' + g.currency : '';
+        root.querySelector('.title').textContent = g.title;
+        root.querySelector('.numbers').textContent = `${fmt(g.current)} / ${fmt(g.target)}${unit}`;
+        root.querySelector('.fill').style.width = pct + '%';
+        root.querySelector('.pct').textContent = Math.floor(pct) + '%';
+        root.classList.toggle('done', pct >= 100);
+      });
+    </script>
+  </body>
+</html>

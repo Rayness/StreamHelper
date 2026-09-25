@@ -1,0 +1,161 @@
+import { useState } from 'react';
+import { ALERT_TYPES, type AlertAnimation, type AlertType, type AlertVariant } from '@shared/types';
+import { EVENT_ICON } from '../components/EventFeed';
+import { Icon } from '../components/icons';
+import { MediaPicker } from '../components/MediaPicker';
+import { Button, Card, ColorInput, CopyField, Field, NumberInput, PageHeader, Select, TextInput, Toggle } from '../components/ui';
+import { useT } from '../i18n';
+import { call, saveSettings, useApp } from '../store';
+
+const VARS: Record<AlertType, string> = {
+  follow: '{user}',
+  sub: '{user} {tier}',
+  resub: '{user} {months} {streak} {tier} {message}',
+  giftsub: '{user} {count} {total} {tier}',
+  cheer: '{user} {amount} {message}',
+  raid: '{user} {amount}',
+  donation: '{user} {amount} {currency} {message}',
+  redemption: '{user} {reward} {cost} {message}',
+};
+
+export function Alerts() {
+  const t = useT();
+  const alerts = useApp((d) => d.settings!.alerts);
+  const overlayUrl = useApp((d) => d.state!.overlayUrl);
+  const [selected, setSelected] = useState<AlertType>('follow');
+  const [previewKey, setPreviewKey] = useState(0);
+  const v = alerts.types[selected];
+
+  const setVariant = (patch: Partial<AlertVariant>) =>
+    saveSettings('alerts', { ...alerts, types: { ...alerts.types, [selected]: { ...v, ...patch } } });
+  const setStyle = (patch: Partial<typeof alerts.style>) => saveSettings('alerts', { ...alerts, style: { ...alerts.style, ...patch } });
+
+  const minLabel: Partial<Record<AlertType, string>> = {
+    resub: t('alerts.minMonths'),
+    giftsub: t('alerts.minGifts'),
+    cheer: t('alerts.minBits'),
+    raid: t('alerts.minViewers'),
+    donation: t('alerts.minDonation'),
+    redemption: t('alerts.minCost'),
+  };
+
+  return (
+    <div className="page">
+      <PageHeader title={t('nav.alerts')} subtitle={t('alerts.subtitle')} />
+      <div className="alerts-layout">
+        <Card className="alert-types">
+          <ul className="type-list">
+            {ALERT_TYPES.map((type) => (
+              <li key={type} className={type === selected ? 'active' : ''}>
+                <button type="button" className="type-main" onClick={() => setSelected(type)}>
+                  <Icon name={EVENT_ICON[type]} size={16} />
+                  <span>{t(`alertType.${type}`)}</span>
+                </button>
+                <Toggle
+                  checked={alerts.types[type].enabled}
+                  onChange={(enabled) => saveSettings('alerts', { ...alerts, types: { ...alerts.types, [type]: { ...alerts.types[type], enabled } } })}
+                />
+              </li>
+            ))}
+          </ul>
+        </Card>
+
+        <div className="alert-editor">
+          <Card
+            title={t(`alertType.${selected}`)}
+            actions={
+              <Button size="sm" variant="primary" icon="play" onClick={() => void call('alerts:test', selected)}>
+                {t('alerts.test')}
+              </Button>
+            }
+          >
+            <div className="form">
+              <Field label={t('alerts.titleTpl')} hint={`${t('alerts.vars')}: ${VARS[selected]}`} wide>
+                <TextInput value={v.title} onChange={(title) => setVariant({ title })} />
+              </Field>
+              <Field label={t('alerts.messageTpl')} wide>
+                <TextInput value={v.message} onChange={(message) => setVariant({ message })} />
+              </Field>
+              <Field label={t('alerts.duration')}>
+                <NumberInput value={v.durationSec} min={1} max={120} onChange={(durationSec) => setVariant({ durationSec })} />
+              </Field>
+              {minLabel[selected] && (
+                <Field label={minLabel[selected]} hint={t('alerts.minHint')}>
+                  <NumberInput value={v.minAmount} min={0} onChange={(minAmount) => setVariant({ minAmount })} />
+                </Field>
+              )}
+              <Field label={t('alerts.animation')}>
+                <Select<AlertAnimation>
+                  value={v.animation}
+                  onChange={(animation) => setVariant({ animation })}
+                  options={(['fade', 'slide', 'zoom', 'bounce'] as const).map((a) => ({ value: a, label: t(`anim.${a}`) }))}
+                />
+              </Field>
+              <Field label={t('alerts.volume')}>
+                <input type="range" min={0} max={1} step={0.05} value={v.volume} onChange={(e) => setVariant({ volume: Number(e.target.value) })} />
+              </Field>
+              <Field label={t('alerts.sound')} wide>
+                <MediaPicker kind="audio" value={v.sound} onChange={(sound) => setVariant({ sound })} />
+              </Field>
+              <Field label={t('alerts.image')} hint={t('alerts.imageHint')} wide>
+                <MediaPicker kind="visual" value={v.image} onChange={(image) => setVariant({ image })} />
+              </Field>
+              <Field label={t('alerts.tts')} hint={t('alerts.ttsHint')} wide>
+                <Toggle checked={v.tts} onChange={(tts) => setVariant({ tts })} />
+              </Field>
+            </div>
+          </Card>
+
+          <Card title={t('alerts.style')}>
+            <div className="form">
+              <Field label={t('common.font')} hint={t('common.fontHint')}>
+                <TextInput value={alerts.style.fontFamily} onChange={(fontFamily) => setStyle({ fontFamily })} />
+              </Field>
+              <Field label={t('common.fontSize')}>
+                <NumberInput value={alerts.style.fontSize} min={12} max={160} onChange={(fontSize) => setStyle({ fontSize })} />
+              </Field>
+              <Field label={t('common.textColor')}>
+                <ColorInput value={alerts.style.textColor} onChange={(textColor) => setStyle({ textColor })} />
+              </Field>
+              <Field label={t('alerts.accent')}>
+                <ColorInput value={alerts.style.accentColor} onChange={(accentColor) => setStyle({ accentColor })} />
+              </Field>
+              <Field label={t('alerts.layout')}>
+                <Select
+                  value={alerts.style.layout}
+                  onChange={(layout) => setStyle({ layout })}
+                  options={[
+                    { value: 'stacked', label: t('alerts.layoutStacked') },
+                    { value: 'side', label: t('alerts.layoutSide') },
+                  ]}
+                />
+              </Field>
+              <Field label={t('alerts.gap')}>
+                <NumberInput value={alerts.gapSec} min={0} max={30} onChange={(gapSec) => saveSettings('alerts', { ...alerts, gapSec })} />
+              </Field>
+            </div>
+          </Card>
+        </div>
+
+        <div className="alert-preview-col">
+          <Card
+            title={t('alerts.preview')}
+            actions={<Button size="sm" icon="replay" onClick={() => setPreviewKey((k) => k + 1)}>{t('common.reload')}</Button>}
+          >
+            {overlayUrl ? (
+              <>
+                <div className="preview-frame checker">
+                  <iframe key={previewKey} src={`${overlayUrl}/overlay/alerts`} title="alerts preview" />
+                </div>
+                <p className="muted small">{t('alerts.previewHint')}</p>
+                <CopyField value={`${overlayUrl}/overlay/alerts`} />
+              </>
+            ) : (
+              <p className="muted">{t('overlays.serverDown')}</p>
+            )}
+          </Card>
+        </div>
+      </div>
+    </div>
+  );
+}

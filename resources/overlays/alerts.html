@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>StreamHelper — Alerts</title>
+    <style>
+      :root {
+        --font: 'Montserrat', 'Segoe UI', system-ui, sans-serif;
+        --size: 40px;
+        --text: #fff;
+        --accent: #9b6bff;
+      }
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        background: transparent;
+      }
+      #stage {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        font-family: var(--font);
+        color: var(--text);
+      }
+      .alert {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 14px;
+        max-width: 90vw;
+        text-align: center;
+      }
+      .alert.side {
+        flex-direction: row;
+        text-align: left;
+        gap: 24px;
+      }
+      .media {
+        max-width: min(420px, 60vw);
+        max-height: 50vh;
+        object-fit: contain;
+      }
+      .title {
+        font-size: var(--size);
+        font-weight: 800;
+        line-height: 1.15;
+        letter-spacing: 0.01em;
+        text-shadow:
+          0 0 18px color-mix(in srgb, var(--accent) 70%, transparent),
+          0 3px 6px rgba(0, 0, 0, 0.7);
+        -webkit-text-stroke: 1px rgba(0, 0, 0, 0.25);
+      }
+      .title .accent {
+        color: var(--accent);
+      }
+      .message {
+        font-size: calc(var(--size) * 0.55);
+        font-weight: 600;
+        max-width: 780px;
+        line-height: 1.3;
+        text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
+        overflow-wrap: anywhere;
+      }
+      .message:empty {
+        display: none;
+      }
+
+      /* enter / exit animations */
+      .fade.enter {
+        animation: fadeIn 0.5s ease-out both;
+      }
+      .fade.exit {
+        animation: fadeIn 0.5s ease-in reverse both;
+      }
+      .slide.enter {
+        animation: slideIn 0.6s cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+      }
+      .slide.exit {
+        animation: slideOut 0.5s ease-in both;
+      }
+      .zoom.enter {
+        animation: zoomIn 0.55s cubic-bezier(0.2, 0.9, 0.3, 1.3) both;
+      }
+      .zoom.exit {
+        animation: zoomIn 0.4s ease-in reverse both;
+      }
+      .bounce.enter {
+        animation: bounceIn 0.9s both;
+      }
+      .bounce.exit {
+        animation: fadeIn 0.5s ease-in reverse both;
+      }
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+        }
+      }
+      @keyframes slideIn {
+        from {
+          opacity: 0;
+          transform: translateY(60px);
+        }
+      }
+      @keyframes slideOut {
+        to {
+          opacity: 0;
+          transform: translateY(-60px);
+        }
+      }
+      @keyframes zoomIn {
+        from {
+          opacity: 0;
+          transform: scale(0.4);
+        }
+      }
+      @keyframes bounceIn {
+        0% {
+          opacity: 0;
+          transform: scale(0.3);
+        }
+        50% {
+          opacity: 1;
+          transform: scale(1.08);
+        }
+        70% {
+          transform: scale(0.95);
+        }
+        100% {
+          transform: scale(1);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="stage"></div>
+    <script src="/overlay/assets/common.js"></script>
+    <script>
+      const stage = document.getElementById('stage');
+      let current = null;
+      let audio = null;
+      let exitTimer = null;
+
+      /** A pleasant two-note chime for alerts without a custom sound. */
+      function chime(volume) {
+        try {
+          const ctx = new AudioContext();
+          const gain = ctx.createGain();
+          gain.connect(ctx.destination);
+          gain.gain.value = 0;
+          [
+            [880, 0],
+            [1318.5, 0.12],
+          ].forEach(([freq, at]) => {
+            const osc = ctx.createOscillator();
+            osc.type = 'sine';
+            osc.frequency.value = freq;
+            osc.connect(gain);
+            osc.start(ctx.currentTime + at);
+            osc.stop(ctx.currentTime + at + 0.9);
+          });
+          gain.gain.linearRampToValueAtTime(0.35 * volume, ctx.currentTime + 0.02);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.1);
+          setTimeout(() => ctx.close(), 1500);
+        } catch {}
+      }
+
+      function speak(text, lang) {
+        if (!text || !('speechSynthesis' in window)) return;
+        const u = new SpeechSynthesisUtterance(text.slice(0, 300));
+        u.lang = lang;
+        speechSynthesis.speak(u);
+      }
+
+      function isVideo(url) {
+        return /\.(webm|mp4)$/i.test(url);
+      }
+
+      function show(a) {
+        clear(true);
+        SH.loadFont(a.style.fontFamily);
+        const s = document.documentElement.style;
+        s.setProperty('--font', SH.fontStack(a.style.fontFamily));
+        s.setProperty('--size', a.style.fontSize + 'px');
+        s.setProperty('--text', a.style.textColor);
+        s.setProperty('--accent', a.style.accentColor);
+
+        const box = SH.el('div', `alert ${a.animation} enter ${a.style.layout === 'side' ? 'side' : ''}`);
+        if (a.image) {
+          const media = isVideo(a.image) ? SH.el('video', 'media') : SH.el('img', 'media');
+          media.src = a.image;
+          if (media.tagName === 'VIDEO') {
+            media.autoplay = true;
+            media.loop = true;
+            media.muted = !!a.sound;
+            media.volume = a.volume;
+          }
+          box.appendChild(media);
+        }
+        const texts = SH.el('div');
+        const title = SH.el('div', 'title');
+        // Paint the user's name with the accent color.
+        const at = a.userName ? a.title.indexOf(a.userName) : -1;
+        if (at === -1) title.textContent = a.title;
+        else {
+          title.appendChild(document.createTextNode(a.title.slice(0, at)));
+          title.appendChild(SH.el('span', 'accent', a.userName));
+          title.appendChild(document.createTextNode(a.title.slice(at + a.userName.length)));
+        }
+        texts.appendChild(title);
+        texts.appendChild(SH.el('div', 'message', a.message));
+        box.appendChild(texts);
+        stage.appendChild(box);
+        current = box;
+
+        if (a.sound) {
+          audio = new Audio(a.sound);
+          audio.volume = a.volume;
+          if (a.tts) audio.onended = () => speak(a.message, document.documentElement.lang);
+          audio.play().catch(() => {});
+        } else {
+          chime(a.volume);
+          if (a.tts) setTimeout(() => speak(a.message, document.documentElement.lang), 900);
+        }
+        exitTimer = setTimeout(() => clear(false), Math.max(1, a.durationSec) * 1000);
+      }
+
+      function clear(immediate) {
+        if (exitTimer) clearTimeout(exitTimer);
+        exitTimer = null;
+        if (audio) {
+          audio.pause();
+          audio = null;
+        }
+        if ('speechSynthesis' in window) speechSynthesis.cancel();
+        const box = current;
+        current = null;
+        if (!box) return;
+        if (immediate) return box.remove();
+        box.classList.remove('enter');
+        box.classList.add('exit');
+        setTimeout(() => box.remove(), 600);
+      }
+
+      SH.connect('alerts', (msg) => {
+        if (msg.type === 'alert') {
+          document.documentElement.lang = /[а-яё]/i.test(msg.alert.title) ? 'ru-RU' : 'en-US';
+          show(msg.alert);
+        } else if (msg.type === 'alertSkip') clear(false);
+      });
+    </script>
+  </body>
+</html>
