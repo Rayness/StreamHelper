@@ -298,7 +298,8 @@ async function bootstrap(): Promise<void> {
       return { action: 'deny' };
     });
     mainWindow.webContents.on('will-navigate', (e, url) => {
-      if (!url.startsWith('http://localhost') && !url.startsWith('file://')) e.preventDefault();
+      const devUrl = process.env['ELECTRON_RENDERER_URL'];
+      if (!(devUrl && url.startsWith(devUrl)) && !url.startsWith('file://')) e.preventDefault();
     });
 
     if (!app.isPackaged && process.env['ELECTRON_RENDERER_URL']) void mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL']);
