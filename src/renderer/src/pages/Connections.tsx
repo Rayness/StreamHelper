@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { twitchClientId } from '@shared/defaults';
 import type { ConnectionState, DeviceCodePrompt } from '@shared/types';
 import { Button, Card, CopyField, Field, NumberInput, PageHeader, StatusText, TextInput, Toggle } from '../components/ui';
 import { useNow } from '../hooks';
@@ -41,7 +42,7 @@ function TwitchCard({ account }: { account: 'broadcaster' | 'bot' }) {
   const t = useT();
   const state = useApp((d) => (account === 'broadcaster' ? d.state!.twitch : d.state!.twitchBot));
   const clientId = useApp((d) => d.settings!.twitch.clientId);
-  const hasClientId = !!clientId.trim();
+  const hasClientId = !!twitchClientId(clientId);
   const loggedIn = !!state.account;
   return (
     <Card

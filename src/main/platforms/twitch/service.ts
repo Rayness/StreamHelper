@@ -1,3 +1,4 @@
+import { twitchClientId } from '@shared/defaults';
 import type { AccountInfo, Category, ChatMessage, StreamInfo } from '@shared/types';
 import { errorMessage, type AppContext } from '../../core/context';
 import type { OAuthToken } from '../../core/secrets';
@@ -40,7 +41,7 @@ export class TwitchService implements ChatPlatform {
   private sentIds = new Set<string>();
 
   constructor(private ctx: AppContext) {
-    const clientId = () => ctx.settings.get('twitch').clientId.trim();
+    const clientId = () => twitchClientId(ctx.settings.get('twitch').clientId);
     const secretKey = { broadcaster: 'twitch', bot: 'twitchBot' } as const;
     const mk = (acc: Account) =>
       new TokenManager(
@@ -149,7 +150,7 @@ export class TwitchService implements ChatPlatform {
   // ---------- login / logout ----------
 
   async login(acc: Account): Promise<void> {
-    const clientId = this.ctx.settings.get('twitch').clientId.trim();
+    const clientId = twitchClientId(this.ctx.settings.get('twitch').clientId);
     if (!clientId) {
       this.ctx.toast('error', 'toast.twitchNoClientId');
       return;
@@ -187,7 +188,7 @@ export class TwitchService implements ChatPlatform {
 
   async logout(acc: Account): Promise<void> {
     const t = this.tokens[acc].token;
-    if (t) await revokeToken(this.ctx.settings.get('twitch').clientId, t.accessToken);
+    if (t) await revokeToken(twitchClientId(this.ctx.settings.get('twitch').clientId), t.accessToken);
     this.ctx.secrets.set(acc === 'broadcaster' ? 'twitch' : 'twitchBot', undefined);
     this.onLoggedOut(acc);
   }

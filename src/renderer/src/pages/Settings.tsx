@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { DEFAULT_TWITCH_CLIENT_ID } from '@shared/defaults';
 import type { Language, SettingsKey } from '@shared/types';
 import { Button, Card, Field, NumberInput, PageHeader, Select, TextInput, Toggle } from '../components/ui';
 import { useT } from '../i18n';
@@ -49,7 +50,7 @@ export function Settings() {
         <Card title={t('settings.advanced')}>
           <div className="form">
             <Field label="Twitch Client ID" hint={t('settings.clientIdHint')} wide>
-              <TextInput value={s.twitch.clientId} onChange={(clientId) => saveSettings('twitch', { clientId: clientId.trim() })} mono />
+              <TextInput value={s.twitch.clientId} onChange={(clientId) => saveSettings('twitch', { clientId: clientId.trim() })} placeholder={DEFAULT_TWITCH_CLIENT_ID} mono />
             </Field>
           </div>
         </Card>

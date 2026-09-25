@@ -16,7 +16,7 @@ import type {
  * Client ID of the StreamHelper application registered at https://dev.twitch.tv/console
  * (client type "Public"). Can be overridden in Settings → Advanced.
  */
-export const DEFAULT_TWITCH_CLIENT_ID = '';
+export const DEFAULT_TWITCH_CLIENT_ID = 'l56mrwhn62w53ijpnzgw05g5qbuj3n';
 /** Client ID of the StreamHelper application at https://www.donationalerts.com/application/clients */
 export const DEFAULT_DA_CLIENT_ID = '';
 export const DEFAULT_OVERLAY_PORT = 4848;
@@ -250,7 +250,7 @@ export function defaultSettings(lang: Language): Settings {
     version: 1,
     language: lang,
     overlayPort: DEFAULT_OVERLAY_PORT,
-    twitch: { clientId: DEFAULT_TWITCH_CLIENT_ID },
+    twitch: { clientId: '' },
     donationalerts: { clientId: DEFAULT_DA_CLIENT_ID, enabled: false },
     streamlabs: { enabled: false },
     obs: { host: '127.0.0.1', port: 4455, autoConnect: true },
@@ -263,6 +263,11 @@ export function defaultSettings(lang: Language): Settings {
     currency: lang === 'ru' ? 'RUB' : 'USD',
     minimizeToTray: true,
   };
+}
+
+/** The Client ID to actually use: the user's override, or the built-in one. */
+export function twitchClientId(configured: string): string {
+  return configured.trim() || DEFAULT_TWITCH_CLIENT_ID;
 }
 
 /** Fill missing keys (new settings added in later versions) without touching user values. */
