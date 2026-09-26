@@ -1,8 +1,8 @@
 import { useState, type ReactNode } from 'react';
-import { defaultBanner, defaultGoal, defaultLabel, defaultTimer, uid } from '@shared/defaults';
+import { defaultAd, defaultBanner, defaultGoal, defaultLabel, defaultTimer, uid } from '@shared/defaults';
 import { timerValue } from '@shared/timer';
 import { formatClock } from '@shared/template';
-import type { AlertType, Banner, BannerLayout, EmoteRainStyle, Goal, GoalKind, Label, OverlayKind, OverlayTimer } from '@shared/types';
+import type { AdCampaign, AlertType, Banner, BannerLayout, EmoteRainStyle, Goal, GoalKind, Label, OverlayKind, OverlayTimer } from '@shared/types';
 import { Icon } from '../components/icons';
 import { MediaPicker } from '../components/MediaPicker';
 import { InstancePicker, OverlayBar, OverlayPreview, pickInstance } from '../components/overlay';
@@ -101,6 +101,12 @@ function OverlayDetail({ kind }: { kind: OverlayKind }) {
       );
     case 'banner':
       return <BannersDetail />;
+    case 'ad':
+      return <AdsDetail />;
+    case 'live':
+      return <SimpleDetail kind="live" />;
+    case 'spotlight':
+      return <SimpleDetail kind="spotlight" />;
     case 'label':
       return <LabelsDetail />;
     case 'goal':
@@ -115,8 +121,18 @@ function OverlayDetail({ kind }: { kind: OverlayKind }) {
     case 'poll':
     case 'giveaway':
     case 'quiz':
+    case 'boss':
       return <InteractiveDetail kind={kind} />;
   }
+}
+
+function SimpleDetail({ kind }: { kind: 'live' | 'spotlight' }) {
+  const t = useT();
+  const spotlight = useApp((d) => d.state!.spotlight);
+  return <>
+    <OverlayBar kind={kind} name={t(`ov.${kind}`)} />
+    <Split settings={<Card><p className="muted">{t(`simple.${kind}`)}</p>{kind === 'spotlight' && spotlight && <Button onClick={() => void call('spotlight:clear')}>{t('spotlight.clear')}</Button>}</Card>} preview={<OverlayPreview kind={kind} />} />
+  </>;
 }
 
 function TestAlertButtons({ types }: { types: AlertType[] }) {
@@ -217,6 +233,50 @@ function ChatDetail() {
 }
 
 // ---------- banners ----------
+
+function AdsDetail() {
+  const t = useT();
+  const ads = useApp((d) => d.settings!.ads);
+  const lang = useApp((d) => d.settings!.language);
+  const active = useApp((d) => d.state!.ad.activeId);
+  const [sel, setSel] = useState<string>();
+  const ad = pickInstance(ads, sel);
+  const update = (patch: Partial<AdCampaign>) => ad && saveSettings('ads', ads.map((x) => x.id === ad.id ? { ...x, ...patch } : x));
+  const add = () => { const next = defaultAd(lang); saveSettings('ads', [...ads, next]); setSel(next.id); };
+  return <>
+    <InstancePicker items={ads} value={ad?.id} onChange={setSel} label={(x) => x.name} onAdd={add} addLabel={t('ads.add')} />
+    <OverlayBar kind="ad" name={t('ov.ad')} />
+    <Split stacked settings={<>
+      {ad && <>
+        <Card title={t('ads.content')}>
+          <div className="form">
+            <Field label={t('ads.name')}><TextInput value={ad.name} onChange={(name) => update({ name })} /></Field>
+            <Field label={t('ads.media')} hint={t('ads.mediaHint')} wide><MediaPicker kind="visual" value={ad.media} onChange={(media) => update({ media })} /></Field>
+            <Field label={t('ads.headline')}><TextInput value={ad.headline} onChange={(headline) => update({ headline })} /></Field>
+            <Field label={t('ads.caption')}><TextInput value={ad.caption} onChange={(caption) => update({ caption })} /></Field>
+            <Field label={t('common.accent')}><ColorInput value={ad.accentColor} onChange={(accentColor) => update({ accentColor })} /></Field>
+            <Field label={t('ads.position')}><Select value={ad.position} onChange={(position) => update({ position })} options={(['bottomRight','bottomLeft','topRight','topLeft'] as const).map((x) => ({ value:x, label:t(`ads.pos_${x}`) }))} /></Field>
+            <Field label={t('ads.width')}><NumberInput value={ad.width} min={200} max={1600} step={20} onChange={(width) => update({ width })} /></Field>
+          </div>
+        </Card>
+        <Card title={t('ads.schedule')}>
+          <div className="form">
+            <Field label={t('ads.enabled')}><Toggle checked={ad.enabled} onChange={(enabled) => update({ enabled })} /></Field>
+            <Field label={t('ads.onlyLive')}><Toggle checked={ad.onlyWhenLive} onChange={(onlyWhenLive) => update({ onlyWhenLive })} /></Field>
+            <Field label={t('ads.duration')}><NumberInput value={ad.durationSec} min={3} max={600} onChange={(durationSec) => update({ durationSec })} /></Field>
+            <Field label={t('ads.every')} hint={t('ads.everyHint')}><NumberInput value={ad.everyMin} min={0} max={240} onChange={(everyMin) => update({ everyMin })} /></Field>
+          </div>
+          <div className="row-gap wrap">
+            <Button variant="primary" disabled={!ad.media} onClick={() => void call('ad:show', ad.id)}>{t('ads.show')}</Button>
+            <Button disabled={!active} onClick={() => void call('ad:hide')}>{t('ads.hide')}</Button>
+          </div>
+          <p className="muted small">{t('ads.status', { name: ads.find((x) => x.id === active)?.name ?? '—' })}</p>
+        </Card>
+        <DeleteInstance onDelete={() => saveSettings('ads', ads.filter((x) => x.id !== ad.id))} />
+      </>}
+    </>} preview={<OverlayPreview kind="ad" id={ad?.id} />} />
+  </>;
+}
 
 function VarsHelp() {
   const t = useT();
@@ -710,7 +770,7 @@ function EmotesDetail() {
 
 // ---------- interactive overlays point to their control page ----------
 
-const INTERACTIVE_TAB: Partial<Record<OverlayKind, string>> = { wheel: 'wheel', poll: 'poll', giveaway: 'giveaway', quiz: 'quiz' };
+const INTERACTIVE_TAB: Partial<Record<OverlayKind, string>> = { wheel: 'wheel', poll: 'poll', giveaway: 'giveaway', quiz: 'quiz', boss: 'boss' };
 
 function InteractiveDetail({ kind }: { kind: OverlayKind }) {
   const t = useT();

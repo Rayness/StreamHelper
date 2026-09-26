@@ -1,10 +1,12 @@
 import { copyFileSync, existsSync, mkdirSync, readdirSync } from 'node:fs';
 import { basename, extname, join } from 'node:path';
+import { randomBytes } from 'node:crypto';
 import { app, BrowserWindow, clipboard, dialog, Menu, nativeImage, shell, Tray } from 'electron';
 import type { AlertType, IpcPush, Language, MediaFile } from '@shared/types';
 import { BotService } from './bot/bot';
 import type { AppContext } from './core/context';
 import { EventBus } from './core/eventBus';
+import { UpdateService } from './core/updater';
 import { SecretStore } from './core/secrets';
 import { StateHub } from './core/state';
 import { SettingsStore } from './core/store';
@@ -13,18 +15,22 @@ import { StreamlabsService } from './donations/streamlabs';
 import { ActionRunner } from './features/actions';
 import { AlertQueue, sampleEvent } from './features/alerts';
 import { TextOverlays } from './features/banners';
+import { AdsService } from './features/ads';
+import { BossService } from './features/boss';
 import { ChatHistory, sampleChatMessage } from './features/chatHistory';
 import { EmoteRain } from './features/emotes';
 import { GiveawayService } from './features/giveaway';
 import { PollService } from './features/poll';
 import { ProgressTracker } from './features/progress';
 import { QuizService } from './features/quiz';
+import { SpotlightService } from './features/spotlight';
 import type { StageDeps } from './features/stage';
 import { WheelService } from './features/wheel';
 import { KawakiService } from './integrations/kawaki/service';
 import { push, registerIpc } from './ipc';
 import { ObsService } from './obs/obs';
 import { createAuthRoutes } from './overlay/authPages';
+import { createDockRoutes } from './overlay/dock';
 import { OverlayHub } from './overlay/hub';
 import { OverlayServer } from './overlay/server';
 import { TwitchService } from './platforms/twitch/service';
@@ -76,6 +82,11 @@ async function bootstrap(): Promise<void> {
   const settings = new SettingsStore(join(userData, 'settings.json'), bus, systemLang);
   const secrets = new SecretStore(join(userData, 'secrets.bin'));
   const state = new StateHub(bus);
+  let dockToken = secrets.get('dockToken');
+  if (!dockToken) {
+    dockToken = randomBytes(32).toString('hex');
+    secrets.set('dockToken', dockToken);
+  }
 
   const ctx: AppContext = {
     bus,
@@ -95,6 +106,7 @@ async function bootstrap(): Promise<void> {
   const obs = new ObsService(ctx);
   const streamlabs = new StreamlabsService(ctx);
   const progress = new ProgressTracker(ctx);
+  const updater = new UpdateService(ctx);
 
   let overlay!: OverlayServer;
   const donationalerts = new DonationAlertsService(ctx, () => `http://127.0.0.1:${overlay.port}/auth/donationalerts`);
@@ -104,6 +116,8 @@ async function bootstrap(): Promise<void> {
     () => overlay.broadcast('alerts', { type: 'alertSkip' }),
   );
   let hub!: OverlayHub;
+  let dockRoute!: ReturnType<typeof createDockRoutes>;
+  const authRoute = createAuthRoutes((token, expiresIn) => donationalerts.completeLogin(token, expiresIn));
   overlay = new OverlayServer({
     port: settings.get('overlayPort'),
     overlaysDir: join(resourcesDir(), 'overlays'),
@@ -113,7 +127,7 @@ async function bootstrap(): Promise<void> {
       state.patch('overlayClients', count);
       state.replace('overlayKinds', perKind);
     },
-    extraRoute: createAuthRoutes((token, expiresIn) => donationalerts.completeLogin(token, expiresIn)),
+    extraRoute: async (req, res, url) => (await authRoute(req, res, url)) || dockRoute(req, res, url),
   });
 
   const sendToAllChats = async (text: string) => {
@@ -133,6 +147,9 @@ async function bootstrap(): Promise<void> {
   const poll = new PollService(ctx, stage);
   const giveaway = new GiveawayService(ctx, stage);
   const quiz = new QuizService(ctx, stage, kawaki);
+  const boss = new BossService(ctx, stage);
+  const ads = new AdsService(ctx, stage);
+  const spotlight = new SpotlightService(ctx, stage, chatHistory);
   const emotes = new EmoteRain(ctx, stage);
   const text = new TextOverlays(ctx, () => overlay);
   hub = new OverlayHub(ctx, overlay, chatHistory, {
@@ -141,6 +158,9 @@ async function bootstrap(): Promise<void> {
     poll: () => poll.overlayMessage(),
     giveaway: () => giveaway.overlayMessage(),
     quiz: () => quiz.overlayMessage(),
+    boss: () => boss.overlayMessage(),
+    ad: (id) => ads.overlayMessage(id),
+    spotlight: () => spotlight.overlayMessage(),
   });
 
   const bot = new BotService(ctx, platforms, twitch);
@@ -160,6 +180,31 @@ async function bootstrap(): Promise<void> {
     wheelSpin: (id) => wheel.spin(id),
     bannerToggle: (id) => text.toggle(id),
     emoteBurst: () => emotes.burst(),
+  });
+  dockRoute = createDockRoutes({
+    token: dockToken,
+    htmlPath: join(resourcesDir(), 'overlays', 'dock.html'),
+    snapshot: () => ({ state: state.current, settings: settings.all }),
+    action: async (name, id) => {
+      switch (name) {
+        case 'stream': return obs.stream('toggle');
+        case 'record': return obs.record('toggle');
+        case 'scene': if (id) return obs.setScene(id); break;
+        case 'alertsPause': return alerts.togglePause();
+        case 'alertsSkip': return alerts.skip();
+        case 'pollStart': return poll.start();
+        case 'pollEnd': return poll.end();
+        case 'giveawayOpen': return giveaway.open();
+        case 'giveawayRoll': return giveaway.roll();
+        case 'bossStart': return boss.start();
+        case 'bossHit': return void boss.hit();
+        case 'adShow': if (id) return ads.show(id); break;
+        case 'adHide': return ads.hide();
+        case 'quickAction': if (id) return actions.run(id); break;
+        case 'spotlightClear': return spotlight.clear();
+      }
+      throw new Error('Unknown dock action');
+    },
   });
 
   // ---------- UI sync ----------
@@ -193,9 +238,11 @@ async function bootstrap(): Promise<void> {
       if (restart) await overlay.restart(port);
       else await overlay.start();
       state.patch('overlayUrl', `http://127.0.0.1:${port}`);
+      state.patch('dockUrl', `http://127.0.0.1:${port}/dock?token=${dockToken}`);
     } catch (err) {
       console.error('[overlay] cannot listen', err);
       state.patch('overlayUrl', '');
+      state.patch('dockUrl', '');
       ctx.toast('error', 'toast.overlayPortBusy', { port });
     }
   }
@@ -264,6 +311,15 @@ async function bootstrap(): Promise<void> {
     'quiz:start': () => quiz.start(),
     'quiz:skip': () => quiz.skip(),
     'quiz:stop': () => quiz.stop(),
+    'boss:start': () => boss.start(),
+    'boss:reset': () => boss.reset(),
+    'boss:hit': () => void boss.hit(),
+    'ad:show': (id) => ads.show(id),
+    'ad:hide': () => ads.hide(),
+    'spotlight:show': (id) => spotlight.show(id),
+    'spotlight:clear': () => spotlight.clear(),
+    'update:check': () => updater.check(),
+    'update:install': () => updater.install(),
     'kawaki:login': () => void kawaki.login(),
     'kawaki:logout': () => kawaki.logout(),
     'kawaki:cancelLogin': () => kawaki.cancelLogin(),
@@ -300,6 +356,8 @@ async function bootstrap(): Promise<void> {
   // ---------- start ----------
   await startOverlay();
   text.start();
+  ads.start();
+  updater.start();
   bot.start();
   actions.registerHotkeys();
   obs.start();
@@ -317,6 +375,9 @@ async function bootstrap(): Promise<void> {
     streamlabs.stop();
     kawaki.stop();
     text.stop();
+    ads.stop();
+    updater.stop();
+    boss.dispose();
     wheel.dispose();
     poll.dispose();
     giveaway.dispose();

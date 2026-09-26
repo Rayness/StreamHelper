@@ -30,6 +30,7 @@ export interface SecretsData {
   kawaki?: KawakiSession;
   streamlabsSocketToken?: string;
   obsPassword?: string;
+  dockToken?: string;
 }
 
 /**

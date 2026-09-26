@@ -9,8 +9,8 @@ import { useNow } from '../hooks';
 import { useT, type TFn } from '../i18n';
 import { call, callOk, navigate, saveSettings, useApp, useSub } from '../store';
 
-type Tab = 'wheel' | 'poll' | 'giveaway' | 'quiz';
-const TABS: Tab[] = ['wheel', 'poll', 'giveaway', 'quiz'];
+type Tab = 'wheel' | 'poll' | 'giveaway' | 'quiz' | 'boss';
+const TABS: Tab[] = ['wheel', 'poll', 'giveaway', 'quiz', 'boss'];
 const PERMISSIONS: Permission[] = ['everyone', 'subscriber', 'vip', 'moderator', 'broadcaster'];
 const permOptions = (t: TFn) => PERMISSIONS.map((p) => ({ value: p, label: t(`perm.${p}`) }));
 
@@ -20,6 +20,7 @@ export function Interactive() {
   const pollLive = useApp((d) => d.state!.poll?.status === 'running');
   const giveawayLive = useApp((d) => d.state!.giveaway.status === 'open');
   const quizLive = useApp((d) => ['question', 'reveal', 'loading'].includes(d.state!.quiz.status));
+  const bossLive = useApp((d) => d.state!.boss.status === 'running');
   return (
     <div className="page page-wide">
       <PageHeader title={t('nav.interactive')} subtitle={t('fun.subtitle')} />
@@ -31,17 +32,19 @@ export function Interactive() {
           { id: 'poll', label: <TabLabel icon="poll" text={t('fun.poll')} live={pollLive} /> },
           { id: 'giveaway', label: <TabLabel icon="gift" text={t('fun.giveaway')} live={giveawayLive} /> },
           { id: 'quiz', label: <TabLabel icon="quiz" text={t('fun.quiz')} live={quizLive} /> },
+          { id: 'boss', label: <TabLabel icon="target" text={t('fun.boss')} live={bossLive} /> },
         ]}
       />
       {tab === 'wheel' && <WheelTab />}
       {tab === 'poll' && <PollTab />}
       {tab === 'giveaway' && <GiveawayTab />}
       {tab === 'quiz' && <QuizTab />}
+      {tab === 'boss' && <BossTab />}
     </div>
   );
 }
 
-function TabLabel({ icon, text, live }: { icon: 'wheel' | 'poll' | 'gift' | 'quiz'; text: string; live?: boolean }) {
+function TabLabel({ icon, text, live }: { icon: 'wheel' | 'poll' | 'gift' | 'quiz' | 'target'; text: string; live?: boolean }) {
   return (
     <span className="tab-label">
       <Icon name={icon} size={15} />
@@ -565,4 +568,39 @@ function QuizTab() {
       </aside>
     </div>
   );
+}
+
+function BossTab() {
+  const t = useT();
+  const cfg = useApp((d) => d.settings!.boss);
+  const boss = useApp((d) => d.state!.boss);
+  const prefix = useApp((d) => d.settings!.bot.prefix);
+  const set = (patch: Partial<typeof cfg>) => saveSettings('boss', { ...cfg, ...patch });
+  return <div className="fun-split">
+    <div className="fun-main">
+      <Card title={t('boss.control')}>
+        <p className="muted">{t('boss.howto', { command: `${prefix}${cfg.command}` })}</p>
+        <div className="control-row">
+          <Button variant="primary" icon="target" onClick={() => void call('boss:start')}>{t('boss.start')}</Button>
+          <Button disabled={boss.status !== 'running'} onClick={() => void call('boss:hit')}>{t('boss.hit')}</Button>
+          <Button onClick={() => void call('boss:reset')}>{t('boss.reset')}</Button>
+          <strong>{boss.hp} / {boss.maxHp} HP</strong>
+        </div>
+        {boss.top.length > 0 && <ol className="leaderboard">{boss.top.map((x) => <li key={x.user}><span>{x.user}</span><b>{x.damage}</b></li>)}</ol>}
+      </Card>
+      <Card title={t('boss.settings')}>
+        <div className="form">
+          <Field label={t('boss.name')}><TextInput value={cfg.name} onChange={(name) => set({ name })} /></Field>
+          <Field label={t('boss.maxHp')}><NumberInput value={cfg.maxHp} min={1} max={1000000} onChange={(maxHp) => set({ maxHp })} /></Field>
+          <Field label={t('boss.damage')}><NumberInput value={cfg.damage} min={1} max={100000} onChange={(damage) => set({ damage })} /></Field>
+          <Field label={t('boss.cooldown')}><NumberInput value={cfg.cooldownSec} min={0} max={3600} onChange={(cooldownSec) => set({ cooldownSec })} /></Field>
+          <Field label={t('boss.command')}><div className="trigger"><span className="prefix">{prefix}</span><input className="input mono" value={cfg.command} onChange={(e) => set({ command: e.target.value.replace(/\s+/g, '').replace(prefix, '') })} /></div></Field>
+          <Field label={t('actions.redemption')}><TextInput value={cfg.redemptionTitle} onChange={(redemptionTitle) => set({ redemptionTitle })} placeholder={t('actions.redemptionPh')} /></Field>
+          <Field label={t('common.accent')}><ColorInput value={cfg.accentColor} onChange={(accentColor) => set({ accentColor })} /></Field>
+          <Field label={t('boss.announce')}><Toggle checked={cfg.announce} onChange={(announce) => set({ announce })} /></Field>
+        </div>
+      </Card>
+    </div>
+    <aside className="fun-side"><OverlayPreview kind="boss" maxHeight={260} /><OverlayBar kind="boss" name={t('fun.boss')} /></aside>
+  </div>;
 }

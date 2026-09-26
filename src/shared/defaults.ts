@@ -2,7 +2,9 @@ import type {
   AlertSettings,
   AlertType,
   AlertVariant,
+  AdCampaign,
   Banner,
+  BossSettings,
   BotSettings,
   BuiltinCommand,
   ChatOverlaySettings,
@@ -281,6 +283,36 @@ export function defaultBanner(lang: Language): Banner {
   };
 }
 
+export function defaultAd(lang: Language): AdCampaign {
+  return {
+    id: uid('ad_'),
+    name: lang === 'ru' ? 'Рекламная кампания' : 'Ad campaign',
+    enabled: false,
+    media: null,
+    headline: lang === 'ru' ? 'Партнёр эфира' : 'Stream partner',
+    caption: '',
+    accentColor: '#9b6bff',
+    position: 'bottomRight',
+    width: 700,
+    durationSec: 15,
+    everyMin: 0,
+    onlyWhenLive: true,
+  };
+}
+
+export function defaultBoss(lang: Language): BossSettings {
+  return {
+    name: lang === 'ru' ? 'Босс чата' : 'Chat boss',
+    maxHp: 1000,
+    damage: 10,
+    cooldownSec: 10,
+    command: lang === 'ru' ? 'удар' : 'hit',
+    redemptionTitle: '',
+    accentColor: '#ff5d8f',
+    announce: true,
+  };
+}
+
 export function defaultLabel(lang: Language, template?: string, name?: string): Label {
   const ru = lang === 'ru';
   return {
@@ -410,6 +442,7 @@ export function defaultSettings(lang: Language): Settings {
     timers: [defaultTimer(lang)],
     actions: defaultActions(lang),
     banners: [defaultBanner(lang)],
+    ads: [defaultAd(lang)],
     labels: [
       defaultLabel(lang),
       defaultLabel(lang, lang === 'ru' ? 'Топ донат: {topdonor} — {topdonation}' : 'Top donation: {topdonor} — {topdonation}', lang === 'ru' ? 'Топ донат' : 'Top donation'),
@@ -420,6 +453,7 @@ export function defaultSettings(lang: Language): Settings {
     poll: defaultPoll(lang),
     giveaway: defaultGiveaway(lang),
     quiz: defaultQuiz(),
+    boss: defaultBoss(lang),
     kawaki: defaultKawaki(lang),
     currency: lang === 'ru' ? 'RUB' : 'USD',
     minimizeToTray: true,

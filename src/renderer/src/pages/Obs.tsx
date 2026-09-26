@@ -10,6 +10,7 @@ export function Obs() {
   const t = useT();
   const obs = useApp((d) => d.state!.obs);
   const connected = obs.status === 'connected';
+  const dockUrl = useApp((d) => d.state!.dockUrl);
   return (
     <div className="page">
       <PageHeader
@@ -84,6 +85,14 @@ export function Obs() {
           </Card>
         </div>
       )}
+      <Card title={t('obs.dock')}>
+        <p className="muted small">{t('obs.dockHint')}</p>
+        <div className="row-gap wrap">
+          <input className="input mono" value={dockUrl} readOnly aria-label={t('obs.dock')} />
+          <Button disabled={!dockUrl} onClick={() => void call('clipboard:write', dockUrl)}>{t('common.copy')}</Button>
+          <Button disabled={!dockUrl} onClick={() => void call('shell:openExternal', dockUrl)}>{t('overlays.open')}</Button>
+        </div>
+      </Card>
       <Actions />
     </div>
   );

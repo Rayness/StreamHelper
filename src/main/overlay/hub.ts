@@ -19,6 +19,9 @@ export interface HubSources {
   poll: () => OverlayMessage;
   giveaway: () => OverlayMessage;
   quiz: () => OverlayMessage;
+  boss: () => OverlayMessage;
+  ad: (id?: string | null) => OverlayMessage;
+  spotlight: () => OverlayMessage;
 }
 
 /** Wires bus events and settings changes to connected overlays. */
@@ -37,6 +40,7 @@ export class OverlayHub {
     bus.on('chat:clearUser', ({ userId }) => server.broadcast('chat', { type: 'chatClearUser', userId }));
     bus.on('chat:clear', () => server.broadcast('chat', { type: 'chatClear' }));
     bus.on('event', (event) => server.broadcast('events', { type: 'event', event }));
+    bus.on('stream:update', (stream) => server.broadcast('live', { type: 'live', stream, lang: this.settings.language }));
     bus.on('kawaki:now', () => server.broadcast('kawaki', this.kawakiMessage()));
     bus.on('settings:changed', (key) => {
       if (key === 'chatOverlay') server.broadcast('chat', { type: 'chatConfig', config: this.settings.chatOverlay });
@@ -45,6 +49,8 @@ export class OverlayHub {
       if (key === 'wheels') server.forEachClient('wheel', (id) => this.wheelMessage(id));
       if (key === 'emoteRain') server.broadcast('emotes', { type: 'emoteConfig', config: this.settings.emoteRain });
       if (key === 'kawaki') server.broadcast('kawaki', this.kawakiMessage());
+      if (key === 'ads') server.forEachClient('ad', (id) => this.sources.ad(id));
+      if (key === 'language') server.broadcast('live', { type: 'live', stream: this.ctx.state.current.stream, lang: this.settings.language });
     });
   }
 
@@ -105,6 +111,14 @@ export class OverlayHub {
         return [this.sources.giveaway()];
       case 'quiz':
         return [this.sources.quiz()];
+      case 'boss':
+        return [this.sources.boss()];
+      case 'ad':
+        return [this.sources.ad(id)];
+      case 'spotlight':
+        return [this.sources.spotlight()];
+      case 'live':
+        return [{ type: 'live', stream: this.ctx.state.current.stream, lang: this.settings.language }];
       case 'kawaki':
         return [this.kawakiMessage()];
     }

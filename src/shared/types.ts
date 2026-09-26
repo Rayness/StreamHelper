@@ -167,6 +167,11 @@ export interface RuntimeState {
   poll: PollState | null;
   giveaway: GiveawayState;
   quiz: QuizState;
+  boss: BossState;
+  ad: { activeId: string | null; endsAt: number | null };
+  spotlight: ChatMessage | null;
+  update: UpdateState;
+  dockUrl: string;
   /** Banners currently on screen (manual toggle or schedule). */
   bannersShown: string[];
 }
@@ -377,6 +382,49 @@ export interface Banner {
   background: string;
   accentColor: string;
   align: 'left' | 'center' | 'right';
+}
+
+/** Graphic/video advertising, independent of the existing text banners. */
+export interface AdCampaign {
+  id: string;
+  name: string;
+  enabled: boolean;
+  media: string | null;
+  headline: string;
+  caption: string;
+  accentColor: string;
+  position: 'bottomLeft' | 'bottomRight' | 'topLeft' | 'topRight';
+  width: number;
+  durationSec: number;
+  everyMin: number;
+  onlyWhenLive: boolean;
+}
+
+export interface BossSettings {
+  name: string;
+  maxHp: number;
+  damage: number;
+  cooldownSec: number;
+  command: string;
+  redemptionTitle: string;
+  accentColor: string;
+  announce: boolean;
+}
+
+export interface BossState {
+  status: 'idle' | 'running' | 'defeated';
+  hp: number;
+  maxHp: number;
+  hits: number;
+  lastHit: { user: string; damage: number } | null;
+  top: { user: string; damage: number }[];
+}
+
+export interface UpdateState {
+  status: 'idle' | 'checking' | 'available' | 'downloading' | 'ready' | 'upToDate' | 'error' | 'unsupported';
+  version: string | null;
+  progress: number;
+  error: string | null;
 }
 
 export interface Label {
@@ -608,6 +656,7 @@ export interface Settings {
   timers: OverlayTimer[];
   actions: QuickAction[];
   banners: Banner[];
+  ads: AdCampaign[];
   labels: Label[];
   stats: StreamStats;
   emoteRain: EmoteRainSettings;
@@ -615,6 +664,7 @@ export interface Settings {
   poll: PollSettings;
   giveaway: GiveawaySettings;
   quiz: QuizSettings;
+  boss: BossSettings;
   kawaki: KawakiSettings;
   /** Main currency for donation totals (goals, subathon). */
   currency: string;
@@ -625,7 +675,7 @@ export type SettingsKey = keyof Settings;
 
 // ---------- Overlay wire protocol ----------
 
-export type OverlayKind = 'chat' | 'alerts' | 'goal' | 'timer' | 'events' | 'banner' | 'label' | 'emotes' | 'wheel' | 'poll' | 'giveaway' | 'kawaki' | 'quiz';
+export type OverlayKind = 'chat' | 'alerts' | 'goal' | 'timer' | 'events' | 'banner' | 'ad' | 'label' | 'emotes' | 'wheel' | 'poll' | 'giveaway' | 'kawaki' | 'quiz' | 'boss' | 'live' | 'spotlight';
 
 export interface RenderedBanner extends Omit<Banner, 'slides'> {
   slides: { id: string; text: string; image: string | null }[];
@@ -669,6 +719,10 @@ export type OverlayMessage =
   | { type: 'event'; event: StreamEvent }
   | { type: 'events'; events: StreamEvent[] }
   | { type: 'banner'; banner: RenderedBanner | null }
+  | { type: 'ad'; campaign: AdCampaign | null; endsAt: number | null }
+  | { type: 'boss'; boss: BossState; style: BossSettings; lang: Language }
+  | { type: 'live'; stream: StreamInfo; lang: Language }
+  | { type: 'spotlight'; message: ChatMessage | null }
   | { type: 'label'; label: (Label & { text: string }) | null }
   | { type: 'emoteConfig'; config: EmoteRainSettings }
   | { type: 'emotes'; urls: string[]; burst?: boolean }
@@ -735,6 +789,15 @@ export interface IpcInvoke {
   'quiz:start': () => void;
   'quiz:skip': () => void;
   'quiz:stop': () => void;
+  'boss:start': () => void;
+  'boss:reset': () => void;
+  'boss:hit': () => void;
+  'ad:show': (campaignId: string) => void;
+  'ad:hide': () => void;
+  'spotlight:show': (messageId: string) => void;
+  'spotlight:clear': () => void;
+  'update:check': () => void;
+  'update:install': () => void;
   'kawaki:login': () => void;
   'kawaki:logout': () => void;
   'kawaki:cancelLogin': () => void;

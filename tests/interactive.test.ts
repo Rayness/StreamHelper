@@ -9,6 +9,8 @@ import { EventBus } from '../src/main/core/eventBus';
 import { StateHub } from '../src/main/core/state';
 import { SettingsStore } from '../src/main/core/store';
 import { bannerShown } from '../src/main/features/banners';
+import { AdsService } from '../src/main/features/ads';
+import { BossService } from '../src/main/features/boss';
 import { emoteUrls } from '../src/main/features/emotes';
 import { GiveawayService, isEntry, ROLL_MS } from '../src/main/features/giveaway';
 import { leadersOf, parseVote, PollService } from '../src/main/features/poll';
@@ -45,6 +47,17 @@ function makeCtx(lang: 'ru' | 'en' = 'en') {
 }
 
 describe('shared helpers', () => {
+  it('adds new advertising and boss defaults without changing saved text banners', () => {
+    const old = defaultSettings('ru') as Partial<ReturnType<typeof defaultSettings>>;
+    const originalBanners = old.banners;
+    delete old.ads;
+    delete old.boss;
+    const upgraded = mergeDefaults(defaultSettings('ru'), old);
+    expect(upgraded.banners).toEqual(originalBanners);
+    expect(upgraded.ads).toHaveLength(1);
+    expect(upgraded.boss.maxHp).toBeGreaterThan(0);
+  });
+
   it('picks by weight and never picks zero-weight items', () => {
     const items = [{ w: 0 }, { w: 1 }, { w: 3 }];
     expect(pickWeighted(items, (i) => i.w, () => 0)).toBe(1);
@@ -55,6 +68,44 @@ describe('shared helpers', () => {
 
   it('normalizes text for comparisons', () => {
     expect(normalizeText('  Ёжик, в ТУМАНЕ!! ')).toBe('ежик в тумане');
+  });
+});
+
+describe('new interactive and advertising services', () => {
+  beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(new Date('2026-01-01T00:00:00Z')); });
+  afterEach(() => vi.useRealTimers());
+
+  it('applies a personal chat cooldown and ends the boss fight exactly at zero HP', () => {
+    const { ctx, bus, settings, state, deps } = makeCtx();
+    settings.set('boss', { ...settings.get('boss'), maxHp: 30, damage: 10, cooldownSec: 30, command: 'hit', redemptionTitle: 'Strike', announce: false });
+    const boss = new BossService(ctx, deps);
+    boss.start();
+    bus.emit('chat:message', msg('!hit', {}, 'a'));
+    bus.emit('chat:message', msg('!hit', {}, 'a'));
+    expect(state.current.boss).toMatchObject({ status: 'running', hp: 20, hits: 1 });
+    bus.emit('chat:message', msg('!hit', {}, 'b'));
+    bus.emit('event', { id: 'reward1', source: 'twitch', timestamp: Date.now(), userName: 'Alice', type: 'redemption', rewardTitle: 'Strike', cost: 100, input: '' });
+    expect(state.current.boss).toMatchObject({ status: 'defeated', hp: 0, hits: 3 });
+    expect(state.current.boss.top).toHaveLength(3);
+    boss.dispose();
+  });
+
+  it('schedules a graphic ad only while live and lets a manual showing override that schedule', () => {
+    const { ctx, settings, state, deps } = makeCtx();
+    const campaign = { ...settings.get('ads')[0], media: 'sponsor.png', enabled: true, everyMin: 1, durationSec: 5, onlyWhenLive: true };
+    settings.set('ads', [campaign]);
+    const ads = new AdsService(ctx, deps);
+    ads.tick();
+    vi.advanceTimersByTime(60_000);
+    ads.tick();
+    expect(state.current.ad.activeId).toBeNull();
+    ads.show(campaign.id);
+    expect(state.current.ad.activeId).toBe(campaign.id);
+    expect(ads.overlayMessage()).toMatchObject({ type: 'ad', campaign: { media: '/media/sponsor.png' } });
+    vi.advanceTimersByTime(5000);
+    ads.tick();
+    expect(state.current.ad.activeId).toBeNull();
+    ads.stop();
   });
 });
 

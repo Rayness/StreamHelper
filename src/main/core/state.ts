@@ -19,6 +19,11 @@ export function initialRuntimeState(): RuntimeState {
     poll: null,
     giveaway: { status: 'idle', entrants: [], winner: null, winnerMessages: [] },
     quiz: { status: 'idle', round: 0, rounds: 0, imageUrl: null, hint: '', endsAt: null, answer: null, winner: null, leaderboard: [] },
+    boss: { status: 'idle', hp: 0, maxHp: 0, hits: 0, lastHit: null, top: [] },
+    ad: { activeId: null, endsAt: null },
+    spotlight: null,
+    update: { status: 'idle', version: null, progress: 0, error: null },
+    dockUrl: '',
     bannersShown: [],
   };
 }
