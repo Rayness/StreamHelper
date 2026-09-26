@@ -12,7 +12,6 @@ export class AdsService {
     ctx.bus.on('settings:changed', (key) => {
       if (key === 'ads') {
         this.nextAt.clear();
-        this.push();
       }
     });
   }

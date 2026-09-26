@@ -389,6 +389,8 @@ export interface Banner {
 }
 
 /** Graphic/video advertising, independent of the existing text banners. */
+export type AdEntrance = 'fade' | 'slideUp' | 'slideDown' | 'slideSide' | 'zoom' | 'bounce' | 'flip' | 'blur' | 'wipe';
+
 export interface AdCampaign {
   id: string;
   name: string;
@@ -398,6 +400,8 @@ export interface AdCampaign {
   caption: string;
   accentColor: string;
   position: 'bottomLeft' | 'bottomRight' | 'topLeft' | 'topRight';
+  entrance: AdEntrance;
+  entranceMs: number;
   width: number;
   durationSec: number;
   everyMin: number;

@@ -142,7 +142,10 @@ async function bootstrap(): Promise<void> {
     await Promise.all(ready.map((p) => p.sendMessage(text)));
   };
   const stage: StageDeps = {
-    broadcast: (kind, msg, id) => overlay.broadcast(kind, msg, id),
+    broadcast: (kind, msg, id) => {
+      if (kind === 'ad') overlay.forEachClient('ad', (clientId) => ads.overlayMessage(clientId));
+      else overlay.broadcast(kind, msg, id);
+    },
     say: (text) => sendToAllChats(text).catch((err) => console.warn('[stage] chat', String(err?.message ?? err))),
   };
   const kawaki = new KawakiService(ctx, {

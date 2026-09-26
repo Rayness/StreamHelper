@@ -293,6 +293,8 @@ export function defaultAd(lang: Language): AdCampaign {
     caption: '',
     accentColor: '#9b6bff',
     position: 'bottomRight',
+    entrance: 'slideUp',
+    entranceMs: 550,
     width: 700,
     durationSec: 15,
     everyMin: 0,
@@ -475,8 +477,11 @@ export function twitchClientId(configured: string): string {
 export function migrateSettings(s: Settings): Settings {
   const known = new Set(s.bot.builtins.map((b) => b.id));
   const missing = defaultBuiltins(s.language).filter((b) => !known.has(b.id));
-  if (missing.length === 0) return s;
-  return { ...s, bot: { ...s.bot, builtins: [...s.bot.builtins, ...missing] } };
+  return {
+    ...s,
+    bot: missing.length ? { ...s.bot, builtins: [...s.bot.builtins, ...missing] } : s.bot,
+    ads: s.ads.map((ad) => ({ ...ad, entrance: ad.entrance ?? 'slideUp', entranceMs: ad.entranceMs ?? 550 })),
+  };
 }
 
 /** Fill missing keys (new settings added in later versions) without touching user values. */

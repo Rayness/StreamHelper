@@ -1,9 +1,131 @@
 <!doctype html>
-<html lang="ru"><head><meta charset="utf-8"><title>StreamHelper — Ads</title>
-<style>
-html,body{margin:0;width:100%;height:100%;overflow:hidden;background:transparent;font-family:Montserrat,'Segoe UI',sans-serif}#ad{position:absolute;width:700px;max-width:calc(100vw - 80px);opacity:0;transform:translateY(25px) scale(.98);transition:opacity .5s,transform .5s;filter:drop-shadow(0 14px 30px #0009)}#ad.show{opacity:1;transform:none}.topLeft{top:40px;left:40px}.topRight{top:40px;right:40px}.bottomLeft{bottom:40px;left:40px}.bottomRight{bottom:40px;right:40px}.art{width:100%;max-height:450px;display:block;object-fit:contain;border-radius:20px;background:#12121a}.copy{display:flex;align-items:center;gap:16px;margin-top:8px;padding:15px 20px;border-radius:14px;background:#14121ded;border-left:5px solid var(--accent);color:#fff}.headline{font-size:30px;font-weight:800;line-height:1.1}.caption{font-size:20px;color:#ddd6e8;line-height:1.3;margin-top:4px}.copy:empty{display:none}
-</style></head><body><div id="ad"></div><script src="/overlay/assets/common.js"></script><script>
-const root=document.getElementById('ad');let activeId=null;
-function render(c){if(!c){root.classList.remove('show');activeId=null;setTimeout(()=>{if(!activeId)root.replaceChildren()},550);return}const changed=activeId!==c.id;activeId=c.id;root.className=c.position;root.style.width=Math.max(200,Math.min(1600,c.width))+'px';root.style.setProperty('--accent',c.accentColor);if(changed){root.replaceChildren();const media=/\.(mp4|webm)(\?|$)/i.test(c.media||'')?document.createElement('video'):document.createElement('img');media.className='art';media.src=c.media;if(media.tagName==='VIDEO'){media.autoplay=true;media.muted=true;media.loop=true;media.playsInline=true;media.play().catch(()=>{})}root.append(media);const copy=document.createElement('div');copy.className='copy';const texts=document.createElement('div');if(c.headline){const h=document.createElement('div');h.className='headline';h.textContent=c.headline;texts.append(h)}if(c.caption){const p=document.createElement('div');p.className='caption';p.textContent=c.caption;texts.append(p)}copy.append(texts);if(texts.childNodes.length)root.append(copy)}requestAnimationFrame(()=>root.classList.add('show'))}
-SH.connect('ad',m=>{if(m.type==='ad')render(m.campaign)});
-</script></body></html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>StreamHelper — Ads</title>
+  <style>
+    html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; font-family: Montserrat, 'Segoe UI', sans-serif; }
+    #ad { position: absolute; width: 700px; max-width: calc(100vw - 80px); opacity: 0; visibility: hidden; pointer-events: none; }
+    #ad.show { opacity: 1; visibility: visible; }
+    #ad.leaving { visibility: visible; animation: adOut .32s ease-in both; }
+    .topLeft { top: 40px; left: 40px; }
+    .topRight { top: 40px; right: 40px; }
+    .bottomLeft { bottom: 40px; left: 40px; }
+    .bottomRight { bottom: 40px; right: 40px; }
+    .art { width: 100%; max-height: 450px; display: block; object-fit: contain; border-radius: 20px; background: #12121a; box-shadow: 0 14px 30px #0009; }
+    .copy { display: flex; align-items: center; gap: 16px; margin-top: 8px; padding: 15px 20px; border-radius: 14px; background: #14121ded; border-left: 5px solid var(--accent); color: #fff; box-shadow: 0 10px 25px #0008; }
+    .headline { font-size: 30px; font-weight: 800; line-height: 1.1; }
+    .caption { font-size: 20px; color: #ddd6e8; line-height: 1.3; margin-top: 4px; }
+    .copy:empty { display: none; }
+
+    #ad.show.entering.fx-fade { animation: adFade var(--enter-ms) ease-out both; }
+    #ad.show.entering.fx-slideUp { animation: adSlideUp var(--enter-ms) cubic-bezier(.2,.9,.3,1) both; }
+    #ad.show.entering.fx-slideDown { animation: adSlideDown var(--enter-ms) cubic-bezier(.2,.9,.3,1) both; }
+    #ad.show.entering.fx-slideSide { animation: adSlideSide var(--enter-ms) cubic-bezier(.2,.9,.3,1) both; }
+    #ad.show.entering.fx-zoom { animation: adZoom var(--enter-ms) cubic-bezier(.16,1,.3,1) both; }
+    #ad.show.entering.fx-bounce { animation: adBounce var(--enter-ms) both; }
+    #ad.show.entering.fx-flip { animation: adFlip var(--enter-ms) cubic-bezier(.2,.8,.2,1) both; transform-origin: var(--pivot); }
+    #ad.show.entering.fx-blur { animation: adBlur var(--enter-ms) ease-out both; }
+    #ad.show.entering.fx-wipe { animation: adWipe var(--enter-ms) cubic-bezier(.2,.8,.2,1) both; }
+
+    @keyframes adFade { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes adSlideUp { from { opacity: 0; transform: translateY(55px); } to { opacity: 1; transform: none; } }
+    @keyframes adSlideDown { from { opacity: 0; transform: translateY(-55px); } to { opacity: 1; transform: none; } }
+    @keyframes adSlideSide { from { opacity: 0; transform: translateX(var(--side)); } to { opacity: 1; transform: none; } }
+    @keyframes adZoom { from { opacity: 0; transform: scale(.64); } to { opacity: 1; transform: none; } }
+    @keyframes adBounce {
+      0% { opacity: 0; transform: translateY(75px) scale(.86); }
+      58% { opacity: 1; transform: translateY(-16px) scale(1.03); }
+      78% { transform: translateY(7px) scale(.99); }
+      100% { opacity: 1; transform: none; }
+    }
+    @keyframes adFlip { from { opacity: 0; transform: perspective(900px) rotateY(var(--flip)) scale(.9); } to { opacity: 1; transform: none; } }
+    @keyframes adBlur { from { opacity: 0; filter: blur(18px); transform: scale(1.06); } to { opacity: 1; filter: blur(0); transform: none; } }
+    @keyframes adWipe { from { opacity: 1; clip-path: var(--wipe-from); } to { opacity: 1; clip-path: inset(0 0 0 0); } }
+    @keyframes adOut { from { opacity: 1; } to { opacity: 0; transform: translateY(15px); } }
+    @media (prefers-reduced-motion: reduce) { #ad.show.entering, #ad.leaving { animation: none !important; } }
+    .reduced #ad.show.entering, .reduced #ad.leaving { animation: none !important; }
+  </style>
+</head>
+<body>
+  <div id="ad"></div>
+  <script src="/overlay/assets/common.js"></script>
+  <script>
+    const root = document.getElementById('ad');
+    const effects = new Set(['fade', 'slideUp', 'slideDown', 'slideSide', 'zoom', 'bounce', 'flip', 'blur', 'wipe']);
+    let generation = 0;
+    let clearTimer = null;
+    if (SH.reducedMotion) document.body.classList.add('reduced');
+
+    function render(c) {
+      const current = ++generation;
+      if (clearTimer) clearTimeout(clearTimer);
+      clearTimer = null;
+
+      if (!c) {
+        if (!root.classList.contains('show')) return;
+        root.classList.remove('show', 'entering');
+        root.classList.add('leaving');
+        clearTimer = setTimeout(() => {
+          if (current === generation) {
+            root.classList.remove('leaving');
+            root.replaceChildren();
+          }
+        }, 350);
+        return;
+      }
+
+      const left = c.position === 'topLeft' || c.position === 'bottomLeft';
+      const effect = effects.has(c.entrance) ? c.entrance : 'slideUp';
+      const duration = Number.isFinite(Number(c.entranceMs)) ? Math.max(150, Math.min(2500, Number(c.entranceMs))) : 550;
+      root.className = c.position || 'bottomRight';
+      root.style.width = Math.max(200, Math.min(1600, Number(c.width) || 700)) + 'px';
+      root.style.setProperty('--accent', c.accentColor || '#9b6bff');
+      root.style.setProperty('--enter-ms', duration + 'ms');
+      root.style.setProperty('--side', left ? '-110px' : '110px');
+      root.style.setProperty('--flip', left ? '-75deg' : '75deg');
+      root.style.setProperty('--pivot', left ? 'left center' : 'right center');
+      root.style.setProperty('--wipe-from', left ? 'inset(0 100% 0 0)' : 'inset(0 0 0 100%)');
+
+      const media = /\.(mp4|webm)(\?|$)/i.test(c.media || '') ? document.createElement('video') : document.createElement('img');
+      media.className = 'art';
+      media.src = c.media;
+      if (media.tagName === 'VIDEO') {
+        media.autoplay = true;
+        media.muted = true;
+        media.loop = true;
+        media.playsInline = true;
+        media.play().catch(() => {});
+      }
+      root.replaceChildren(media);
+      if (c.headline || c.caption) {
+        const copy = document.createElement('div');
+        copy.className = 'copy';
+        const texts = document.createElement('div');
+        if (c.headline) {
+          const headline = document.createElement('div');
+          headline.className = 'headline';
+          headline.textContent = c.headline;
+          texts.append(headline);
+        }
+        if (c.caption) {
+          const caption = document.createElement('div');
+          caption.className = 'caption';
+          caption.textContent = c.caption;
+          texts.append(caption);
+        }
+        copy.append(texts);
+        root.append(copy);
+      }
+
+      // A layout flush restarts the animation even when the same campaign is shown twice.
+      void root.offsetWidth;
+      root.classList.add('show', 'entering', `fx-${effect}`);
+    }
+
+    SH.connect('ad', (message) => {
+      if (message.type === 'ad') render(message.campaign);
+    });
+  </script>
+</body>
+</html>

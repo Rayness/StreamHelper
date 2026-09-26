@@ -58,6 +58,16 @@ describe('shared helpers', () => {
     expect(upgraded.boss.maxHp).toBeGreaterThan(0);
   });
 
+  it('keeps existing ad campaigns and gives them the original entrance effect', () => {
+    const old = defaultSettings('ru');
+    const campaign = { ...old.ads[0], headline: 'Старый партнёр' } as Record<string, unknown>;
+    delete campaign.entrance;
+    delete campaign.entranceMs;
+    old.ads = [campaign as unknown as typeof old.ads[number]];
+    const upgraded = migrateSettings(mergeDefaults(defaultSettings('ru'), old));
+    expect(upgraded.ads[0]).toMatchObject({ headline: 'Старый партнёр', entrance: 'slideUp', entranceMs: 550 });
+  });
+
   it('picks by weight and never picks zero-weight items', () => {
     const items = [{ w: 0 }, { w: 1 }, { w: 3 }];
     expect(pickWeighted(items, (i) => i.w, () => 0)).toBe(1);

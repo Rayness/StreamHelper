@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react';
 import { defaultAd, defaultBanner, defaultGoal, defaultLabel, defaultTimer, uid } from '@shared/defaults';
 import { timerValue } from '@shared/timer';
 import { formatClock } from '@shared/template';
-import type { AdCampaign, AlertType, Banner, BannerLayout, EmoteRainStyle, Goal, GoalKind, Label, OverlayKind, OverlayTimer } from '@shared/types';
+import type { AdCampaign, AdEntrance, AlertType, Banner, BannerLayout, EmoteRainStyle, Goal, GoalKind, Label, OverlayKind, OverlayTimer } from '@shared/types';
 import { Icon } from '../components/icons';
 import { MediaPicker } from '../components/MediaPicker';
 import { InstancePicker, OverlayBar, OverlayPreview, pickInstance } from '../components/overlay';
@@ -256,6 +256,8 @@ function AdsDetail() {
             <Field label={t('ads.caption')}><TextInput value={ad.caption} onChange={(caption) => update({ caption })} /></Field>
             <Field label={t('common.accent')}><ColorInput value={ad.accentColor} onChange={(accentColor) => update({ accentColor })} /></Field>
             <Field label={t('ads.position')}><Select value={ad.position} onChange={(position) => update({ position })} options={(['bottomRight','bottomLeft','topRight','topLeft'] as const).map((x) => ({ value:x, label:t(`ads.pos_${x}`) }))} /></Field>
+            <Field label={t('ads.entrance')}><Select<AdEntrance> value={ad.entrance ?? 'slideUp'} onChange={(entrance) => update({ entrance })} options={(['fade','slideUp','slideDown','slideSide','zoom','bounce','flip','blur','wipe'] as const).map((x) => ({ value: x, label: t(`ads.fx_${x}`) }))} /></Field>
+            <Field label={t('ads.entranceMs')}><NumberInput value={ad.entranceMs ?? 550} min={150} max={2500} step={50} onChange={(entranceMs) => update({ entranceMs })} /></Field>
             <Field label={t('ads.width')}><NumberInput value={ad.width} min={200} max={1600} step={20} onChange={(width) => update({ width })} /></Field>
           </div>
         </Card>
