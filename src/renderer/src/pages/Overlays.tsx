@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react';
 import { defaultAd, defaultBanner, defaultGoal, defaultLabel, defaultTimer, uid } from '@shared/defaults';
 import { timerValue } from '@shared/timer';
 import { formatClock } from '@shared/template';
-import type { AdCampaign, AdEntrance, AlertType, Banner, BannerLayout, EmoteRainStyle, Goal, GoalKind, Label, OverlayKind, OverlayTimer } from '@shared/types';
+import type { AdCampaign, AdEntrance, AlertType, Banner, BannerLayout, ChatBackgroundStyle, ChatEnterAnimation, ChatExitAnimation, EmoteRainStyle, Goal, GoalKind, Label, OverlayKind, OverlayTimer } from '@shared/types';
 import { Icon } from '../components/icons';
 import { MediaPicker } from '../components/MediaPicker';
 import { InstancePicker, OverlayBar, OverlayPreview, pickInstance } from '../components/overlay';
@@ -176,50 +176,63 @@ function ChatDetail() {
     <>
       <OverlayBar kind="chat" name={t('ov.chat')} />
       <Split
-        settings={
-          <Card>
+        settings={<>
+          <Card title={t('chatSettings.appearance')}>
             <div className="form">
-              <Field label={t('common.font')} hint={t('common.fontHint')}>
-                <TextInput value={c.fontFamily} onChange={(fontFamily) => set({ fontFamily })} />
+              <Field label={t('common.font')} hint={t('common.fontHint')}><TextInput value={c.fontFamily} onChange={(fontFamily) => set({ fontFamily })} /></Field>
+              <Field label={t('common.fontSize')}><NumberInput value={c.fontSize} min={10} max={72} onChange={(fontSize) => set({ fontSize })} /></Field>
+              <Field label={t('common.textColor')}><ColorInput value={c.textColor} onChange={(textColor) => set({ textColor })} /></Field>
+              <Field label={t('common.accent')}><ColorInput value={c.accentColor} onChange={(accentColor) => set({ accentColor })} /></Field>
+              <Field label={t('chatSettings.nameColor')}>
+                <Select value={c.nameColor} onChange={(nameColor) => set({ nameColor })} options={(['user', 'accent', 'text'] as const).map((x) => ({ value: x, label: t(`chatSettings.name_${x}`) }))} />
               </Field>
-              <Field label={t('common.fontSize')}>
-                <NumberInput value={c.fontSize} min={10} max={72} onChange={(fontSize) => set({ fontSize })} />
+              <Field label={t('chatSettings.backgroundStyle')}>
+                <Select<ChatBackgroundStyle> value={c.backgroundStyle} onChange={(backgroundStyle) => set({ backgroundStyle })} options={(['card', 'glass', 'gradient', 'outline', 'none'] as const).map((x) => ({ value: x, label: t(`chatSettings.bg_${x}`) }))} />
               </Field>
-              <Field label={t('common.textColor')}>
-                <ColorInput value={c.textColor} onChange={(textColor) => set({ textColor })} />
-              </Field>
-              <Field label={t('overlays.chatBg')} hint={t('overlays.chatBgHint')}>
-                <TextInput value={c.background} onChange={(background) => set({ background })} mono />
-              </Field>
-              <Field label={t('overlays.maxMessages')}>
-                <NumberInput value={c.maxMessages} min={1} max={200} onChange={(maxMessages) => set({ maxMessages })} />
-              </Field>
-              <Field label={t('overlays.hideAfter')} hint={t('overlays.hideAfterHint')}>
-                <NumberInput value={c.hideAfterSec} min={0} max={3600} onChange={(hideAfterSec) => set({ hideAfterSec })} />
-              </Field>
-              <Field label={t('overlays.direction')}>
-                <Select
-                  value={c.direction}
-                  onChange={(direction) => set({ direction })}
-                  options={[
-                    { value: 'up', label: t('overlays.dirUp') },
-                    { value: 'down', label: t('overlays.dirDown') },
-                  ]}
-                />
-              </Field>
-              <Field label={t('overlays.options')} wide>
-                <div className="stack">
-                  <Toggle checked={c.showBadges} onChange={(showBadges) => set({ showBadges })} label={t('overlays.showBadges')} />
-                  <Toggle checked={c.showPlatform} onChange={(showPlatform) => set({ showPlatform })} label={t('overlays.showPlatform')} />
-                  <Toggle checked={c.hideCommands} onChange={(hideCommands) => set({ hideCommands })} label={t('overlays.hideCommands')} />
-                </div>
-              </Field>
-              <Field label={t('overlays.hideBots')} hint={t('overlays.hideBotsHint')} wide>
-                <LinesInput value={c.hideBots} onChange={(hideBots) => set({ hideBots })} rows={3} />
-              </Field>
+              <Field label={t('overlays.chatBg')} hint={t('overlays.chatBgHint')}><TextInput value={c.background} onChange={(background) => set({ background })} mono /></Field>
+              <Field label={t('chatSettings.backgroundMedia')} hint={t('chatSettings.backgroundMediaHint')} wide><MediaPicker kind="image" value={c.backgroundMedia} onChange={(backgroundMedia) => set({ backgroundMedia })} /></Field>
+              {c.backgroundMedia && <Field label={t('chatSettings.mediaOpacity')}><NumberInput value={c.backgroundMediaOpacity} min={0} max={100} step={5} onChange={(backgroundMediaOpacity) => set({ backgroundMediaOpacity })} /></Field>}
+              <Field label={t('chatSettings.shadow')}><Toggle checked={c.shadow} onChange={(shadow) => set({ shadow })} /></Field>
+              <Field label={t('chatSettings.radius')}><NumberInput value={c.borderRadius} min={0} max={48} onChange={(borderRadius) => set({ borderRadius })} /></Field>
             </div>
           </Card>
-        }
+          <Card title={t('chatSettings.animation')}>
+            <div className="form">
+              <Field label={t('chatSettings.enter')}>
+                <Select<ChatEnterAnimation> value={c.enterAnimation} onChange={(enterAnimation) => set({ enterAnimation })} options={(['none', 'fade', 'slideUp', 'slideSide', 'zoom', 'bounce', 'blur'] as const).map((x) => ({ value: x, label: t(`chatSettings.enter_${x}`) }))} />
+              </Field>
+              <Field label={t('chatSettings.enterMs')}><NumberInput value={c.enterMs} min={100} max={2000} step={50} onChange={(enterMs) => set({ enterMs })} /></Field>
+              <Field label={t('chatSettings.exit')}>
+                <Select<ChatExitAnimation> value={c.exitAnimation} onChange={(exitAnimation) => set({ exitAnimation })} options={(['none', 'fade', 'slideSide', 'slideUp', 'shrink'] as const).map((x) => ({ value: x, label: t(`chatSettings.exit_${x}`) }))} />
+              </Field>
+              <Field label={t('chatSettings.exitMs')}><NumberInput value={c.exitMs} min={100} max={2000} step={50} onChange={(exitMs) => set({ exitMs })} /></Field>
+            </div>
+          </Card>
+          <Card title={t('chatSettings.layout')}>
+            <div className="form">
+              <Field label={t('chatSettings.align')}><Select value={c.align} onChange={(align) => set({ align })} options={[{ value: 'left', label: t('chatSettings.align_left') }, { value: 'right', label: t('chatSettings.align_right') }]} /></Field>
+              <Field label={t('chatSettings.width')}><NumberInput value={c.messageWidth} min={40} max={100} step={5} onChange={(messageWidth) => set({ messageWidth })} /></Field>
+              <Field label={t('chatSettings.gap')}><NumberInput value={c.gap} min={0} max={40} onChange={(gap) => set({ gap })} /></Field>
+              <Field label={t('chatSettings.paddingX')}><NumberInput value={c.paddingX} min={0} max={48} onChange={(paddingX) => set({ paddingX })} /></Field>
+              <Field label={t('chatSettings.paddingY')}><NumberInput value={c.paddingY} min={0} max={48} onChange={(paddingY) => set({ paddingY })} /></Field>
+              <Field label={t('overlays.maxMessages')}><NumberInput value={c.maxMessages} min={1} max={200} onChange={(maxMessages) => set({ maxMessages })} /></Field>
+              <Field label={t('overlays.hideAfter')} hint={t('overlays.hideAfterHint')}><NumberInput value={c.hideAfterSec} min={0} max={3600} onChange={(hideAfterSec) => set({ hideAfterSec })} /></Field>
+              <Field label={t('overlays.direction')}><Select value={c.direction} onChange={(direction) => set({ direction })} options={[{ value: 'up', label: t('overlays.dirUp') }, { value: 'down', label: t('overlays.dirDown') }]} /></Field>
+            </div>
+          </Card>
+          <Card title={t('overlays.options')}>
+            <div className="form">
+              <Field label={t('overlays.options')} wide><div className="stack">
+                <Toggle checked={c.showBadges} onChange={(showBadges) => set({ showBadges })} label={t('overlays.showBadges')} />
+                <Toggle checked={c.showPlatform} onChange={(showPlatform) => set({ showPlatform })} label={t('overlays.showPlatform')} />
+                <Toggle checked={c.showTimestamp} onChange={(showTimestamp) => set({ showTimestamp })} label={t('chatSettings.timestamp')} />
+                <Toggle checked={c.showReply} onChange={(showReply) => set({ showReply })} label={t('chatSettings.reply')} />
+                <Toggle checked={c.hideCommands} onChange={(hideCommands) => set({ hideCommands })} label={t('overlays.hideCommands')} />
+              </div></Field>
+              <Field label={t('overlays.hideBots')} hint={t('overlays.hideBotsHint')} wide><LinesInput value={c.hideBots} onChange={(hideBots) => set({ hideBots })} rows={3} /></Field>
+            </div>
+          </Card>
+        </>}
         preview={
           <OverlayPreview kind="chat" maxHeight={520}>
             <Button size="sm" icon="send" onClick={() => void call('chat:test')}>

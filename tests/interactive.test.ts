@@ -68,6 +68,19 @@ describe('shared helpers', () => {
     expect(upgraded.ads[0]).toMatchObject({ headline: 'Старый партнёр', entrance: 'slideUp', entranceMs: 550 });
   });
 
+  it('adds chat appearance options without replacing an existing chat theme', () => {
+    const old = defaultSettings('ru');
+    const chat = old.chatOverlay as unknown as Record<string, unknown>;
+    chat.background = 'rgba(12,24,48,.8)';
+    delete chat.backgroundStyle;
+    delete chat.enterAnimation;
+    delete chat.showTimestamp;
+    const upgraded = mergeDefaults(defaultSettings('ru'), old);
+    expect(upgraded.chatOverlay).toMatchObject({
+      background: 'rgba(12,24,48,.8)', backgroundStyle: 'card', enterAnimation: 'slideUp', showTimestamp: false,
+    });
+  });
+
   it('picks by weight and never picks zero-weight items', () => {
     const items = [{ w: 0 }, { w: 1 }, { w: 3 }];
     expect(pickWeighted(items, (i) => i.w, () => 0)).toBe(1);

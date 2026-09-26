@@ -277,6 +277,10 @@ export interface AlertSettings {
   types: Record<AlertType, AlertVariant>;
 }
 
+export type ChatBackgroundStyle = 'card' | 'glass' | 'gradient' | 'outline' | 'none';
+export type ChatEnterAnimation = 'none' | 'fade' | 'slideUp' | 'slideSide' | 'zoom' | 'bounce' | 'blur';
+export type ChatExitAnimation = 'none' | 'fade' | 'slideSide' | 'slideUp' | 'shrink';
+
 export interface ChatOverlaySettings {
   fontFamily: string;
   fontSize: number;
@@ -289,6 +293,24 @@ export interface ChatOverlaySettings {
   direction: 'up' | 'down';
   background: string;
   textColor: string;
+  accentColor: string;
+  backgroundStyle: ChatBackgroundStyle;
+  backgroundMedia: string | null;
+  backgroundMediaOpacity: number;
+  shadow: boolean;
+  borderRadius: number;
+  paddingX: number;
+  paddingY: number;
+  gap: number;
+  align: 'left' | 'right';
+  messageWidth: number;
+  enterAnimation: ChatEnterAnimation;
+  exitAnimation: ChatExitAnimation;
+  enterMs: number;
+  exitMs: number;
+  showTimestamp: boolean;
+  showReply: boolean;
+  nameColor: 'user' | 'accent' | 'text';
 }
 
 export type GoalKind = 'followers' | 'subs' | 'bits' | 'donations' | 'manual';

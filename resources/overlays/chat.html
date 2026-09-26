@@ -1,203 +1,223 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <title>StreamHelper — Chat</title>
-    <style>
-      :root {
-        --font: 'Inter', 'Segoe UI', system-ui, sans-serif;
-        --size: 20px;
-        --bg: rgba(0, 0, 0, 0.35);
-        --text: #fff;
+<head>
+  <meta charset="utf-8" />
+  <title>StreamHelper — Chat</title>
+  <style>
+    :root {
+      --font: 'Inter', 'Segoe UI', system-ui, sans-serif;
+      --size: 20px;
+      --bg: rgba(0, 0, 0, .35);
+      --text: #fff;
+      --accent: #9b6bff;
+      --radius: 10px;
+      --pad-x: 10px;
+      --pad-y: 6px;
+      --gap: 6px;
+      --width: 100%;
+      --align: flex-start;
+      --shadow: none;
+      --card-image: none;
+      --image-opacity: .35;
+      --enter-ms: 250ms;
+      --exit-ms: 600ms;
+      --slide-x: -22px;
+    }
+    html, body { margin: 0; height: 100%; overflow: hidden; background: transparent; }
+    #chat {
+      position: absolute; inset: 0; display: flex; flex-direction: column;
+      justify-content: flex-end; gap: var(--gap); padding: 10px; box-sizing: border-box;
+      font-family: var(--font); font-size: var(--size); color: var(--text);
+    }
+    #chat.down { justify-content: flex-start; }
+    .msg {
+      position: relative; flex: none; align-self: var(--align); width: var(--width); max-width: 100%;
+      box-sizing: border-box; min-width: 0; padding: var(--pad-y) var(--pad-x);
+      background: var(--bg); border-radius: var(--radius); box-shadow: var(--shadow);
+      line-height: 1.35; overflow-wrap: anywhere; text-shadow: 0 1px 2px #0009;
+    }
+    .msg::before {
+      content: ''; position: absolute; inset: 0; z-index: 0; border-radius: inherit;
+      background-image: var(--card-image); background-size: cover; background-position: center;
+      opacity: var(--image-opacity); pointer-events: none;
+    }
+    .msg > * { position: relative; z-index: 1; }
+    #chat[data-style='glass'] .msg { background: color-mix(in srgb, var(--bg) 78%, transparent); backdrop-filter: blur(12px); border: 1px solid #ffffff38; }
+    #chat[data-style='gradient'] .msg { background: linear-gradient(120deg, var(--bg), color-mix(in srgb, var(--accent) 28%, var(--bg))); }
+    #chat[data-style='outline'] .msg { background: color-mix(in srgb, var(--bg) 40%, transparent); border: 1px solid var(--accent); }
+    #chat[data-style='none'] .msg { background: transparent; }
+    .msg.highlight { box-shadow: inset 3px 0 0 var(--accent), var(--shadow); }
+    .msg.action .text { font-style: italic; color: var(--user-color); }
+    .badge { height: 1.05em; vertical-align: -.15em; margin-right: 3px; }
+    .name { font-weight: 700; margin-right: 2px; color: var(--user-color); }
+    #chat[data-name-color='accent'] .name, #chat[data-name-color='accent'] .msg.action .text { color: var(--accent); }
+    #chat[data-name-color='text'] .name, #chat[data-name-color='text'] .msg.action .text { color: var(--text); }
+    .emote { height: 1.6em; vertical-align: middle; margin: -.3em 1px; }
+    .mention { font-weight: 600; opacity: .9; }
+    .reply { margin-bottom: 3px; padding-left: 7px; border-left: 2px solid var(--accent); opacity: .75; font-size: .72em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .timestamp { margin-left: 8px; opacity: .65; font-size: .65em; white-space: nowrap; }
+    #chat[data-badges='false'] .badge, #chat[data-platform='false'] .platform,
+    #chat[data-timestamp='false'] .timestamp, #chat[data-reply='false'] .reply { display: none; }
+    .platform { display: inline-block; width: .6em; height: .6em; border-radius: 50%; margin-right: 6px; vertical-align: .1em; }
+    .platform.twitch { background: #9146ff; }
+    .platform.youtube { background: #ff0033; }
+    .platform.vkplay { background: #0077ff; }
+    .platform.kick { background: #53fc18; }
+
+    .msg.enter.enter-fade { animation: chatFadeIn var(--enter-ms) ease-out both; }
+    .msg.enter.enter-slideUp { animation: chatSlideUpIn var(--enter-ms) ease-out both; }
+    .msg.enter.enter-slideSide { animation: chatSlideSideIn var(--enter-ms) ease-out both; }
+    .msg.enter.enter-zoom { animation: chatZoomIn var(--enter-ms) cubic-bezier(.16, 1, .3, 1) both; }
+    .msg.enter.enter-bounce { animation: chatBounceIn var(--enter-ms) both; }
+    .msg.enter.enter-blur { animation: chatBlurIn var(--enter-ms) ease-out both; }
+    .msg.out.exit-fade { animation: chatFadeOut var(--exit-ms) ease-in both; }
+    .msg.out.exit-slideSide { animation: chatSlideSideOut var(--exit-ms) ease-in both; }
+    .msg.out.exit-slideUp { animation: chatSlideUpOut var(--exit-ms) ease-in both; }
+    .msg.out.exit-shrink { animation: chatShrinkOut var(--exit-ms) ease-in both; }
+    @keyframes chatFadeIn { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes chatSlideUpIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+    @keyframes chatSlideSideIn { from { opacity: 0; transform: translateX(var(--slide-x)); } to { opacity: 1; transform: none; } }
+    @keyframes chatZoomIn { from { opacity: 0; transform: scale(.78); } to { opacity: 1; transform: none; } }
+    @keyframes chatBounceIn { 0% { opacity: 0; transform: translateY(24px) scale(.9); } 65% { opacity: 1; transform: translateY(-5px) scale(1.02); } 100% { opacity: 1; transform: none; } }
+    @keyframes chatBlurIn { from { opacity: 0; filter: blur(9px); } to { opacity: 1; filter: blur(0); } }
+    @keyframes chatFadeOut { from { opacity: 1; } to { opacity: 0; } }
+    @keyframes chatSlideSideOut { from { opacity: 1; } to { opacity: 0; transform: translateX(var(--slide-x)); } }
+    @keyframes chatSlideUpOut { from { opacity: 1; } to { opacity: 0; transform: translateY(-18px); } }
+    @keyframes chatShrinkOut { from { opacity: 1; } to { opacity: 0; transform: scale(.75); } }
+    @media (prefers-reduced-motion: reduce) { .msg.enter, .msg.out { animation: none !important; } }
+    .reduced .msg.enter, .reduced .msg.out { animation: none !important; }
+  </style>
+</head>
+<body>
+  <div id="chat"></div>
+  <script src="/overlay/assets/common.js"></script>
+  <script>
+    const root = document.getElementById('chat');
+    const motionQuery = matchMedia('(prefers-reduced-motion: reduce)');
+    if (SH.reducedMotion) document.body.classList.add('reduced');
+    const reducedMotion = () => SH.reducedMotion || motionQuery.matches;
+    const enterEffects = new Set(['none', 'fade', 'slideUp', 'slideSide', 'zoom', 'bounce', 'blur']);
+    const exitEffects = new Set(['none', 'fade', 'slideSide', 'slideUp', 'shrink']);
+    const styles = new Set(['card', 'glass', 'gradient', 'outline', 'none']);
+    let cfg = {
+      maxMessages: 30, hideAfterSec: 0, showBadges: true, showPlatform: false,
+      showTimestamp: false, showReply: false, direction: 'up', align: 'left',
+      backgroundStyle: 'card', enterAnimation: 'slideUp', exitAnimation: 'slideSide',
+      enterMs: 250, exitMs: 600,
+    };
+    const COLORS = ['#ff7a7a', '#ffb86b', '#ffe66b', '#8bff8b', '#6bffe6', '#6bb8ff', '#b86bff', '#ff6be6'];
+    const colorFor = (login) => COLORS[[...login].reduce((a, c) => a + c.charCodeAt(0), 0) % COLORS.length];
+    const clamp = (value, fallback, min, max) => Number.isFinite(Number(value)) ? Math.max(min, Math.min(max, Number(value))) : fallback;
+
+    function applyConfig(c) {
+      cfg = { ...cfg, ...c };
+      SH.loadFont(cfg.fontFamily);
+      const s = document.documentElement.style;
+      s.setProperty('--font', SH.fontStack(cfg.fontFamily));
+      s.setProperty('--size', clamp(cfg.fontSize, 20, 10, 72) + 'px');
+      s.setProperty('--bg', cfg.background || 'rgba(0,0,0,.35)');
+      s.setProperty('--text', cfg.textColor || '#ffffff');
+      s.setProperty('--accent', cfg.accentColor || '#9b6bff');
+      s.setProperty('--radius', clamp(cfg.borderRadius, 10, 0, 48) + 'px');
+      s.setProperty('--pad-x', clamp(cfg.paddingX, 10, 0, 48) + 'px');
+      s.setProperty('--pad-y', clamp(cfg.paddingY, 6, 0, 48) + 'px');
+      s.setProperty('--gap', clamp(cfg.gap, 6, 0, 40) + 'px');
+      s.setProperty('--width', clamp(cfg.messageWidth, 100, 40, 100) + '%');
+      s.setProperty('--align', cfg.align === 'right' ? 'flex-end' : 'flex-start');
+      s.setProperty('--slide-x', cfg.align === 'right' ? '22px' : '-22px');
+      s.setProperty('--shadow', cfg.shadow ? '0 8px 22px #0009' : 'none');
+      const media = cfg.backgroundMedia ? SH.mediaUrl(cfg.backgroundMedia) : null;
+      s.setProperty('--card-image', media ? `url(${JSON.stringify(media)})` : 'none');
+      s.setProperty('--image-opacity', String(clamp(cfg.backgroundMediaOpacity, 35, 0, 100) / 100));
+      s.setProperty('--enter-ms', clamp(cfg.enterMs, 250, 100, 2000) + 'ms');
+      s.setProperty('--exit-ms', clamp(cfg.exitMs, 600, 100, 2000) + 'ms');
+      root.classList.toggle('down', cfg.direction === 'down');
+      root.dataset.style = styles.has(cfg.backgroundStyle) ? cfg.backgroundStyle : 'card';
+      root.dataset.badges = String(!!cfg.showBadges);
+      root.dataset.platform = String(!!cfg.showPlatform);
+      root.dataset.timestamp = String(!!cfg.showTimestamp);
+      root.dataset.reply = String(!!cfg.showReply);
+      root.dataset.nameColor = cfg.nameColor || 'user';
+      trim();
+    }
+
+    function render(m) {
+      const row = SH.el('div', 'msg');
+      row.dataset.id = m.id;
+      row.dataset.user = m.userId;
+      row.style.setProperty('--user-color', m.color || colorFor(m.userLogin || ''));
+      if (m.highlighted) row.classList.add('highlight');
+      if (m.isAction) row.classList.add('action');
+      if (m.replyTo) row.appendChild(SH.el('div', 'reply', `↪ ${m.replyTo.userName}: ${m.replyTo.text}`));
+
+      const line = SH.el('div', 'line');
+      line.appendChild(SH.el('span', `platform ${m.platform}`));
+      for (const badge of m.badges || []) {
+        if (!badge.imageUrl) continue;
+        const img = SH.el('img', 'badge');
+        img.src = badge.imageUrl;
+        img.alt = badge.title || badge.id;
+        line.appendChild(img);
       }
-      html,
-      body {
-        margin: 0;
-        height: 100%;
-        overflow: hidden;
-        background: transparent;
-      }
-      #chat {
-        position: absolute;
-        inset: 0;
-        display: flex;
-        flex-direction: column;
-        justify-content: flex-end;
-        gap: 6px;
-        padding: 10px;
-        box-sizing: border-box;
-        font-family: var(--font);
-        font-size: var(--size);
-        color: var(--text);
-      }
-      #chat.down {
-        justify-content: flex-start;
-      }
-      .msg {
-        background: var(--bg);
-        border-radius: 10px;
-        padding: 6px 10px;
-        line-height: 1.35;
-        overflow-wrap: anywhere;
-        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
-        animation: in 0.25s ease-out;
-        transition:
-          opacity 0.6s,
-          transform 0.6s;
-      }
-      .msg.highlight {
-        box-shadow: inset 3px 0 0 #9b6bff;
-      }
-      .msg.out {
-        opacity: 0;
-        transform: translateX(-12px);
-      }
-      .msg.action .text {
-        font-style: italic;
-      }
-      .badge {
-        height: 1.05em;
-        vertical-align: -0.15em;
-        margin-right: 3px;
-      }
-      .name {
-        font-weight: 700;
-        margin-right: 2px;
-      }
-      .emote {
-        height: 1.6em;
-        vertical-align: middle;
-        margin: -0.3em 1px;
-      }
-      .mention {
-        font-weight: 600;
-        opacity: 0.9;
-      }
-      .platform {
-        display: inline-block;
-        width: 0.6em;
-        height: 0.6em;
-        border-radius: 50%;
-        margin-right: 6px;
-        vertical-align: 0.1em;
-      }
-      .platform.twitch {
-        background: #9146ff;
-      }
-      .platform.youtube {
-        background: #ff0033;
-      }
-      .platform.vkplay {
-        background: #0077ff;
-      }
-      .platform.kick {
-        background: #53fc18;
-      }
-      @keyframes in {
-        from {
-          opacity: 0;
-          transform: translateY(10px);
+      line.appendChild(SH.el('span', 'name', m.userName));
+      line.appendChild(document.createTextNode(m.isAction ? ' ' : ': '));
+      const text = SH.el('span', 'text');
+      for (const fragment of m.fragments || [{ type: 'text', text: m.text }]) {
+        if (fragment.type === 'emote') {
+          const img = SH.el('img', 'emote');
+          img.src = fragment.url;
+          img.alt = fragment.text;
+          text.appendChild(img);
+        } else if (fragment.type === 'mention') {
+          text.appendChild(SH.el('span', 'mention', fragment.text));
+        } else {
+          text.appendChild(document.createTextNode(fragment.text));
         }
       }
-    </style>
-  </head>
-  <body>
-    <div id="chat"></div>
-    <script src="/overlay/assets/common.js"></script>
-    <script>
-      const root = document.getElementById('chat');
-      let cfg = { maxMessages: 30, hideAfterSec: 0, showBadges: true, showPlatform: false, direction: 'up' };
-      // Fallback colors for users without one, stable per login.
-      const COLORS = ['#ff7a7a', '#ffb86b', '#ffe66b', '#8bff8b', '#6bffe6', '#6bb8ff', '#b86bff', '#ff6be6'];
-      const colorFor = (login) => COLORS[[...login].reduce((a, c) => a + c.charCodeAt(0), 0) % COLORS.length];
+      line.appendChild(text);
+      const time = new Date(m.timestamp || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      line.appendChild(SH.el('span', 'timestamp', time));
+      row.appendChild(line);
+      return row;
+    }
 
-      function applyConfig(c) {
-        cfg = c;
-        SH.loadFont(c.fontFamily);
-        const s = document.documentElement.style;
-        s.setProperty('--font', SH.fontStack(c.fontFamily));
-        s.setProperty('--size', c.fontSize + 'px');
-        s.setProperty('--bg', c.background);
-        s.setProperty('--text', c.textColor);
-        root.classList.toggle('down', c.direction === 'down');
-        trim();
+    function add(m) {
+      if (root.querySelector(`[data-id="${CSS.escape(m.id)}"]`)) return;
+      const row = render(m);
+      if (cfg.direction === 'down') root.prepend(row);
+      else root.appendChild(row);
+      const entrance = enterEffects.has(cfg.enterAnimation) ? cfg.enterAnimation : 'slideUp';
+      if (!reducedMotion() && entrance !== 'none') row.classList.add('enter', `enter-${entrance}`);
+      if (cfg.hideAfterSec > 0) setTimeout(() => remove(row), cfg.hideAfterSec * 1000);
+      trim();
+    }
+
+    function remove(row) {
+      if (!row.isConnected || row.classList.contains('out')) return;
+      row.classList.remove('enter');
+      const exit = exitEffects.has(cfg.exitAnimation) ? cfg.exitAnimation : 'slideSide';
+      if (reducedMotion() || exit === 'none') return row.remove();
+      row.classList.add('out', `exit-${exit}`);
+      setTimeout(() => row.remove(), clamp(cfg.exitMs, 600, 100, 2000) + 30);
+    }
+
+    function trim() {
+      const rows = [...root.children].filter((r) => !r.classList.contains('out'));
+      const extra = rows.length - cfg.maxMessages;
+      if (extra <= 0) return;
+      const oldest = cfg.direction === 'down' ? rows.slice(-extra) : rows.slice(0, extra);
+      oldest.forEach(remove);
+    }
+
+    SH.connect('chat', (msg) => {
+      switch (msg.type) {
+        case 'chatConfig': return applyConfig(msg.config);
+        case 'chat': return add(msg.message);
+        case 'chatDelete': return root.querySelectorAll(`[data-id="${CSS.escape(msg.id)}"]`).forEach(remove);
+        case 'chatClearUser': return root.querySelectorAll(`[data-user="${CSS.escape(msg.userId)}"]`).forEach(remove);
+        case 'chatClear': return root.replaceChildren();
       }
-
-      function render(m) {
-        const row = SH.el('div', 'msg');
-        row.dataset.id = m.id;
-        row.dataset.user = m.userId;
-        if (m.highlighted) row.classList.add('highlight');
-        if (m.isAction) row.classList.add('action');
-        if (cfg.showPlatform) row.appendChild(SH.el('span', `platform ${m.platform}`));
-        if (cfg.showBadges) {
-          for (const b of m.badges) {
-            if (!b.imageUrl) continue;
-            const img = SH.el('img', 'badge');
-            img.src = b.imageUrl;
-            img.alt = b.title || b.id;
-            row.appendChild(img);
-          }
-        }
-        const name = SH.el('span', 'name', m.userName);
-        name.style.color = m.color || colorFor(m.userLogin);
-        row.appendChild(name);
-        row.appendChild(document.createTextNode(m.isAction ? ' ' : ': '));
-        const text = SH.el('span', 'text');
-        if (m.isAction) text.style.color = m.color || colorFor(m.userLogin);
-        for (const f of m.fragments) {
-          if (f.type === 'emote') {
-            const img = SH.el('img', 'emote');
-            img.src = f.url;
-            img.alt = f.text;
-            text.appendChild(img);
-          } else if (f.type === 'mention') {
-            text.appendChild(SH.el('span', 'mention', f.text));
-          } else {
-            text.appendChild(document.createTextNode(f.text));
-          }
-        }
-        row.appendChild(text);
-        return row;
-      }
-
-      function add(m) {
-        // After a reconnect the app replays recent history; skip what we already show.
-        if (root.querySelector(`[data-id="${CSS.escape(m.id)}"]`)) return;
-        const row = render(m);
-        if (cfg.direction === 'down') root.prepend(row);
-        else root.appendChild(row);
-        if (cfg.hideAfterSec > 0) setTimeout(() => remove(row), cfg.hideAfterSec * 1000);
-        trim();
-      }
-
-      function remove(row) {
-        row.classList.add('out');
-        setTimeout(() => row.remove(), 600);
-      }
-
-      function trim() {
-        const rows = [...root.children].filter((r) => !r.classList.contains('out'));
-        const extra = rows.length - cfg.maxMessages;
-        if (extra <= 0) return;
-        const oldest = cfg.direction === 'down' ? rows.slice(-extra) : rows.slice(0, extra);
-        oldest.forEach((r) => r.remove());
-      }
-
-      SH.connect('chat', (msg) => {
-        switch (msg.type) {
-          case 'chatConfig':
-            return applyConfig(msg.config);
-          case 'chat':
-            return add(msg.message);
-          case 'chatDelete':
-            return root.querySelectorAll(`[data-id="${CSS.escape(msg.id)}"]`).forEach(remove);
-          case 'chatClearUser':
-            return root.querySelectorAll(`[data-user="${CSS.escape(msg.userId)}"]`).forEach(remove);
-          case 'chatClear':
-            return (root.innerHTML = '');
-        }
-      });
-    </script>
-  </body>
+    });
+  </script>
+</body>
 </html>
