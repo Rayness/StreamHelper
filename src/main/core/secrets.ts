@@ -29,6 +29,8 @@ export interface SecretsData {
   donationalerts?: OAuthToken;
   kawaki?: KawakiSession;
   streamlabsSocketToken?: string;
+  streamelementsJwt?: string;
+  discordWebhookUrl?: string;
   obsPassword?: string;
   dockToken?: string;
 }

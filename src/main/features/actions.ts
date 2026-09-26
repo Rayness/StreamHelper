@@ -18,6 +18,7 @@ export interface ActionTargets {
   wheelSpin(wheelId: string): void;
   bannerToggle(bannerId: string): void;
   emoteBurst(): void;
+  streamerbotAction(actionId: string): Promise<void>;
 }
 
 /** Runs dashboard buttons / global hotkeys. Each step is independent: one failing step doesn't stop the rest. */
@@ -87,6 +88,8 @@ export class ActionRunner {
         return t.bannerToggle(s.bannerId);
       case 'emoteBurst':
         return t.emoteBurst();
+      case 'streamerbotAction':
+        return t.streamerbotAction(s.actionId);
       case 'wait':
         return new Promise((r) => setTimeout(r, Math.max(0, Math.min(60_000, s.ms))));
     }

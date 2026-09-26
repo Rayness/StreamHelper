@@ -1,7 +1,7 @@
 // Contracts shared by the main process, the renderer UI and (as plain JSON) the overlays.
 
 export type Platform = 'twitch' | 'youtube' | 'vkplay' | 'kick';
-export type DonationSource = 'donationalerts' | 'streamlabs';
+export type DonationSource = 'donationalerts' | 'streamlabs' | 'streamelements';
 export type EventSource = Platform | DonationSource | 'test';
 export type Language = 'ru' | 'en';
 
@@ -156,6 +156,9 @@ export interface RuntimeState {
   twitchBot: ConnectionState & { deviceCode?: DeviceCodePrompt };
   donationalerts: ConnectionState;
   streamlabs: ConnectionState;
+  streamelements: ConnectionState;
+  streamerbot: ConnectionState & { actions: { id: string; name: string }[] };
+  discord: ConnectionState;
   obs: ObsState;
   stream: StreamInfo;
   alerts: { paused: boolean; queueLength: number; current: string | null };
@@ -337,6 +340,7 @@ export type ActionStep =
   | { type: 'wheelSpin'; wheelId: string }
   | { type: 'bannerToggle'; bannerId: string }
   | { type: 'emoteBurst' }
+  | { type: 'streamerbotAction'; actionId: string }
   | { type: 'wait'; ms: number };
 
 export interface QuickAction {
@@ -648,6 +652,9 @@ export interface Settings {
   twitch: { clientId: string };
   donationalerts: { clientId: string; enabled: boolean };
   streamlabs: { enabled: boolean };
+  streamelements: { enabled: boolean; channelId: string };
+  streamerbot: { enabled: boolean; port: number };
+  discord: { enabled: boolean; notifyLive: boolean; notifyOffline: boolean; notifyDonations: boolean };
   obs: { host: string; port: number; autoConnect: boolean };
   bot: BotSettings;
   alerts: AlertSettings;
@@ -762,6 +769,14 @@ export interface IpcInvoke {
   'da:logout': () => void;
   'streamlabs:connect': (token: string) => void;
   'streamlabs:disconnect': () => void;
+  'streamelements:connect': (channelId: string, token: string) => void;
+  'streamelements:disconnect': () => void;
+  'streamerbot:connect': (port: number) => void;
+  'streamerbot:disconnect': () => void;
+  'streamerbot:refresh': () => void;
+  'discord:connect': (url: string) => void;
+  'discord:disconnect': () => void;
+  'discord:test': () => void;
   'obs:connect': (password?: string) => void;
   'obs:disconnect': () => void;
   'obs:setScene': (scene: string) => void;

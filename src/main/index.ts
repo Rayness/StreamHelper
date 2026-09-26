@@ -12,6 +12,9 @@ import { StateHub } from './core/state';
 import { SettingsStore } from './core/store';
 import { DonationAlertsService } from './donations/donationalerts';
 import { StreamlabsService } from './donations/streamlabs';
+import { StreamElementsService } from './donations/streamelements';
+import { StreamerBotService } from './integrations/streamerbot';
+import { DiscordService } from './integrations/discord';
 import { ActionRunner } from './features/actions';
 import { AlertQueue, sampleEvent } from './features/alerts';
 import { TextOverlays } from './features/banners';
@@ -105,6 +108,9 @@ async function bootstrap(): Promise<void> {
   platforms.register(twitch);
   const obs = new ObsService(ctx);
   const streamlabs = new StreamlabsService(ctx);
+  const streamelements = new StreamElementsService(ctx);
+  const streamerbot = new StreamerBotService(ctx);
+  const discord = new DiscordService(ctx);
   const progress = new ProgressTracker(ctx);
   const updater = new UpdateService(ctx);
 
@@ -180,6 +186,7 @@ async function bootstrap(): Promise<void> {
     wheelSpin: (id) => wheel.spin(id),
     bannerToggle: (id) => text.toggle(id),
     emoteBurst: () => emotes.burst(),
+    streamerbotAction: (id) => streamerbot.run(id),
   });
   dockRoute = createDockRoutes({
     token: dockToken,
@@ -284,6 +291,14 @@ async function bootstrap(): Promise<void> {
     'da:logout': () => donationalerts.logout(),
     'streamlabs:connect': (token) => streamlabs.connect(token),
     'streamlabs:disconnect': () => streamlabs.disconnect(),
+    'streamelements:connect': (channelId, token) => streamelements.connect(channelId, token),
+    'streamelements:disconnect': () => streamelements.disconnect(),
+    'streamerbot:connect': (port) => streamerbot.connect(port),
+    'streamerbot:disconnect': () => streamerbot.disconnect(),
+    'streamerbot:refresh': () => streamerbot.refresh(),
+    'discord:connect': (url) => discord.connect(url),
+    'discord:disconnect': () => discord.disconnect(),
+    'discord:test': () => discord.test(),
     'obs:connect': (password) => obs.connect(password),
     'obs:disconnect': () => obs.disconnect(),
     'obs:setScene': (s) => obs.setScene(s),
@@ -364,6 +379,9 @@ async function bootstrap(): Promise<void> {
   void twitch.start();
   void donationalerts.start();
   streamlabs.start();
+  streamelements.start();
+  streamerbot.start();
+  discord.start();
   void kawaki.start();
 
   app.on('before-quit', () => {
@@ -373,6 +391,8 @@ async function bootstrap(): Promise<void> {
     twitch.stop();
     donationalerts.stop();
     streamlabs.stop();
+    streamelements.stop();
+    streamerbot.stop();
     kawaki.stop();
     text.stop();
     ads.stop();
