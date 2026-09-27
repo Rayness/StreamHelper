@@ -17,6 +17,8 @@ foreach ($file in @($setup, $blockmap, $manifest)) {
 }
 if ((Get-Item -LiteralPath $setup).VersionInfo.ProductVersion -ne $version) { throw 'Installer version does not match package.json' }
 if (-not (Select-String -LiteralPath $manifest -Pattern "^version: $([regex]::Escape($version))$" -Quiet)) { throw 'latest.yml version does not match package.json' }
+$signature = Get-AuthenticodeSignature -LiteralPath $setup
+if ($signature.Status -ne 'Valid') { throw "Installer must have a trusted code-signing signature before publication (status: $($signature.Status))" }
 if ($ValidateOnly) {
   Write-Output "Release files for $version are valid in $output"
   return
