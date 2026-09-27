@@ -25,6 +25,7 @@ export function initialRuntimeState(): RuntimeState {
     boss: { status: 'idle', hp: 0, maxHp: 0, hits: 0, lastHit: null, top: [] },
     ad: { activeId: null, endsAt: null },
     spotlight: null,
+    music: { status: 'connecting', track: null, sources: [] },
     update: { status: 'idle', version: null, progress: 0, error: null },
     dockUrl: '',
     bannersShown: [],

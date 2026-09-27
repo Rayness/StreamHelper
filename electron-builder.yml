@@ -10,6 +10,7 @@ directories:
   output: dist
 files:
   - out/**
+  - src/main/winrt/generated/**
   - package.json
 extraResources:
   - from: resources/overlays
@@ -18,6 +19,7 @@ extraResources:
     to: icon.png
 asarUnpack:
   - resources/**
+  - '**/*.node'
 win:
   target:
     - target: nsis

@@ -22,6 +22,7 @@ import { AdsService } from './features/ads';
 import { BossService } from './features/boss';
 import { ChatHistory, sampleChatMessage } from './features/chatHistory';
 import { EmoteRain } from './features/emotes';
+import { MusicService } from './features/music';
 import { GiveawayService } from './features/giveaway';
 import { PollService } from './features/poll';
 import { ProgressTracker } from './features/progress';
@@ -113,6 +114,7 @@ async function bootstrap(): Promise<void> {
   const discord = new DiscordService(ctx);
   const progress = new ProgressTracker(ctx);
   const updater = new UpdateService(ctx);
+  const music = new MusicService(ctx);
 
   let overlay!: OverlayServer;
   const donationalerts = new DonationAlertsService(ctx, () => `http://127.0.0.1:${overlay.port}/auth/donationalerts`);
@@ -376,6 +378,7 @@ async function bootstrap(): Promise<void> {
   text.start();
   ads.start();
   updater.start();
+  music.start();
   bot.start();
   actions.registerHotkeys();
   obs.start();
@@ -400,6 +403,7 @@ async function bootstrap(): Promise<void> {
     text.stop();
     ads.stop();
     updater.stop();
+    music.stop();
     boss.dispose();
     wheel.dispose();
     poll.dispose();
