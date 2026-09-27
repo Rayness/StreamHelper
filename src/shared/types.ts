@@ -277,9 +277,9 @@ export interface AlertSettings {
   types: Record<AlertType, AlertVariant>;
 }
 
-export type ChatBackgroundStyle = 'card' | 'glass' | 'gradient' | 'outline' | 'none';
-export type ChatEnterAnimation = 'none' | 'fade' | 'slideUp' | 'slideSide' | 'zoom' | 'bounce' | 'blur';
-export type ChatExitAnimation = 'none' | 'fade' | 'slideSide' | 'slideUp' | 'shrink';
+export type ChatBackgroundStyle = 'card' | 'glass' | 'gradient' | 'outline' | 'neon' | 'stripe' | 'bubble' | 'none';
+export type ChatEnterAnimation = 'none' | 'fade' | 'slideUp' | 'slideSide' | 'zoom' | 'bounce' | 'blur' | 'drop' | 'swing' | 'glitch';
+export type ChatExitAnimation = 'none' | 'fade' | 'slideSide' | 'slideUp' | 'shrink' | 'blur' | 'pop' | 'glitch';
 
 export interface ChatOverlaySettings {
   fontFamily: string;
@@ -411,7 +411,20 @@ export interface Banner {
 }
 
 /** Graphic/video advertising, independent of the existing text banners. */
-export type AdEntrance = 'fade' | 'slideUp' | 'slideDown' | 'slideSide' | 'zoom' | 'bounce' | 'flip' | 'blur' | 'wipe';
+export type AdEntrance = 'fade' | 'slideUp' | 'slideDown' | 'slideSide' | 'zoom' | 'bounce' | 'flip' | 'blur' | 'wipe' | 'glitch' | 'rotate' | 'drop' | 'pulse' | 'curtain';
+
+export interface RewardOverlaySettings {
+  maxItems: number;
+  showInput: boolean;
+  accentColor: string;
+}
+
+export interface CollabOverlaySettings {
+  title: string;
+  guests: string[];
+  showRaids: boolean;
+  accentColor: string;
+}
 
 export interface AdCampaign {
   id: string;
@@ -685,6 +698,8 @@ export interface Settings {
   bot: BotSettings;
   alerts: AlertSettings;
   chatOverlay: ChatOverlaySettings;
+  rewardsOverlay: RewardOverlaySettings;
+  collabOverlay: CollabOverlaySettings;
   goals: Goal[];
   timers: OverlayTimer[];
   actions: QuickAction[];
@@ -708,7 +723,7 @@ export type SettingsKey = keyof Settings;
 
 // ---------- Overlay wire protocol ----------
 
-export type OverlayKind = 'chat' | 'alerts' | 'goal' | 'timer' | 'events' | 'banner' | 'ad' | 'label' | 'emotes' | 'wheel' | 'poll' | 'giveaway' | 'kawaki' | 'quiz' | 'boss' | 'live' | 'spotlight';
+export type OverlayKind = 'chat' | 'alerts' | 'goal' | 'timer' | 'events' | 'rewards' | 'collab' | 'banner' | 'ad' | 'label' | 'emotes' | 'wheel' | 'poll' | 'giveaway' | 'kawaki' | 'quiz' | 'boss' | 'live' | 'spotlight';
 
 export interface RenderedBanner extends Omit<Banner, 'slides'> {
   slides: { id: string; text: string; image: string | null }[];
@@ -751,6 +766,10 @@ export type OverlayMessage =
   | { type: 'timer'; timer: OverlayTimer | null; now: number }
   | { type: 'event'; event: StreamEvent }
   | { type: 'events'; events: StreamEvent[] }
+  | { type: 'rewards'; events: StreamEventOf<'redemption'>[]; config: RewardOverlaySettings }
+  | { type: 'reward'; event: StreamEventOf<'redemption'> }
+  | { type: 'collab'; config: CollabOverlaySettings; raids: StreamEventOf<'raid'>[]; lang: Language }
+  | { type: 'collabRaid'; event: StreamEventOf<'raid'> }
   | { type: 'banner'; banner: RenderedBanner | null }
   | { type: 'ad'; campaign: AdCampaign | null; endsAt: number | null }
   | { type: 'boss'; boss: BossState; style: BossSettings; lang: Language }

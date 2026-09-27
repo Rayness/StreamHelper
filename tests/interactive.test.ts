@@ -18,6 +18,10 @@ import { answerVariants, isCorrectAnswer, levenshtein, maskTitle } from '../src/
 import { normalizeText, pickWeighted } from '../src/main/features/stage';
 import { applyEventToStats, resolveStreamVar } from '../src/main/features/vars';
 import { segmentAtPointer, wheelRotation, WheelService } from '../src/main/features/wheel';
+import { OverlayHub } from '../src/main/overlay/hub';
+import type { OverlayServer } from '../src/main/overlay/server';
+import type { ChatHistory } from '../src/main/features/chatHistory';
+import type { HubSources } from '../src/main/overlay/hub';
 
 let seq = 0;
 function msg(text: string, roles: Partial<ChatRoles> = {}, userId = 'u1'): ChatMessage {
@@ -81,6 +85,16 @@ describe('shared helpers', () => {
     });
   });
 
+  it('keeps old settings while adding reward and collaboration overlays', () => {
+    const old = defaultSettings('ru') as unknown as Record<string, unknown>;
+    delete old.rewardsOverlay;
+    delete old.collabOverlay;
+    const upgraded = mergeDefaults(defaultSettings('ru'), old);
+    expect(upgraded.chatOverlay.backgroundStyle).toBe('card');
+    expect(upgraded.rewardsOverlay.maxItems).toBe(5);
+    expect(upgraded.collabOverlay.guests).toEqual([]);
+  });
+
   it('picks by weight and never picks zero-weight items', () => {
     const items = [{ w: 0 }, { w: 1 }, { w: 3 }];
     expect(pickWeighted(items, (i) => i.w, () => 0)).toBe(1);
@@ -91,6 +105,26 @@ describe('shared helpers', () => {
 
   it('normalizes text for comparisons', () => {
     expect(normalizeText('  Ёжик, в ТУМАНЕ!! ')).toBe('ежик в тумане');
+  });
+});
+
+describe('reward and collaboration overlay events', () => {
+  it('routes only matching Twitch events and gives new sources their current state', () => {
+    const { ctx, bus, settings } = makeCtx();
+    const sent: { kind: string; message: OverlayMessage }[] = [];
+    const server = { broadcast: (kind: string, message: OverlayMessage) => sent.push({ kind, message }), forEachClient: vi.fn() } as unknown as OverlayServer;
+    const reward: StreamEvent = { id: 'reward-1', source: 'twitch', timestamp: 1, userName: 'Viewer', type: 'redemption', rewardTitle: 'Choose scene', cost: 500, input: 'BRB' };
+    const raid: StreamEvent = { id: 'raid-1', source: 'twitch', timestamp: 2, userName: 'Guest', type: 'raid', viewers: 42 };
+    const history = [raid, reward];
+    const sources = { alerts: () => ({ recentEvents: history }) } as unknown as HubSources;
+    const chat = { recent: () => [] } as unknown as ChatHistory;
+    const hub = new OverlayHub(ctx, server, chat, sources);
+    expect(hub.initialMessages('rewards', null)[0]).toMatchObject({ type: 'rewards', events: [reward], config: settings.get('rewardsOverlay') });
+    expect(hub.initialMessages('collab', null)[0]).toMatchObject({ type: 'collab', raids: [raid], config: settings.get('collabOverlay') });
+    bus.emit('event', reward);
+    bus.emit('event', raid);
+    expect(sent.filter((item) => item.kind === 'rewards')).toEqual([{ kind: 'rewards', message: { type: 'reward', event: reward } }]);
+    expect(sent.filter((item) => item.kind === 'collab')).toEqual([{ kind: 'collab', message: { type: 'collabRaid', event: raid } }]);
   });
 });
 

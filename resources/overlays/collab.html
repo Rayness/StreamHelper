@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>StreamHelper — Collaboration</title>
+  <style>
+    :root { --accent: #9b6bff; }
+    html, body { margin: 0; height: 100%; overflow: hidden; background: transparent; }
+    body { color: #fff; font: 20px/1.3 'Segoe UI', system-ui, sans-serif; }
+    #card { margin: 12px; padding: 20px 24px; width: max-content; min-width: 350px; max-width: calc(100% - 72px); border-radius: 22px; background: linear-gradient(135deg, #151321ee, #252037ee); border: 1px solid #ffffff2a; border-top: 3px solid var(--accent); box-shadow: 0 16px 40px #0008; }
+    #title { color: var(--accent); font-weight: 900; font-size: 1.25em; }
+    #guests { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 15px; }
+    .guest { padding: 7px 12px; border-radius: 999px; background: #ffffff18; font-weight: 700; overflow-wrap: anywhere; }
+    .guest::before { content: '◉'; margin-right: 8px; color: var(--accent); }
+    #raids { display: flex; flex-direction: column; gap: 5px; margin-top: 14px; }
+    .raid { padding-top: 7px; border-top: 1px solid #ffffff25; font-size: .82em; color: #e5e1f1; }
+    .raid strong { color: var(--accent); }
+  </style>
+</head>
+<body>
+  <div id="card"><div id="title"></div><div id="guests"></div><div id="raids"></div></div>
+  <script src="/overlay/assets/common.js"></script>
+  <script>
+    const title = document.getElementById('title');
+    const guests = document.getElementById('guests');
+    const raids = document.getElementById('raids');
+    let cfg = { title: 'Коллаборация', guests: [], showRaids: true, accentColor: '#9b6bff' };
+    let lang = 'ru';
+    const seen = new Set();
+    function render() {
+      document.documentElement.style.setProperty('--accent', cfg.accentColor || '#9b6bff');
+      title.textContent = cfg.title || '';
+      guests.replaceChildren();
+      for (const raw of cfg.guests || []) {
+        const name = String(raw).trim().replace(/^@/, '');
+        if (name) guests.append(SH.el('span', 'guest', `@${name}`));
+      }
+      raids.style.display = cfg.showRaids ? 'flex' : 'none';
+      document.getElementById('card').style.display = title.textContent || guests.children.length || (cfg.showRaids && raids.children.length) ? '' : 'none';
+    }
+    function add(event, prepend = true) {
+      if (seen.has(event.id)) return;
+      seen.add(event.id);
+      const row = SH.el('div', 'raid');
+      row.dataset.id = event.id;
+      row.append(`⚑ ${SH.tr(lang, 'Рейд', 'Raid')}: `, SH.el('strong', '', event.userName), ` · ${event.viewers || 0} ${SH.tr(lang, 'зрителей', 'viewers')}`);
+      if (prepend) raids.prepend(row); else raids.append(row);
+      while (raids.children.length > 3) {
+        seen.delete(raids.lastElementChild.dataset.id);
+        raids.lastElementChild.remove();
+      }
+      render();
+    }
+    SH.connect('collab', (message) => {
+      if (message.type === 'collab') {
+        cfg = message.config || cfg;
+        lang = message.lang || 'ru';
+        raids.replaceChildren(); seen.clear();
+        for (const event of message.raids || []) add(event, false);
+        render();
+      } else if (message.type === 'collabRaid') add(message.event);
+    });
+  </script>
+</body>
+</html>

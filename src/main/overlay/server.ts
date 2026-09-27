@@ -24,7 +24,7 @@ const MIME: Record<string, string> = {
   '.woff2': 'font/woff2',
 };
 
-export const OVERLAY_KINDS: OverlayKind[] = ['chat', 'alerts', 'goal', 'timer', 'events', 'banner', 'ad', 'label', 'emotes', 'wheel', 'poll', 'giveaway', 'kawaki', 'quiz', 'boss', 'live', 'spotlight'];
+export const OVERLAY_KINDS: OverlayKind[] = ['chat', 'alerts', 'goal', 'timer', 'events', 'rewards', 'collab', 'banner', 'ad', 'label', 'emotes', 'wheel', 'poll', 'giveaway', 'kawaki', 'quiz', 'boss', 'live', 'spotlight'];
 
 interface Client {
   ws: WebSocket;

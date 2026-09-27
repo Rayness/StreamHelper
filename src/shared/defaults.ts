@@ -461,6 +461,8 @@ export function defaultSettings(lang: Language): Settings {
     bot: defaultBot(lang),
     alerts: defaultAlerts(lang),
     chatOverlay: defaultChatOverlay(),
+    rewardsOverlay: { maxItems: 5, showInput: true, accentColor: '#9b6bff' },
+    collabOverlay: { title: lang === 'ru' ? 'Коллаборация' : 'Collaboration', guests: [], showRaids: true, accentColor: '#9b6bff' },
     goals: [defaultGoal(lang)],
     timers: [defaultTimer(lang)],
     actions: defaultActions(lang),
