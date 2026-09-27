@@ -173,6 +173,7 @@ export interface RuntimeState {
   boss: BossState;
   ad: { activeId: string | null; endsAt: number | null };
   spotlight: ChatMessage | null;
+  music: MusicRuntimeState;
   update: UpdateState;
   dockUrl: string;
   /** Banners currently on screen (manual toggle or schedule). */
@@ -423,6 +424,37 @@ export interface CollabOverlaySettings {
   title: string;
   guests: string[];
   showRaids: boolean;
+  accentColor: string;
+}
+
+export type MusicSourceKind = 'spotify' | 'yandex' | 'browser' | 'other';
+export type MusicSourcePreference = 'auto' | MusicSourceKind | 'any';
+
+export interface MusicTrack {
+  source: MusicSourceKind;
+  title: string;
+  artist: string;
+  album: string;
+  artwork: string | null;
+  playing: boolean;
+  positionMs: number | null;
+  durationMs: number | null;
+  observedAt: number;
+}
+
+export interface MusicRuntimeState {
+  status: 'connecting' | 'ready' | 'unavailable';
+  track: MusicTrack | null;
+  sources: MusicSourceKind[];
+}
+
+export interface MusicOverlaySettings {
+  source: MusicSourcePreference;
+  style: 'card' | 'glass' | 'minimal';
+  showArtwork: boolean;
+  showAlbum: boolean;
+  showProgress: boolean;
+  hideWhenPaused: boolean;
   accentColor: string;
 }
 
@@ -700,6 +732,7 @@ export interface Settings {
   chatOverlay: ChatOverlaySettings;
   rewardsOverlay: RewardOverlaySettings;
   collabOverlay: CollabOverlaySettings;
+  musicOverlay: MusicOverlaySettings;
   goals: Goal[];
   timers: OverlayTimer[];
   actions: QuickAction[];
@@ -723,7 +756,7 @@ export type SettingsKey = keyof Settings;
 
 // ---------- Overlay wire protocol ----------
 
-export type OverlayKind = 'chat' | 'alerts' | 'goal' | 'timer' | 'events' | 'rewards' | 'collab' | 'banner' | 'ad' | 'label' | 'emotes' | 'wheel' | 'poll' | 'giveaway' | 'kawaki' | 'quiz' | 'boss' | 'live' | 'spotlight';
+export type OverlayKind = 'chat' | 'alerts' | 'goal' | 'timer' | 'events' | 'rewards' | 'collab' | 'music' | 'banner' | 'ad' | 'label' | 'emotes' | 'wheel' | 'poll' | 'giveaway' | 'kawaki' | 'quiz' | 'boss' | 'live' | 'spotlight';
 
 export interface RenderedBanner extends Omit<Banner, 'slides'> {
   slides: { id: string; text: string; image: string | null }[];
@@ -770,6 +803,7 @@ export type OverlayMessage =
   | { type: 'reward'; event: StreamEventOf<'redemption'> }
   | { type: 'collab'; config: CollabOverlaySettings; raids: StreamEventOf<'raid'>[]; lang: Language }
   | { type: 'collabRaid'; event: StreamEventOf<'raid'> }
+  | { type: 'music'; track: MusicTrack | null; config: MusicOverlaySettings; lang: Language }
   | { type: 'banner'; banner: RenderedBanner | null }
   | { type: 'ad'; campaign: AdCampaign | null; endsAt: number | null }
   | { type: 'boss'; boss: BossState; style: BossSettings; lang: Language }

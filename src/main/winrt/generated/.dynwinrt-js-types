@@ -1,0 +1,544 @@
+{
+  "version": 1,
+  "records": [
+    {
+      "identity": {
+        "namespace": "Windows.Foundation",
+        "name": "IClosable",
+        "kind": "interface",
+        "variant": ""
+      },
+      "projected_name": "IClosable",
+      "implementation_name": "IClosable",
+      "abi_identity": "iid:30d5a829-7fa4-4026-83bb-d75bae4ea99e",
+      "compatibility_aliases": [],
+      "implementation_helpers": [
+        {
+          "key": "handlers",
+          "suffix": "Handlers",
+          "name": "IClosableHandlers",
+          "implementation_name": "IClosableHandlers"
+        }
+      ],
+      "reserved_symbols": []
+    },
+    {
+      "identity": {
+        "namespace": "Windows.Foundation",
+        "name": "IReference_Boolean",
+        "kind": "interface",
+        "variant": "piid:61c17706-2d65-11e0-9ae8-d48564015472:args:[bool]"
+      },
+      "projected_name": "IReference_Boolean",
+      "implementation_name": "IReference_Boolean",
+      "abi_identity": "piid:61c17706-2d65-11e0-9ae8-d48564015472:iid:61c17706-2d65-11e0-9ae8-d48564015472:args:[bool]",
+      "compatibility_aliases": [],
+      "implementation_helpers": [],
+      "reserved_symbols": []
+    },
+    {
+      "identity": {
+        "namespace": "Windows.Foundation",
+        "name": "IReference_Double",
+        "kind": "interface",
+        "variant": "piid:61c17706-2d65-11e0-9ae8-d48564015472:args:[f64]"
+      },
+      "projected_name": "IReference_Double",
+      "implementation_name": "IReference_Double",
+      "abi_identity": "piid:61c17706-2d65-11e0-9ae8-d48564015472:iid:61c17706-2d65-11e0-9ae8-d48564015472:args:[f64]",
+      "compatibility_aliases": [],
+      "implementation_helpers": [],
+      "reserved_symbols": []
+    },
+    {
+      "identity": {
+        "namespace": "Windows.Foundation",
+        "name": "IReference_WindowsMediaMediaPlaybackAutoRepeatMode_ge2a1cc07d6c15eb3",
+        "kind": "interface",
+        "variant": "piid:61c17706-2d65-11e0-9ae8-d48564015472:args:[enum(Windows.Media.MediaPlaybackAutoRepeatMode;underlying=i32)]"
+      },
+      "projected_name": "IReference_WindowsMediaMediaPlaybackAutoRepeatMode_ge2a1cc07d6c15eb3",
+      "implementation_name": "IReference_WindowsMediaMediaPlaybackAutoRepeatMode_ge2a1cc07d6c15eb3",
+      "abi_identity": "piid:61c17706-2d65-11e0-9ae8-d48564015472:iid:61c17706-2d65-11e0-9ae8-d48564015472:args:[enum(Windows.Media.MediaPlaybackAutoRepeatMode;underlying=i32)]",
+      "compatibility_aliases": [],
+      "implementation_helpers": [],
+      "reserved_symbols": []
+    },
+    {
+      "identity": {
+        "namespace": "Windows.Foundation",
+        "name": "IReference_WindowsMediaMediaPlaybackType_gb960b028603bdcbe",
+        "kind": "interface",
+        "variant": "piid:61c17706-2d65-11e0-9ae8-d48564015472:args:[enum(Windows.Media.MediaPlaybackType;underlying=i32)]"
+      },
+      "projected_name": "IReference_WindowsMediaMediaPlaybackType_gb960b028603bdcbe",
+      "implementation_name": "IReference_WindowsMediaMediaPlaybackType_gb960b028603bdcbe",
+      "abi_identity": "piid:61c17706-2d65-11e0-9ae8-d48564015472:iid:61c17706-2d65-11e0-9ae8-d48564015472:args:[enum(Windows.Media.MediaPlaybackType;underlying=i32)]",
+      "compatibility_aliases": [],
+      "implementation_helpers": [],
+      "reserved_symbols": []
+    },
+    {
+      "identity": {
+        "namespace": "Windows.Foundation",
+        "name": "TypedEventHandler_WindowsMediaControlGlobalSystemMediaTransportControlsSessionManager_WindowsMediaCont_g9816f7b8d17a0535",
+        "kind": "delegate",
+        "variant": "piid:9de1c534-6ae1-11e0-84e1-18a905bcc53f:args:[class(Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager;default=interface(Windows.Media.Control.IGlobalSystemMediaTransportControlsSessionManager,cace8eac-e86e-504a-ab31-5ff8ff1bce49)),class(Windows.Media.Control.CurrentSessionChangedEventArgs;default=interface(Windows.Media.Control.ICurrentSessionChangedEventArgs,6969cb39-0bfa-5fe0-8d73-09cc5e5408e1))]"
+      },
+      "projected_name": "TypedEventHandler_WindowsMediaControlGlobalSystemMediaTransportControlsSessionManager_WindowsMediaCont_g9816f7b8d17a0535",
+      "implementation_name": "TypedEventHandler_WindowsMediaControlGlobalSystemMediaTransportControlsSessionManager_WindowsMediaCont_g9816f7b8d17a0535",
+      "abi_identity": "piid:9de1c534-6ae1-11e0-84e1-18a905bcc53f:iid:9de1c534-6ae1-11e0-84e1-18a905bcc53f:args:[class(Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager;default=interface(Windows.Media.Control.IGlobalSystemMediaTransportControlsSessionManager,cace8eac-e86e-504a-ab31-5ff8ff1bce49)),class(Windows.Media.Control.CurrentSessionChangedEventArgs;default=interface(Windows.Media.Control.ICurrentSessionChangedEventArgs,6969cb39-0bfa-5fe0-8d73-09cc5e5408e1))]",
+      "compatibility_aliases": [],
+      "implementation_helpers": [],
+      "reserved_symbols": []
+    },
+    {
+      "identity": {
+        "namespace": "Windows.Foundation",
+        "name": "TypedEventHandler_WindowsMediaControlGlobalSystemMediaTransportControlsSessionManager_WindowsMediaCont_ga150785a7da87d5f",
+        "kind": "delegate",
+        "variant": "piid:9de1c534-6ae1-11e0-84e1-18a905bcc53f:args:[class(Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager;default=interface(Windows.Media.Control.IGlobalSystemMediaTransportControlsSessionManager,cace8eac-e86e-504a-ab31-5ff8ff1bce49)),class(Windows.Media.Control.SessionsChangedEventArgs;default=interface(Windows.Media.Control.ISessionsChangedEventArgs,bbf0cd32-42c4-5a58-b317-f34bbfbd26e0))]"
+      },
+      "projected_name": "TypedEventHandler_WindowsMediaControlGlobalSystemMediaTransportControlsSessionManager_WindowsMediaCont_ga150785a7da87d5f",
+      "implementation_name": "TypedEventHandler_WindowsMediaControlGlobalSystemMediaTransportControlsSessionManager_WindowsMediaCont_ga150785a7da87d5f",
+      "abi_identity": "piid:9de1c534-6ae1-11e0-84e1-18a905bcc53f:iid:9de1c534-6ae1-11e0-84e1-18a905bcc53f:args:[class(Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager;default=interface(Windows.Media.Control.IGlobalSystemMediaTransportControlsSessionManager,cace8eac-e86e-504a-ab31-5ff8ff1bce49)),class(Windows.Media.Control.SessionsChangedEventArgs;default=interface(Windows.Media.Control.ISessionsChangedEventArgs,bbf0cd32-42c4-5a58-b317-f34bbfbd26e0))]",
+      "compatibility_aliases": [],
+      "implementation_helpers": [],
+      "reserved_symbols": []
+    },
+    {
+      "identity": {
+        "namespace": "Windows.Foundation",
+        "name": "TypedEventHandler_WindowsMediaControlGlobalSystemMediaTransportControlsSession_WindowsMediaControlMedi_gcffb54f71966b894",
+        "kind": "delegate",
+        "variant": "piid:9de1c534-6ae1-11e0-84e1-18a905bcc53f:args:[class(Windows.Media.Control.GlobalSystemMediaTransportControlsSession;default=interface(Windows.Media.Control.IGlobalSystemMediaTransportControlsSession,7148c835-9b14-5ae2-ab85-dc9b1c14e1a8)),class(Windows.Media.Control.MediaPropertiesChangedEventArgs;default=interface(Windows.Media.Control.IMediaPropertiesChangedEventArgs,7d3741cb-adf0-5cef-91ba-cfabcdd77678))]"
+      },
+      "projected_name": "TypedEventHandler_WindowsMediaControlGlobalSystemMediaTransportControlsSession_WindowsMediaControlMedi_gcffb54f71966b894",
+      "implementation_name": "TypedEventHandler_WindowsMediaControlGlobalSystemMediaTransportControlsSession_WindowsMediaControlMedi_gcffb54f71966b894",
+      "abi_identity": "piid:9de1c534-6ae1-11e0-84e1-18a905bcc53f:iid:9de1c534-6ae1-11e0-84e1-18a905bcc53f:args:[class(Windows.Media.Control.GlobalSystemMediaTransportControlsSession;default=interface(Windows.Media.Control.IGlobalSystemMediaTransportControlsSession,7148c835-9b14-5ae2-ab85-dc9b1c14e1a8)),class(Windows.Media.Control.MediaPropertiesChangedEventArgs;default=interface(Windows.Media.Control.IMediaPropertiesChangedEventArgs,7d3741cb-adf0-5cef-91ba-cfabcdd77678))]",
+      "compatibility_aliases": [],
+      "implementation_helpers": [],
+      "reserved_symbols": []
+    },
+    {
+      "identity": {
+        "namespace": "Windows.Foundation",
+        "name": "TypedEventHandler_WindowsMediaControlGlobalSystemMediaTransportControlsSession_WindowsMediaControlPlay_g6a06339189c175f8",
+        "kind": "delegate",
+        "variant": "piid:9de1c534-6ae1-11e0-84e1-18a905bcc53f:args:[class(Windows.Media.Control.GlobalSystemMediaTransportControlsSession;default=interface(Windows.Media.Control.IGlobalSystemMediaTransportControlsSession,7148c835-9b14-5ae2-ab85-dc9b1c14e1a8)),class(Windows.Media.Control.PlaybackInfoChangedEventArgs;default=interface(Windows.Media.Control.IPlaybackInfoChangedEventArgs,786756c2-bc0d-50a5-8807-054291fef139))]"
+      },
+      "projected_name": "TypedEventHandler_WindowsMediaControlGlobalSystemMediaTransportControlsSession_WindowsMediaControlPlay_g6a06339189c175f8",
+      "implementation_name": "TypedEventHandler_WindowsMediaControlGlobalSystemMediaTransportControlsSession_WindowsMediaControlPlay_g6a06339189c175f8",
+      "abi_identity": "piid:9de1c534-6ae1-11e0-84e1-18a905bcc53f:iid:9de1c534-6ae1-11e0-84e1-18a905bcc53f:args:[class(Windows.Media.Control.GlobalSystemMediaTransportControlsSession;default=interface(Windows.Media.Control.IGlobalSystemMediaTransportControlsSession,7148c835-9b14-5ae2-ab85-dc9b1c14e1a8)),class(Windows.Media.Control.PlaybackInfoChangedEventArgs;default=interface(Windows.Media.Control.IPlaybackInfoChangedEventArgs,786756c2-bc0d-50a5-8807-054291fef139))]",
+      "compatibility_aliases": [],
+      "implementation_helpers": [],
+      "reserved_symbols": []
+    },
+    {
+      "identity": {
+        "namespace": "Windows.Foundation",
+        "name": "TypedEventHandler_WindowsMediaControlGlobalSystemMediaTransportControlsSession_WindowsMediaControlTime_g9fcf135f7ab9130d",
+        "kind": "delegate",
+        "variant": "piid:9de1c534-6ae1-11e0-84e1-18a905bcc53f:args:[class(Windows.Media.Control.GlobalSystemMediaTransportControlsSession;default=interface(Windows.Media.Control.IGlobalSystemMediaTransportControlsSession,7148c835-9b14-5ae2-ab85-dc9b1c14e1a8)),class(Windows.Media.Control.TimelinePropertiesChangedEventArgs;default=interface(Windows.Media.Control.ITimelinePropertiesChangedEventArgs,29033a2f-c923-5a77-bcaf-055ff415ad32))]"
+      },
+      "projected_name": "TypedEventHandler_WindowsMediaControlGlobalSystemMediaTransportControlsSession_WindowsMediaControlTime_g9fcf135f7ab9130d",
+      "implementation_name": "TypedEventHandler_WindowsMediaControlGlobalSystemMediaTransportControlsSession_WindowsMediaControlTime_g9fcf135f7ab9130d",
+      "abi_identity": "piid:9de1c534-6ae1-11e0-84e1-18a905bcc53f:iid:9de1c534-6ae1-11e0-84e1-18a905bcc53f:args:[class(Windows.Media.Control.GlobalSystemMediaTransportControlsSession;default=interface(Windows.Media.Control.IGlobalSystemMediaTransportControlsSession,7148c835-9b14-5ae2-ab85-dc9b1c14e1a8)),class(Windows.Media.Control.TimelinePropertiesChangedEventArgs;default=interface(Windows.Media.Control.ITimelinePropertiesChangedEventArgs,29033a2f-c923-5a77-bcaf-055ff415ad32))]",
+      "compatibility_aliases": [],
+      "implementation_helpers": [],
+      "reserved_symbols": []
+    },
+    {
+      "identity": {
+        "namespace": "Windows.Foundation.Collections",
+        "name": "IVectorView_String",
+        "kind": "interface",
+        "variant": "piid:bbe1fa4c-b0e3-4583-baef-1f1b2e483e56:args:[string]"
+      },
+      "projected_name": "IVectorView_String",
+      "implementation_name": "IVectorView_String",
+      "abi_identity": "piid:bbe1fa4c-b0e3-4583-baef-1f1b2e483e56:iid:bbe1fa4c-b0e3-4583-baef-1f1b2e483e56:args:[string]",
+      "compatibility_aliases": [],
+      "implementation_helpers": [],
+      "reserved_symbols": []
+    },
+    {
+      "identity": {
+        "namespace": "Windows.Foundation.Collections",
+        "name": "IVectorView_WindowsMediaControlGlobalSystemMediaTransportControlsSession_gdc49772a0550e35e",
+        "kind": "interface",
+        "variant": "piid:bbe1fa4c-b0e3-4583-baef-1f1b2e483e56:args:[class(Windows.Media.Control.GlobalSystemMediaTransportControlsSession;default=interface(Windows.Media.Control.IGlobalSystemMediaTransportControlsSession,7148c835-9b14-5ae2-ab85-dc9b1c14e1a8))]"
+      },
+      "projected_name": "IVectorView_WindowsMediaControlGlobalSystemMediaTransportControlsSession_gdc49772a0550e35e",
+      "implementation_name": "IVectorView_WindowsMediaControlGlobalSystemMediaTransportControlsSession_gdc49772a0550e35e",
+      "abi_identity": "piid:bbe1fa4c-b0e3-4583-baef-1f1b2e483e56:iid:bbe1fa4c-b0e3-4583-baef-1f1b2e483e56:args:[class(Windows.Media.Control.GlobalSystemMediaTransportControlsSession;default=interface(Windows.Media.Control.IGlobalSystemMediaTransportControlsSession,7148c835-9b14-5ae2-ab85-dc9b1c14e1a8))]",
+      "compatibility_aliases": [],
+      "implementation_helpers": [],
+      "reserved_symbols": []
+    },
+    {
+      "identity": {
+        "namespace": "Windows.Media",
+        "name": "MediaPlaybackAutoRepeatMode",
+        "kind": "enum",
+        "variant": ""
+      },
+      "projected_name": "MediaPlaybackAutoRepeatMode",
+      "implementation_name": "MediaPlaybackAutoRepeatMode",
+      "abi_identity": "type",
+      "compatibility_aliases": [],
+      "implementation_helpers": [],
+      "reserved_symbols": []
+    },
+    {
+      "identity": {
+        "namespace": "Windows.Media",
+        "name": "MediaPlaybackType",
+        "kind": "enum",
+        "variant": ""
+      },
+      "projected_name": "MediaPlaybackType",
+      "implementation_name": "MediaPlaybackType",
+      "abi_identity": "type",
+      "compatibility_aliases": [],
+      "implementation_helpers": [],
+      "reserved_symbols": []
+    },
+    {
+      "identity": {
+        "namespace": "Windows.Media.Control",
+        "name": "CurrentSessionChangedEventArgs",
+        "kind": "class",
+        "variant": ""
+      },
+      "projected_name": "CurrentSessionChangedEventArgs",
+      "implementation_name": "CurrentSessionChangedEventArgs",
+      "abi_identity": "type",
+      "compatibility_aliases": [],
+      "implementation_helpers": [],
+      "reserved_symbols": []
+    },
+    {
+      "identity": {
+        "namespace": "Windows.Media.Control",
+        "name": "GlobalSystemMediaTransportControlsSession",
+        "kind": "class",
+        "variant": ""
+      },
+      "projected_name": "GlobalSystemMediaTransportControlsSession",
+      "implementation_name": "GlobalSystemMediaTransportControlsSession",
+      "abi_identity": "type",
+      "compatibility_aliases": [],
+      "implementation_helpers": [],
+      "reserved_symbols": [
+        "EventRegistrationToken",
+        "EventRegistrationToken_Type",
+        "packEventRegistrationToken",
+        "unpackEventRegistrationToken"
+      ]
+    },
+    {
+      "identity": {
+        "namespace": "Windows.Media.Control",
+        "name": "GlobalSystemMediaTransportControlsSessionManager",
+        "kind": "class",
+        "variant": ""
+      },
+      "projected_name": "GlobalSystemMediaTransportControlsSessionManager",
+      "implementation_name": "GlobalSystemMediaTransportControlsSessionManager",
+      "abi_identity": "type",
+      "compatibility_aliases": [],
+      "implementation_helpers": [],
+      "reserved_symbols": [
+        "EventRegistrationToken",
+        "EventRegistrationToken_Type",
+        "packEventRegistrationToken",
+        "unpackEventRegistrationToken"
+      ]
+    },
+    {
+      "identity": {
+        "namespace": "Windows.Media.Control",
+        "name": "GlobalSystemMediaTransportControlsSessionMediaProperties",
+        "kind": "class",
+        "variant": ""
+      },
+      "projected_name": "GlobalSystemMediaTransportControlsSessionMediaProperties",
+      "implementation_name": "GlobalSystemMediaTransportControlsSessionMediaProperties",
+      "abi_identity": "type",
+      "compatibility_aliases": [],
+      "implementation_helpers": [],
+      "reserved_symbols": []
+    },
+    {
+      "identity": {
+        "namespace": "Windows.Media.Control",
+        "name": "GlobalSystemMediaTransportControlsSessionPlaybackControls",
+        "kind": "class",
+        "variant": ""
+      },
+      "projected_name": "GlobalSystemMediaTransportControlsSessionPlaybackControls",
+      "implementation_name": "GlobalSystemMediaTransportControlsSessionPlaybackControls",
+      "abi_identity": "type",
+      "compatibility_aliases": [],
+      "implementation_helpers": [],
+      "reserved_symbols": []
+    },
+    {
+      "identity": {
+        "namespace": "Windows.Media.Control",
+        "name": "GlobalSystemMediaTransportControlsSessionPlaybackInfo",
+        "kind": "class",
+        "variant": ""
+      },
+      "projected_name": "GlobalSystemMediaTransportControlsSessionPlaybackInfo",
+      "implementation_name": "GlobalSystemMediaTransportControlsSessionPlaybackInfo",
+      "abi_identity": "type",
+      "compatibility_aliases": [],
+      "implementation_helpers": [],
+      "reserved_symbols": []
+    },
+    {
+      "identity": {
+        "namespace": "Windows.Media.Control",
+        "name": "GlobalSystemMediaTransportControlsSessionPlaybackStatus",
+        "kind": "enum",
+        "variant": ""
+      },
+      "projected_name": "GlobalSystemMediaTransportControlsSessionPlaybackStatus",
+      "implementation_name": "GlobalSystemMediaTransportControlsSessionPlaybackStatus",
+      "abi_identity": "type",
+      "compatibility_aliases": [],
+      "implementation_helpers": [],
+      "reserved_symbols": []
+    },
+    {
+      "identity": {
+        "namespace": "Windows.Media.Control",
+        "name": "GlobalSystemMediaTransportControlsSessionTimelineProperties",
+        "kind": "class",
+        "variant": ""
+      },
+      "projected_name": "GlobalSystemMediaTransportControlsSessionTimelineProperties",
+      "implementation_name": "GlobalSystemMediaTransportControlsSessionTimelineProperties",
+      "abi_identity": "type",
+      "compatibility_aliases": [],
+      "implementation_helpers": [],
+      "reserved_symbols": [
+        "DateTime",
+        "DateTime_Type",
+        "TimeSpan",
+        "TimeSpan_Type",
+        "packDateTime",
+        "packTimeSpan",
+        "unpackDateTime",
+        "unpackTimeSpan"
+      ]
+    },
+    {
+      "identity": {
+        "namespace": "Windows.Media.Control",
+        "name": "MediaPropertiesChangedEventArgs",
+        "kind": "class",
+        "variant": ""
+      },
+      "projected_name": "MediaPropertiesChangedEventArgs",
+      "implementation_name": "MediaPropertiesChangedEventArgs",
+      "abi_identity": "type",
+      "compatibility_aliases": [],
+      "implementation_helpers": [],
+      "reserved_symbols": []
+    },
+    {
+      "identity": {
+        "namespace": "Windows.Media.Control",
+        "name": "PlaybackInfoChangedEventArgs",
+        "kind": "class",
+        "variant": ""
+      },
+      "projected_name": "PlaybackInfoChangedEventArgs",
+      "implementation_name": "PlaybackInfoChangedEventArgs",
+      "abi_identity": "type",
+      "compatibility_aliases": [],
+      "implementation_helpers": [],
+      "reserved_symbols": []
+    },
+    {
+      "identity": {
+        "namespace": "Windows.Media.Control",
+        "name": "SessionsChangedEventArgs",
+        "kind": "class",
+        "variant": ""
+      },
+      "projected_name": "SessionsChangedEventArgs",
+      "implementation_name": "SessionsChangedEventArgs",
+      "abi_identity": "type",
+      "compatibility_aliases": [],
+      "implementation_helpers": [],
+      "reserved_symbols": []
+    },
+    {
+      "identity": {
+        "namespace": "Windows.Media.Control",
+        "name": "TimelinePropertiesChangedEventArgs",
+        "kind": "class",
+        "variant": ""
+      },
+      "projected_name": "TimelinePropertiesChangedEventArgs",
+      "implementation_name": "TimelinePropertiesChangedEventArgs",
+      "abi_identity": "type",
+      "compatibility_aliases": [],
+      "implementation_helpers": [],
+      "reserved_symbols": []
+    },
+    {
+      "identity": {
+        "namespace": "Windows.Storage.Streams",
+        "name": "ByteOrder",
+        "kind": "enum",
+        "variant": ""
+      },
+      "projected_name": "ByteOrder",
+      "implementation_name": "ByteOrder",
+      "abi_identity": "type",
+      "compatibility_aliases": [],
+      "implementation_helpers": [],
+      "reserved_symbols": []
+    },
+    {
+      "identity": {
+        "namespace": "Windows.Storage.Streams",
+        "name": "DataReader",
+        "kind": "class",
+        "variant": ""
+      },
+      "projected_name": "DataReader",
+      "implementation_name": "DataReader",
+      "abi_identity": "type",
+      "compatibility_aliases": [],
+      "implementation_helpers": [],
+      "reserved_symbols": [
+        "DateTime",
+        "DateTime_Type",
+        "TimeSpan",
+        "TimeSpan_Type",
+        "packDateTime",
+        "packTimeSpan",
+        "unpackDateTime",
+        "unpackTimeSpan"
+      ]
+    },
+    {
+      "identity": {
+        "namespace": "Windows.Storage.Streams",
+        "name": "IBuffer",
+        "kind": "interface",
+        "variant": ""
+      },
+      "projected_name": "IBuffer",
+      "implementation_name": "IBuffer",
+      "abi_identity": "iid:905a0fe0-bc53-11df-8c49-001e4fc686da",
+      "compatibility_aliases": [],
+      "implementation_helpers": [
+        {
+          "key": "handlers",
+          "suffix": "Handlers",
+          "name": "IBufferHandlers",
+          "implementation_name": "IBufferHandlers"
+        }
+      ],
+      "reserved_symbols": []
+    },
+    {
+      "identity": {
+        "namespace": "Windows.Storage.Streams",
+        "name": "IInputStream",
+        "kind": "interface",
+        "variant": ""
+      },
+      "projected_name": "IInputStream",
+      "implementation_name": "IInputStream",
+      "abi_identity": "iid:905a0fe2-bc53-11df-8c49-001e4fc686da",
+      "compatibility_aliases": [],
+      "implementation_helpers": [
+        {
+          "key": "handlers",
+          "suffix": "Handlers",
+          "name": "IInputStreamHandlers",
+          "implementation_name": "IInputStreamHandlers"
+        }
+      ],
+      "reserved_symbols": []
+    },
+    {
+      "identity": {
+        "namespace": "Windows.Storage.Streams",
+        "name": "IRandomAccessStreamReference",
+        "kind": "interface",
+        "variant": ""
+      },
+      "projected_name": "IRandomAccessStreamReference",
+      "implementation_name": "IRandomAccessStreamReference",
+      "abi_identity": "iid:33ee3134-1dd6-4e3a-8067-d1c162e8642b",
+      "compatibility_aliases": [],
+      "implementation_helpers": [
+        {
+          "key": "handlers",
+          "suffix": "Handlers",
+          "name": "IRandomAccessStreamReferenceHandlers",
+          "implementation_name": "IRandomAccessStreamReferenceHandlers"
+        }
+      ],
+      "reserved_symbols": []
+    },
+    {
+      "identity": {
+        "namespace": "Windows.Storage.Streams",
+        "name": "IRandomAccessStreamWithContentType",
+        "kind": "interface",
+        "variant": ""
+      },
+      "projected_name": "IRandomAccessStreamWithContentType",
+      "implementation_name": "IRandomAccessStreamWithContentType",
+      "abi_identity": "iid:cc254827-4b3d-438f-9232-10c76bc7e038",
+      "compatibility_aliases": [],
+      "implementation_helpers": [
+        {
+          "key": "handlers",
+          "suffix": "Handlers",
+          "name": "IRandomAccessStreamWithContentTypeHandlers",
+          "implementation_name": "IRandomAccessStreamWithContentTypeHandlers"
+        }
+      ],
+      "reserved_symbols": []
+    },
+    {
+      "identity": {
+        "namespace": "Windows.Storage.Streams",
+        "name": "InputStreamOptions",
+        "kind": "enum",
+        "variant": ""
+      },
+      "projected_name": "InputStreamOptions",
+      "implementation_name": "InputStreamOptions",
+      "abi_identity": "type",
+      "compatibility_aliases": [],
+      "implementation_helpers": [],
+      "reserved_symbols": []
+    },
+    {
+      "identity": {
+        "namespace": "Windows.Storage.Streams",
+        "name": "UnicodeEncoding",
+        "kind": "enum",
+        "variant": ""
+      },
+      "projected_name": "UnicodeEncoding",
+      "implementation_name": "UnicodeEncoding",
+      "abi_identity": "type",
+      "compatibility_aliases": [],
+      "implementation_helpers": [],
+      "reserved_symbols": []
+    }
+  ]
+}

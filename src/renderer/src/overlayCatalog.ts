@@ -20,6 +20,7 @@ export const OVERLAYS: OverlayDef[] = [
   { kind: 'events', icon: 'zap', group: 'main', size: [400, 300], query: 'limit=5' },
   { kind: 'rewards', icon: 'gift', group: 'main', size: [560, 450] },
   { kind: 'collab', icon: 'broadcast', group: 'screen', size: [650, 360] },
+  { kind: 'music', icon: 'music', group: 'screen', size: [650, 180] },
   { kind: 'banner', icon: 'banner', group: 'screen', size: [1920, 110] },
   { kind: 'ad', icon: 'banner', group: 'screen', size: [1920, 1080] },
   { kind: 'live', icon: 'broadcast', group: 'screen', size: [650, 160] },

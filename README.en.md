@@ -2,7 +2,7 @@
 
 [Русский](README.md) · [English](README.en.md)
 
-StreamHelper is a Windows desktop app for managing a stream, chat, and OBS browser sources from one place. Current version: **0.4.2**. The interface supports Russian and English.
+StreamHelper is a Windows desktop app for managing a stream, chat, and OBS browser sources from one place. The latest published release is **0.4.2**; **0.4.3** is in development. The interface supports Russian and English.
 
 Releases are available [in this repository](https://github.com/Rayness/StreamHelper/releases) and in the [public update repository](https://github.com/Rayness/StreamHelper-Releases/releases).
 
@@ -17,6 +17,10 @@ These screenshots use fictional demo data; they contain no real accounts or toke
 **Chat overlay settings and live preview:**
 
 ![Chat overlay settings](docs/screenshots/chat-settings-en.png)
+
+**Now Playing overlay:**
+
+![Now Playing overlay settings](docs/screenshots/music-settings-en.png)
 
 **Channel rewards and collaboration:**
 
@@ -59,6 +63,7 @@ Each overlay is a separate OBS Browser Source. The **Overlays** page shows its r
 | Recent events | A compact channel activity feed. |
 | Channel rewards | Recent Twitch custom reward redemptions with viewer, title, cost, and optional response. |
 | Collab | A manually entered list of co-stream guest channels and incoming raids. |
+| Now Playing | Track, artist, artwork, album, and progress from Windows media sessions. Supports Spotify, the Yandex Music app, and browser players. |
 | Banners | Existing text banners, ticker, and scheduled display. |
 | Advertising | Sponsor images and videos with a separate schedule and 14 entrance effects, including glitch. Text banners remain independent. |
 | Live status and chat spotlight | Title, category, viewers, uptime, or one selected chat message. |
@@ -69,6 +74,8 @@ Each overlay is a separate OBS Browser Source. The **Overlays** page shows its r
 **Channel points:** StreamHelper subscribes to Twitch's `channel.channel_points_custom_reward_redemption.add` event when custom rewards are available and the broadcaster grants `channel:read:redemptions`. Twitch's built-in rewards do not appear in this feed. A custom reward title can also trigger a wheel spin, boss hit, or quick action. If Twitch does not provide these events, the reward overlay stays empty without affecting other features.
 
 **Collaborations:** enter one Twitch guest channel per line. The card updates without reloading OBS. Incoming raids are added when Twitch sends raid events. Shared chat and control of another broadcaster's channel are not connected automatically.
+
+**Music:** open **Overlays → Now Playing** and add the source to OBS. Auto mode selects an active session, preferring Spotify, then the Yandex Music app, then a browser. You can pin a source and adjust the style, accent color, artwork, album, and progress. The card hides on pause by default. StreamHelper reads local Windows media sessions, so no Spotify or Yandex sign-in is needed. Yandex Music in Chrome or Edge appears as “Browser” because Windows does not provide the tab URL. If several tabs in one browser play at once, a specific tab cannot be selected.
 
 ## Connections and automation
 
@@ -102,6 +109,7 @@ The overlay server listens only on `127.0.0.1`. The OBS dock has its own access 
 - **Blank overlay:** confirm StreamHelper is running and the source URL uses the current port. Some sources wait for an event or manual display.
 - **No channel rewards:** sign in as the broadcaster again to grant the required scope and check that the channel has a custom reward. Built-in rewards are not supported.
 - **OBS controls unavailable:** enable OBS WebSocket Server and check the port and password.
+- **No music shown:** play a track on this PC, check the detected sources, and try Auto or Browser. Some players do not publish a Windows media session, so their tracks cannot appear.
 - **SmartScreen or antivirus warning:** the installer is not yet publisher-signed. Compare its SHA-256 with the checksum in the release.
 - **Dock stopped working after a port change:** copy the new URL from StreamHelper into OBS's custom dock settings.
 
@@ -115,10 +123,10 @@ npm run dev
 npm run typecheck
 npm test
 npm run build
-npx electron-builder --win --publish never --config.directories.output=dist/0.4.2
+npx electron-builder --win --publish never --config.directories.output=dist/0.4.3
 ```
 
-Building an installer does not publish it. To validate and publish an update release:
+Generated Windows Runtime bindings are included in the repository; a normal build does not need the Windows SDK. To regenerate them on a machine with the Windows SDK, run `npm run generate:winrt`. Building an installer does not publish it. To validate and publish an update release:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/publish-release.ps1 -ValidateOnly

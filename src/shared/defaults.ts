@@ -463,6 +463,7 @@ export function defaultSettings(lang: Language): Settings {
     chatOverlay: defaultChatOverlay(),
     rewardsOverlay: { maxItems: 5, showInput: true, accentColor: '#9b6bff' },
     collabOverlay: { title: lang === 'ru' ? 'Коллаборация' : 'Collaboration', guests: [], showRaids: true, accentColor: '#9b6bff' },
+    musicOverlay: { source: 'auto', style: 'card', showArtwork: true, showAlbum: true, showProgress: true, hideWhenPaused: true, accentColor: '#1db954' },
     goals: [defaultGoal(lang)],
     timers: [defaultTimer(lang)],
     actions: defaultActions(lang),

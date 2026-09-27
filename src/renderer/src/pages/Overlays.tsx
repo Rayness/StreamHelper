@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react';
 import { defaultAd, defaultBanner, defaultGoal, defaultLabel, defaultTimer, uid } from '@shared/defaults';
 import { timerValue } from '@shared/timer';
 import { formatClock } from '@shared/template';
-import type { AdCampaign, AdEntrance, AlertType, Banner, BannerLayout, ChatBackgroundStyle, ChatEnterAnimation, ChatExitAnimation, EmoteRainStyle, Goal, GoalKind, Label, OverlayKind, OverlayTimer } from '@shared/types';
+import type { AdCampaign, AdEntrance, AlertType, Banner, BannerLayout, ChatBackgroundStyle, ChatEnterAnimation, ChatExitAnimation, EmoteRainStyle, Goal, GoalKind, Label, MusicSourceKind, OverlayKind, OverlayTimer } from '@shared/types';
 import { Icon } from '../components/icons';
 import { MediaPicker } from '../components/MediaPicker';
 import { InstancePicker, OverlayBar, OverlayPreview, pickInstance } from '../components/overlay';
@@ -103,6 +103,8 @@ function OverlayDetail({ kind }: { kind: OverlayKind }) {
       return <RewardsDetail />;
     case 'collab':
       return <CollabDetail />;
+    case 'music':
+      return <MusicDetail />;
     case 'banner':
       return <BannersDetail />;
     case 'ad':
@@ -136,6 +138,42 @@ function SimpleDetail({ kind }: { kind: 'live' | 'spotlight' }) {
   return <>
     <OverlayBar kind={kind} name={t(`ov.${kind}`)} />
     <Split settings={<Card><p className="muted">{t(`simple.${kind}`)}</p>{kind === 'spotlight' && spotlight && <Button onClick={() => void call('spotlight:clear')}>{t('spotlight.clear')}</Button>}</Card>} preview={<OverlayPreview kind={kind} />} />
+  </>;
+}
+
+function MusicDetail() {
+  const t = useT();
+  const cfg = useApp((d) => d.settings!.musicOverlay);
+  const music = useApp((d) => d.state!.music);
+  const set = (patch: Partial<typeof cfg>) => saveSettings('musicOverlay', { ...cfg, ...patch });
+  const sourceName = (source: MusicSourceKind) => t(`music.source.${source}`);
+  return <>
+    <OverlayBar kind="music" name={t('ov.music')} />
+    <Split settings={<Card title={t('music.settings')}>
+      <p className="muted small">{t('music.help')}</p>
+      <p className="muted small">{music.status === 'unavailable' ? t('music.unavailable') : music.sources.length ? `${t('music.detected')}: ${music.sources.map(sourceName).join(', ')}` : t('music.noSource')}</p>
+      <Field label={t('music.source')} wide><Select value={cfg.source} onChange={(source) => set({ source })} options={[
+        { value: 'auto', label: t('music.source.auto') },
+        { value: 'spotify', label: t('music.source.spotify') },
+        { value: 'yandex', label: t('music.source.yandex') },
+        { value: 'browser', label: t('music.source.browser') },
+        { value: 'other', label: t('music.source.other') },
+        { value: 'any', label: t('music.source.any') },
+      ]} /></Field>
+      <Field label={t('music.style')}><Select value={cfg.style} onChange={(style) => set({ style })} options={[
+        { value: 'card', label: t('music.style.card') },
+        { value: 'glass', label: t('music.style.glass') },
+        { value: 'minimal', label: t('music.style.minimal') },
+      ]} /></Field>
+      <Field label={t('common.accent')}><ColorInput value={cfg.accentColor} onChange={(accentColor) => set({ accentColor })} /></Field>
+      <Field label={t('overlays.options')} wide><div className="stack">
+        <Toggle checked={cfg.showArtwork} onChange={(showArtwork) => set({ showArtwork })} label={t('music.artwork')} />
+        <Toggle checked={cfg.showAlbum} onChange={(showAlbum) => set({ showAlbum })} label={t('music.album')} />
+        <Toggle checked={cfg.showProgress} onChange={(showProgress) => set({ showProgress })} label={t('music.progress')} />
+        <Toggle checked={cfg.hideWhenPaused} onChange={(hideWhenPaused) => set({ hideWhenPaused })} label={t('music.hidePaused')} />
+      </div></Field>
+      <p className="muted small">{t('music.browserHint')}</p>
+    </Card>} preview={<OverlayPreview kind="music" maxHeight={300} />} />
   </>;
 }
 

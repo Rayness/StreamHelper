@@ -1,0 +1,158 @@
+{
+  "name": "@winapp/bindings",
+  "type": "commonjs",
+  "sideEffects": false,
+  "main": "./index.js",
+  "types": "./index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "import": "./index.mjs",
+      "require": "./index.js"
+    },
+    "./proxy": {
+      "types": "./index.d.ts",
+      "require": "./index.proxy.js"
+    },
+    "./lifetime": {
+      "types": "./lifetime.d.ts",
+      "default": "./lifetime.js"
+    },
+    "./windows/foundation/IClosable": {
+      "types": "./windows/foundation/IClosable.d.ts",
+      "default": "./windows/foundation/IClosable.js"
+    },
+    "./windows/foundation/IReference_Boolean": {
+      "types": "./windows/foundation/IReference_Boolean.d.ts",
+      "default": "./windows/foundation/IReference_Boolean.js"
+    },
+    "./windows/foundation/IReference_Double": {
+      "types": "./windows/foundation/IReference_Double.d.ts",
+      "default": "./windows/foundation/IReference_Double.js"
+    },
+    "./windows/foundation/IReference_WindowsMediaMediaPlaybackAutoRepeatMode_ge2a1cc07d6c15eb3": {
+      "types": "./windows/foundation/IReference_WindowsMediaMediaPlaybackAutoRepeatMode_ge2a1cc07d6c15eb3.d.ts",
+      "default": "./windows/foundation/IReference_WindowsMediaMediaPlaybackAutoRepeatMode_ge2a1cc07d6c15eb3.js"
+    },
+    "./windows/foundation/IReference_WindowsMediaMediaPlaybackType_gb960b028603bdcbe": {
+      "types": "./windows/foundation/IReference_WindowsMediaMediaPlaybackType_gb960b028603bdcbe.d.ts",
+      "default": "./windows/foundation/IReference_WindowsMediaMediaPlaybackType_gb960b028603bdcbe.js"
+    },
+    "./windows/foundation/TypedEventHandler_WindowsMediaControlGlobalSystemMediaTransportControlsSessionManager_WindowsMediaCont_g9816f7b8d17a0535": {
+      "types": "./windows/foundation/TypedEventHandler_WindowsMediaControlGlobalSystemMediaTransportControlsSessionManager_WindowsMediaCont_g9816f7b8d17a0535.d.ts",
+      "default": "./windows/foundation/TypedEventHandler_WindowsMediaControlGlobalSystemMediaTransportControlsSessionManager_WindowsMediaCont_g9816f7b8d17a0535.js"
+    },
+    "./windows/foundation/TypedEventHandler_WindowsMediaControlGlobalSystemMediaTransportControlsSessionManager_WindowsMediaCont_ga150785a7da87d5f": {
+      "types": "./windows/foundation/TypedEventHandler_WindowsMediaControlGlobalSystemMediaTransportControlsSessionManager_WindowsMediaCont_ga150785a7da87d5f.d.ts",
+      "default": "./windows/foundation/TypedEventHandler_WindowsMediaControlGlobalSystemMediaTransportControlsSessionManager_WindowsMediaCont_ga150785a7da87d5f.js"
+    },
+    "./windows/foundation/TypedEventHandler_WindowsMediaControlGlobalSystemMediaTransportControlsSession_WindowsMediaControlMedi_gcffb54f71966b894": {
+      "types": "./windows/foundation/TypedEventHandler_WindowsMediaControlGlobalSystemMediaTransportControlsSession_WindowsMediaControlMedi_gcffb54f71966b894.d.ts",
+      "default": "./windows/foundation/TypedEventHandler_WindowsMediaControlGlobalSystemMediaTransportControlsSession_WindowsMediaControlMedi_gcffb54f71966b894.js"
+    },
+    "./windows/foundation/TypedEventHandler_WindowsMediaControlGlobalSystemMediaTransportControlsSession_WindowsMediaControlPlay_g6a06339189c175f8": {
+      "types": "./windows/foundation/TypedEventHandler_WindowsMediaControlGlobalSystemMediaTransportControlsSession_WindowsMediaControlPlay_g6a06339189c175f8.d.ts",
+      "default": "./windows/foundation/TypedEventHandler_WindowsMediaControlGlobalSystemMediaTransportControlsSession_WindowsMediaControlPlay_g6a06339189c175f8.js"
+    },
+    "./windows/foundation/TypedEventHandler_WindowsMediaControlGlobalSystemMediaTransportControlsSession_WindowsMediaControlTime_g9fcf135f7ab9130d": {
+      "types": "./windows/foundation/TypedEventHandler_WindowsMediaControlGlobalSystemMediaTransportControlsSession_WindowsMediaControlTime_g9fcf135f7ab9130d.d.ts",
+      "default": "./windows/foundation/TypedEventHandler_WindowsMediaControlGlobalSystemMediaTransportControlsSession_WindowsMediaControlTime_g9fcf135f7ab9130d.js"
+    },
+    "./windows/foundation/collections/IVectorView_String": {
+      "types": "./windows/foundation/collections/IVectorView_String.d.ts",
+      "default": "./windows/foundation/collections/IVectorView_String.js"
+    },
+    "./windows/foundation/collections/IVectorView_WindowsMediaControlGlobalSystemMediaTransportControlsSession_gdc49772a0550e35e": {
+      "types": "./windows/foundation/collections/IVectorView_WindowsMediaControlGlobalSystemMediaTransportControlsSession_gdc49772a0550e35e.d.ts",
+      "default": "./windows/foundation/collections/IVectorView_WindowsMediaControlGlobalSystemMediaTransportControlsSession_gdc49772a0550e35e.js"
+    },
+    "./windows/media/MediaPlaybackAutoRepeatMode": {
+      "types": "./windows/media/MediaPlaybackAutoRepeatMode.d.ts",
+      "default": "./windows/media/MediaPlaybackAutoRepeatMode.js"
+    },
+    "./windows/media/MediaPlaybackType": {
+      "types": "./windows/media/MediaPlaybackType.d.ts",
+      "default": "./windows/media/MediaPlaybackType.js"
+    },
+    "./windows/media/control/CurrentSessionChangedEventArgs": {
+      "types": "./windows/media/control/CurrentSessionChangedEventArgs.d.ts",
+      "default": "./windows/media/control/CurrentSessionChangedEventArgs.js"
+    },
+    "./windows/media/control/GlobalSystemMediaTransportControlsSession": {
+      "types": "./windows/media/control/GlobalSystemMediaTransportControlsSession.d.ts",
+      "default": "./windows/media/control/GlobalSystemMediaTransportControlsSession.js"
+    },
+    "./windows/media/control/GlobalSystemMediaTransportControlsSessionManager": {
+      "types": "./windows/media/control/GlobalSystemMediaTransportControlsSessionManager.d.ts",
+      "default": "./windows/media/control/GlobalSystemMediaTransportControlsSessionManager.js"
+    },
+    "./windows/media/control/GlobalSystemMediaTransportControlsSessionMediaProperties": {
+      "types": "./windows/media/control/GlobalSystemMediaTransportControlsSessionMediaProperties.d.ts",
+      "default": "./windows/media/control/GlobalSystemMediaTransportControlsSessionMediaProperties.js"
+    },
+    "./windows/media/control/GlobalSystemMediaTransportControlsSessionPlaybackControls": {
+      "types": "./windows/media/control/GlobalSystemMediaTransportControlsSessionPlaybackControls.d.ts",
+      "default": "./windows/media/control/GlobalSystemMediaTransportControlsSessionPlaybackControls.js"
+    },
+    "./windows/media/control/GlobalSystemMediaTransportControlsSessionPlaybackInfo": {
+      "types": "./windows/media/control/GlobalSystemMediaTransportControlsSessionPlaybackInfo.d.ts",
+      "default": "./windows/media/control/GlobalSystemMediaTransportControlsSessionPlaybackInfo.js"
+    },
+    "./windows/media/control/GlobalSystemMediaTransportControlsSessionPlaybackStatus": {
+      "types": "./windows/media/control/GlobalSystemMediaTransportControlsSessionPlaybackStatus.d.ts",
+      "default": "./windows/media/control/GlobalSystemMediaTransportControlsSessionPlaybackStatus.js"
+    },
+    "./windows/media/control/GlobalSystemMediaTransportControlsSessionTimelineProperties": {
+      "types": "./windows/media/control/GlobalSystemMediaTransportControlsSessionTimelineProperties.d.ts",
+      "default": "./windows/media/control/GlobalSystemMediaTransportControlsSessionTimelineProperties.js"
+    },
+    "./windows/media/control/MediaPropertiesChangedEventArgs": {
+      "types": "./windows/media/control/MediaPropertiesChangedEventArgs.d.ts",
+      "default": "./windows/media/control/MediaPropertiesChangedEventArgs.js"
+    },
+    "./windows/media/control/PlaybackInfoChangedEventArgs": {
+      "types": "./windows/media/control/PlaybackInfoChangedEventArgs.d.ts",
+      "default": "./windows/media/control/PlaybackInfoChangedEventArgs.js"
+    },
+    "./windows/media/control/SessionsChangedEventArgs": {
+      "types": "./windows/media/control/SessionsChangedEventArgs.d.ts",
+      "default": "./windows/media/control/SessionsChangedEventArgs.js"
+    },
+    "./windows/media/control/TimelinePropertiesChangedEventArgs": {
+      "types": "./windows/media/control/TimelinePropertiesChangedEventArgs.d.ts",
+      "default": "./windows/media/control/TimelinePropertiesChangedEventArgs.js"
+    },
+    "./windows/storage/streams/ByteOrder": {
+      "types": "./windows/storage/streams/ByteOrder.d.ts",
+      "default": "./windows/storage/streams/ByteOrder.js"
+    },
+    "./windows/storage/streams/DataReader": {
+      "types": "./windows/storage/streams/DataReader.d.ts",
+      "default": "./windows/storage/streams/DataReader.js"
+    },
+    "./windows/storage/streams/IBuffer": {
+      "types": "./windows/storage/streams/IBuffer.d.ts",
+      "default": "./windows/storage/streams/IBuffer.js"
+    },
+    "./windows/storage/streams/IInputStream": {
+      "types": "./windows/storage/streams/IInputStream.d.ts",
+      "default": "./windows/storage/streams/IInputStream.js"
+    },
+    "./windows/storage/streams/IRandomAccessStreamReference": {
+      "types": "./windows/storage/streams/IRandomAccessStreamReference.d.ts",
+      "default": "./windows/storage/streams/IRandomAccessStreamReference.js"
+    },
+    "./windows/storage/streams/IRandomAccessStreamWithContentType": {
+      "types": "./windows/storage/streams/IRandomAccessStreamWithContentType.d.ts",
+      "default": "./windows/storage/streams/IRandomAccessStreamWithContentType.js"
+    },
+    "./windows/storage/streams/InputStreamOptions": {
+      "types": "./windows/storage/streams/InputStreamOptions.d.ts",
+      "default": "./windows/storage/streams/InputStreamOptions.js"
+    },
+    "./windows/storage/streams/UnicodeEncoding": {
+      "types": "./windows/storage/streams/UnicodeEncoding.d.ts",
+      "default": "./windows/storage/streams/UnicodeEncoding.js"
+    }
+  }
+}

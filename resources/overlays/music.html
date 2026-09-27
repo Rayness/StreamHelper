@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>StreamHelper — Now Playing</title>
+  <style>
+    :root { --accent: #1db954; }
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: transparent; color: #fff; font-family: 'Segoe UI', Inter, sans-serif; }
+    #card { display: flex; align-items: center; gap: 17px; width: calc(100% - 12px); height: calc(100% - 12px); margin: 6px; padding: 15px 19px; border: 1px solid #ffffff2c; border-radius: 19px; background: #17151fe8; box-shadow: 0 18px 38px #0008; opacity: 0; transform: translateY(12px) scale(.98); transition: opacity .35s ease, transform .35s ease; }
+    #card.visible { opacity: 1; transform: none; }
+    #card.glass { background: #191924a8; backdrop-filter: blur(22px); border-color: #ffffff55; }
+    #card.minimal { background: transparent; box-shadow: none; border-color: transparent; padding-left: 8px; }
+    #cover { position: relative; flex: none; width: 130px; height: 130px; border-radius: 12px; background: linear-gradient(135deg, var(--accent), #242330); overflow: hidden; box-shadow: 0 8px 22px #0008; }
+    #cover img { width: 100%; height: 100%; object-fit: cover; display: none; }
+    #cover.has-image img { display: block; }
+    #cover:after { content: '♫'; position: absolute; inset: 0; display: grid; place-items: center; font-size: 65px; color: #fff9; }
+    #cover.has-image:after { display: none; }
+    #card.no-cover #cover { display: none; }
+    .content { min-width: 0; flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 5px; }
+    .top { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 12px; font-weight: 800; letter-spacing: .11em; text-transform: uppercase; color: var(--accent); }
+    .top .pulse { width: 8px; height: 8px; flex: none; border-radius: 50%; background: var(--accent); box-shadow: 0 0 12px var(--accent); animation: pulse 1.5s infinite; }
+    #card.paused .pulse { animation: none; opacity: .45; }
+    .source { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .paused-label { display: none; margin-left: auto; color: #d7d3de; letter-spacing: 0; text-transform: none; }
+    #card.paused .paused-label { display: block; }
+    #title { font-size: 25px; line-height: 1.15; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #artist { font-size: 17px; font-weight: 600; color: #e0dce6; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #album { font-size: 13px; color: #b4acbd; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #album:empty { display: none; }
+    #progress { margin-top: 6px; display: flex; align-items: center; gap: 9px; font-size: 11px; font-variant-numeric: tabular-nums; color: #b4acbd; }
+    #progress.hidden { display: none; }
+    .rail { flex: 1; height: 5px; border-radius: 5px; overflow: hidden; background: #ffffff35; }
+    #fill { width: 0; height: 100%; background: var(--accent); border-radius: inherit; transition: width .6s linear; }
+    .swap { animation: swap .45s cubic-bezier(.22, 1, .36, 1); }
+    @keyframes swap { from { opacity: .3; transform: translateY(7px); } }
+    @keyframes pulse { 50% { opacity: .5; } }
+    @media (prefers-reduced-motion: reduce) { *, *:before, *:after { animation: none !important; transition: none !important; } }
+  </style>
+</head>
+<body>
+  <div id="card">
+    <div id="cover"><img alt="" /></div>
+    <div class="content" id="content">
+      <div class="top"><span class="pulse"></span><span class="source" id="source"></span><span class="paused-label" id="paused"></span></div>
+      <div id="title"></div>
+      <div id="artist"></div>
+      <div id="album"></div>
+      <div id="progress"><span id="elapsed">0:00</span><div class="rail"><div id="fill"></div></div><span id="duration">0:00</span></div>
+    </div>
+  </div>
+  <script src="/overlay/assets/common.js"></script>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const sample = { source: 'spotify', title: 'Midnight Lights', artist: 'Demo Artist', album: 'Sample Album', artwork: null, playing: true, positionMs: 72000, durationMs: 213000, observedAt: Date.now() };
+    let track = null;
+    let config = { style: 'card', showArtwork: true, showAlbum: true, showProgress: true, hideWhenPaused: true, accentColor: '#1db954' };
+    let lang = 'ru';
+    let lastKey = '';
+    function sourceLabel(source) {
+      const names = lang === 'en'
+        ? { spotify: 'Spotify', yandex: 'Yandex Music', browser: 'Browser', other: 'Now playing' }
+        : { spotify: 'Spotify', yandex: 'Яндекс Музыка', browser: 'Браузер', other: 'Сейчас играет' };
+      return names[source] || names.other;
+    }
+    function progress() {
+      const current = track || (SH.preview ? sample : null);
+      if (!current || current.durationMs == null || current.positionMs == null || !config.showProgress) {
+        $('progress').classList.add('hidden');
+        return;
+      }
+      $('progress').classList.remove('hidden');
+      const elapsed = Math.min(current.durationMs, Math.max(0, current.positionMs + (current.playing ? Date.now() - current.observedAt : 0)));
+      $('elapsed').textContent = SH.formatClock(elapsed);
+      $('duration').textContent = SH.formatClock(current.durationMs);
+      $('fill').style.width = `${Math.min(100, elapsed / current.durationMs * 100)}%`;
+    }
+    function render() {
+      const current = track || (SH.preview ? sample : null);
+      const visible = !!current && (current.playing || !config.hideWhenPaused);
+      const card = $('card');
+      card.classList.toggle('visible', visible);
+      card.classList.toggle('paused', !!current && !current.playing);
+      card.classList.toggle('no-cover', !config.showArtwork);
+      card.classList.toggle('glass', config.style === 'glass');
+      card.classList.toggle('minimal', config.style === 'minimal');
+      document.documentElement.style.setProperty('--accent', /^#[0-9a-fA-F]{6}$/.test(config.accentColor) ? config.accentColor : '#1db954');
+      if (!current) return;
+      $('source').textContent = sourceLabel(current.source);
+      $('paused').textContent = lang === 'en' ? 'Paused' : 'Пауза';
+      $('title').textContent = current.title;
+      $('artist').textContent = current.artist || (lang === 'en' ? 'Unknown artist' : 'Неизвестный исполнитель');
+      $('album').textContent = config.showAlbum ? current.album : '';
+      const image = $('cover').querySelector('img');
+      image.src = current.artwork || '';
+      $('cover').classList.toggle('has-image', !!current.artwork);
+      const key = `${current.source}\0${current.title}\0${current.artist}`;
+      if (key !== lastKey) {
+        lastKey = key;
+        $('content').classList.remove('swap');
+        void $('content').offsetWidth;
+        $('content').classList.add('swap');
+      }
+      progress();
+    }
+    SH.connect('music', (message) => {
+      if (message.type !== 'music') return;
+      track = message.track;
+      config = message.config;
+      lang = message.lang;
+      render();
+    });
+    render();
+    setInterval(progress, 1000);
+  </script>
+</body>
+</html>

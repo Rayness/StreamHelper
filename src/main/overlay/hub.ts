@@ -46,10 +46,12 @@ export class OverlayHub {
     });
     bus.on('stream:update', (stream) => server.broadcast('live', { type: 'live', stream, lang: this.settings.language }));
     bus.on('kawaki:now', () => server.broadcast('kawaki', this.kawakiMessage()));
+    bus.on('music:changed', () => server.broadcast('music', this.musicMessage()));
     bus.on('settings:changed', (key) => {
       if (key === 'chatOverlay') server.broadcast('chat', { type: 'chatConfig', config: this.settings.chatOverlay });
       if (key === 'rewardsOverlay') server.broadcast('rewards', this.rewardsMessage());
       if (key === 'collabOverlay') server.broadcast('collab', this.collabMessage());
+      if (key === 'musicOverlay') server.broadcast('music', this.musicMessage());
       if (key === 'goals') server.forEachClient('goal', (id) => this.goalMessage(id));
       if (key === 'timers') server.forEachClient('timer', (id) => this.timerMessage(id));
       if (key === 'wheels') server.forEachClient('wheel', (id) => this.wheelMessage(id));
@@ -59,6 +61,7 @@ export class OverlayHub {
       if (key === 'language') {
         server.broadcast('live', { type: 'live', stream: this.ctx.state.current.stream, lang: this.settings.language });
         server.broadcast('collab', this.collabMessage());
+        server.broadcast('music', this.musicMessage());
       }
     });
   }
@@ -106,6 +109,10 @@ export class OverlayHub {
     };
   }
 
+  private musicMessage(): OverlayMessage {
+    return { type: 'music', track: this.ctx.state.current.music.track, config: this.settings.musicOverlay, lang: this.settings.language };
+  }
+
   initialMessages(kind: OverlayKind, id: string | null): OverlayMessage[] {
     switch (kind) {
       case 'chat': {
@@ -126,6 +133,8 @@ export class OverlayHub {
         return [this.rewardsMessage()];
       case 'collab':
         return [this.collabMessage()];
+      case 'music':
+        return [this.musicMessage()];
       case 'alerts':
         return [];
       case 'banner':
