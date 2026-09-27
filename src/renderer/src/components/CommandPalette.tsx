@@ -55,7 +55,7 @@ function buildCommands(t: TFn): Command[] {
       label: `${b.visible ? t('palette.hideBanner') : t('palette.showBanner')}: ${b.name}`,
       group: screen,
       icon: 'banner',
-      keywords: 'banner баннер',
+      keywords: 'ticker строка бегущая banner',
       run: () => {
         const list = getData().settings!.banners;
         saveSettings('banners', list.map((x) => (x.id === b.id ? { ...x, visible: !x.visible } : x)));

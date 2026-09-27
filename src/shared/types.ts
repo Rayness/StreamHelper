@@ -159,6 +159,7 @@ export interface RuntimeState {
   streamelements: ConnectionState;
   streamerbot: ConnectionState & { actions: { id: string; name: string }[] };
   discord: ConnectionState;
+  subForStream: ConnectionState & { overlayUrl: string };
   obs: ObsState;
   stream: StreamInfo;
   alerts: { paused: boolean; queueLength: number; current: string | null };
@@ -174,6 +175,7 @@ export interface RuntimeState {
   ad: { activeId: string | null; endsAt: number | null };
   spotlight: ChatMessage | null;
   music: MusicRuntimeState;
+  songRequests: SongRequestState;
   update: UpdateState;
   dockUrl: string;
   /** Banners currently on screen (manual toggle or schedule). */
@@ -276,6 +278,7 @@ export interface AlertSettings {
   gapSec: number;
   style: AlertStyle;
   types: Record<AlertType, AlertVariant>;
+  donationTiers: { id: string; minAmount: number; variant: AlertVariant; style?: AlertStyle }[];
 }
 
 export type ChatBackgroundStyle = 'card' | 'glass' | 'gradient' | 'outline' | 'neon' | 'stripe' | 'bubble' | 'none';
@@ -314,7 +317,7 @@ export interface ChatOverlaySettings {
   nameColor: 'user' | 'accent' | 'text';
 }
 
-export type GoalKind = 'followers' | 'subs' | 'bits' | 'donations' | 'manual';
+export type GoalKind = 'followers' | 'subs' | 'bits' | 'donations' | 'chatMessages' | 'chatters' | 'manual';
 
 export interface Goal {
   id: string;
@@ -326,6 +329,13 @@ export interface Goal {
   currency: string;
   barColor: string;
   textColor: string;
+  donationMinAmount?: number;
+  donationMaxAmount?: number;
+  donationSources?: DonationSource[];
+  showPercent?: boolean;
+  showAmounts?: boolean;
+  /** Internal count for the unique-chatters activity; persisted across restarts. */
+  chattersSeen?: string[];
 }
 
 export type TimerMode = 'countdown' | 'stopwatch';
@@ -446,6 +456,32 @@ export interface MusicRuntimeState {
   status: 'connecting' | 'ready' | 'unavailable';
   track: MusicTrack | null;
   sources: MusicSourceKind[];
+}
+
+export interface SongRequest {
+  id: string;
+  videoId: string;
+  url: string;
+  userName: string;
+  source: 'redemption' | 'donation' | 'manual';
+  requestedAt: number;
+}
+
+export interface SongRequestSettings {
+  enabled: boolean;
+  rewardTitle: string;
+  minDonation: number;
+  autoPlay: boolean;
+  pauseWindowsMusic: boolean;
+  resumeWindowsMusic: boolean;
+  maxQueue: number;
+}
+
+export interface SongRequestState {
+  queue: SongRequest[];
+  current: SongRequest | null;
+  playerConnected: boolean;
+  lastError: string | null;
 }
 
 export interface MusicOverlaySettings {
@@ -726,6 +762,7 @@ export interface Settings {
   streamelements: { enabled: boolean; channelId: string };
   streamerbot: { enabled: boolean; port: number };
   discord: { enabled: boolean; notifyLive: boolean; notifyOffline: boolean; notifyDonations: boolean };
+  subForStream: { enabled: boolean; port: number };
   obs: { host: string; port: number; autoConnect: boolean };
   bot: BotSettings;
   alerts: AlertSettings;
@@ -733,6 +770,8 @@ export interface Settings {
   rewardsOverlay: RewardOverlaySettings;
   collabOverlay: CollabOverlaySettings;
   musicOverlay: MusicOverlaySettings;
+  songRequests: SongRequestSettings;
+  songQueue: SongRequest[];
   goals: Goal[];
   timers: OverlayTimer[];
   actions: QuickAction[];
@@ -756,7 +795,7 @@ export type SettingsKey = keyof Settings;
 
 // ---------- Overlay wire protocol ----------
 
-export type OverlayKind = 'chat' | 'alerts' | 'goal' | 'timer' | 'events' | 'rewards' | 'collab' | 'music' | 'banner' | 'ad' | 'label' | 'emotes' | 'wheel' | 'poll' | 'giveaway' | 'kawaki' | 'quiz' | 'boss' | 'live' | 'spotlight';
+export type OverlayKind = 'chat' | 'alerts' | 'goal' | 'timer' | 'events' | 'rewards' | 'collab' | 'music' | 'song' | 'banner' | 'ad' | 'label' | 'emotes' | 'wheel' | 'poll' | 'giveaway' | 'kawaki' | 'quiz' | 'boss' | 'live' | 'spotlight';
 
 export interface RenderedBanner extends Omit<Banner, 'slides'> {
   slides: { id: string; text: string; image: string | null }[];
@@ -804,6 +843,7 @@ export type OverlayMessage =
   | { type: 'collab'; config: CollabOverlaySettings; raids: StreamEventOf<'raid'>[]; lang: Language }
   | { type: 'collabRaid'; event: StreamEventOf<'raid'> }
   | { type: 'music'; track: MusicTrack | null; config: MusicOverlaySettings; lang: Language }
+  | { type: 'song'; request: SongRequest | null; nonce: string | null }
   | { type: 'banner'; banner: RenderedBanner | null }
   | { type: 'ad'; campaign: AdCampaign | null; endsAt: number | null }
   | { type: 'boss'; boss: BossState; style: BossSettings; lang: Language }
@@ -863,13 +903,20 @@ export interface IpcInvoke {
   'obs:toggleMute': (input: string) => void;
   'obs:stream': (mode: 'start' | 'stop' | 'toggle') => void;
   'obs:record': (mode: 'start' | 'stop' | 'toggle') => void;
-  'alerts:test': (type: AlertType) => void;
+  'alerts:test': (type: AlertType, donationAmount?: number) => void;
   'alerts:pause': (paused: boolean) => void;
   'alerts:skip': () => void;
   'alerts:replay': (eventId: string) => void;
   'actions:run': (actionId: string) => void;
   'timer:control': (timerId: string, op: 'start' | 'pause' | 'reset' | 'add', seconds?: number) => void;
   'banner:showNow': (bannerId: string) => void;
+  'song:add': (url: string) => void;
+  'song:play': (id?: string) => void;
+  'song:skip': () => void;
+  'song:remove': (id: string) => void;
+  'music:control': (source: MusicSourceKind, action: 'play' | 'pause' | 'next') => void;
+  'subs:check': () => void;
+  'subs:clear': () => void;
   'stats:reset': () => void;
   'emotes:test': () => void;
   'wheel:spin': (wheelId: string) => void;

@@ -10,7 +10,7 @@ import { Button, Card, ColorInput, Field, IconButton, LinesInput, NumberInput, P
 import { useNow } from '../hooks';
 import { useT, type TKey } from '../i18n';
 import { OVERLAYS, type OverlayGroup } from '../overlayCatalog';
-import { call, navigate, saveSettings, useApp, useSub } from '../store';
+import { call, callOk, navigate, saveSettings, useApp, useSub } from '../store';
 
 const KINDS = OVERLAYS.map((o) => o.kind);
 const GROUPS: OverlayGroup[] = ['main', 'screen', 'fun'];
@@ -18,10 +18,12 @@ const GROUPS: OverlayGroup[] = ['main', 'screen', 'fun'];
 export function Overlays() {
   const t = useT();
   const [kind, setKind] = useSub<OverlayKind>('overlays', 'alerts', KINDS);
+  const [query, setQuery] = useState('');
   const url = useApp((d) => d.state!.overlayUrl);
   const clients = useApp((d) => d.state!.overlayClients);
   const perKind = useApp((d) => d.state!.overlayKinds);
   const def = OVERLAYS.find((o) => o.kind === kind)!;
+  const visible = OVERLAYS.filter((o) => !query.trim() || `${t(`ov.${o.kind}`)} ${t(`ovDesc.${o.kind}`)}`.toLowerCase().includes(query.toLowerCase().trim()));
   return (
     <div className="page page-wide">
       <PageHeader
@@ -37,10 +39,12 @@ export function Overlays() {
       ) : (
         <div className="ov-layout">
           <nav className="ov-list" aria-label={t('nav.overlays')}>
-            {GROUPS.map((g) => (
+            <div style={{ padding: '8px' }}><TextInput value={query} onChange={setQuery} placeholder={t('common.search')} /></div>
+            {visible.length === 0 && <p className="muted small" style={{ padding: 12 }}>{t('palette.empty')}</p>}
+            {GROUPS.filter((g) => visible.some((o) => o.group === g)).map((g) => (
               <div key={g} className="ov-group">
                 <span className="ov-group-title">{t(`ovGroup.${g}`)}</span>
-                {OVERLAYS.filter((o) => o.group === g).map((o) => (
+                {visible.filter((o) => o.group === g).map((o) => (
                   <button key={o.kind} type="button" className={`ov-item ${o.kind === kind ? 'active' : ''}`} onClick={() => setKind(o.kind)}>
                     <Icon name={o.icon} size={17} />
                     <span>{t(`ov.${o.kind}`)}</span>
@@ -105,6 +109,8 @@ function OverlayDetail({ kind }: { kind: OverlayKind }) {
       return <CollabDetail />;
     case 'music':
       return <MusicDetail />;
+    case 'song':
+      return <SongDetail />;
     case 'banner':
       return <BannersDetail />;
     case 'ad':
@@ -173,7 +179,38 @@ function MusicDetail() {
         <Toggle checked={cfg.hideWhenPaused} onChange={(hideWhenPaused) => set({ hideWhenPaused })} label={t('music.hidePaused')} />
       </div></Field>
       <p className="muted small">{t('music.browserHint')}</p>
+      {music.sources.length > 0 && <Field label={t('music.windowsControl')} wide><div className="stack">{music.sources.map((source) => <div key={source} className="row-gap wrap"><strong>{sourceName(source)}</strong><Button size="sm" onClick={() => void call('music:control', source, 'play')}>{t('music.play')}</Button><Button size="sm" onClick={() => void call('music:control', source, 'pause')}>{t('music.pause')}</Button><Button size="sm" onClick={() => void call('music:control', source, 'next')}>{t('music.next')}</Button></div>)}</div></Field>}
     </Card>} preview={<OverlayPreview kind="music" maxHeight={300} />} />
+  </>;
+}
+
+function SongDetail() {
+  const t = useT();
+  const cfg = useApp((d) => d.settings!.songRequests);
+  const state = useApp((d) => d.state!.songRequests);
+  const [link, setLink] = useState('');
+  const set = (patch: Partial<typeof cfg>) => saveSettings('songRequests', { ...cfg, ...patch });
+  return <>
+    <OverlayBar kind="song" name={t('ov.song')} />
+    <Split settings={<>
+      <Card title={t('song.queue')}>
+        <p className="muted small">{state.playerConnected ? t('song.playerReady') : t('song.playerMissing')}</p>
+        {state.lastError && <p className="error small">{state.lastError}</p>}
+        <div className="row-gap wrap"><TextInput value={link} onChange={setLink} placeholder="https://www.youtube.com/watch?v=…" /><Button onClick={async () => { if (await callOk('song:add', link)) setLink(''); }}>{t('common.add')}</Button></div>
+        {state.current && <div className="card"><strong>{t('song.now')}</strong><p>{state.current.userName} · {state.current.url}</p><Button size="sm" onClick={() => void call('song:skip')}>{t('song.skip')}</Button></div>}
+        {state.queue.length === 0 && !state.current && <p className="muted">{t('song.empty')}</p>}
+        <ul className="source-list">{state.queue.map((item) => <li key={item.id}><span>{item.userName} · {item.url}</span><div className="row-gap"><Button size="sm" disabled={!state.playerConnected} onClick={() => void call('song:play', item.id)}>{t('song.play')}</Button><IconButton icon="x" label={t('common.delete')} onClick={() => void call('song:remove', item.id)} /></div></li>)}</ul>
+      </Card>
+      <Card title={t('song.settings')}><div className="form">
+        <Field label={t('song.enabled')} wide><Toggle checked={cfg.enabled} onChange={(enabled) => set({ enabled })} /></Field>
+        <Field label={t('song.reward')} hint={t('song.rewardHint')} wide><TextInput value={cfg.rewardTitle} onChange={(rewardTitle) => set({ rewardTitle })} /></Field>
+        <Field label={t('song.minDonation')} hint={t('song.minDonationHint')}><NumberInput value={cfg.minDonation} min={0} onChange={(minDonation) => set({ minDonation })} /></Field>
+        <Field label={t('song.maxQueue')}><NumberInput value={cfg.maxQueue} min={1} max={100} onChange={(maxQueue) => set({ maxQueue })} /></Field>
+        <Field label={t('song.autoPlay')} wide><Toggle checked={cfg.autoPlay} onChange={(autoPlay) => set({ autoPlay })} /></Field>
+        <Field label={t('song.pauseWindows')} wide><Toggle checked={cfg.pauseWindowsMusic} onChange={(pauseWindowsMusic) => set({ pauseWindowsMusic })} /></Field>
+        <Field label={t('song.resumeWindows')} wide><Toggle checked={cfg.resumeWindowsMusic} onChange={(resumeWindowsMusic) => set({ resumeWindowsMusic })} /></Field>
+      </div></Card>
+    </>} preview={<OverlayPreview kind="song" maxHeight={360} />} />
   </>;
 }
 
@@ -620,7 +657,7 @@ function GoalsDetail() {
   const [sel, setSel] = useState<string>();
   const g = pickInstance(goals, sel);
   const update = (patch: Partial<Goal>) => g && saveSettings('goals', goals.map((x) => (x.id === g.id ? { ...x, ...patch } : x)));
-  const kinds: GoalKind[] = ['followers', 'subs', 'bits', 'donations', 'manual'];
+  const kinds: GoalKind[] = ['followers', 'subs', 'bits', 'donations', 'chatMessages', 'chatters', 'manual'];
   const add = () => {
     const ng = { ...defaultGoal(lang), currency };
     saveSettings('goals', [...goals, ng]);
@@ -654,13 +691,24 @@ function GoalsDetail() {
                       <NumberInput value={g.target} min={1} onChange={(target) => update({ target })} />
                     </Field>
                     <Field label={t('goals.current')}>
-                      <NumberInput value={g.current} min={0} onChange={(current) => update({ current })} />
+                      <NumberInput value={g.current} min={0} onChange={(current) => update({ current, ...(g.kind === 'chatters' && current === 0 ? { chattersSeen: [] } : {}) })} />
                     </Field>
-                    {g.kind === 'donations' && (
+                    {g.kind === 'donations' && <>
                       <Field label={t('settings.currency')}>
                         <TextInput value={g.currency} onChange={(c) => update({ currency: c.toUpperCase() })} />
                       </Field>
-                    )}
+                      <Field label={t('goals.donationMin')} hint={t('goals.donationMinHint')}>
+                        <NumberInput value={g.donationMinAmount ?? 0} min={0} onChange={(donationMinAmount) => update({ donationMinAmount })} />
+                      </Field>
+                      <Field label={t('goals.donationMax')} hint={t('goals.donationMaxHint')}>
+                        <NumberInput value={g.donationMaxAmount ?? 0} min={0} onChange={(donationMaxAmount) => update({ donationMaxAmount })} />
+                      </Field>
+                      <Field label={t('goals.sources')} wide>
+                        <div className="row-gap wrap">{(['donationalerts', 'streamlabs', 'streamelements'] as const).map((source) => <Toggle key={source} checked={(g.donationSources ?? []).includes(source)} onChange={(on) => update({ donationSources: on ? [...(g.donationSources ?? []), source] : (g.donationSources ?? []).filter((x) => x !== source) })} label={source === 'donationalerts' ? 'DonationAlerts' : source === 'streamlabs' ? 'Streamlabs' : 'StreamElements'} />)}</div>
+                      </Field>
+                    </>}
+                    <Field label={t('goals.showAmounts')}><Toggle checked={g.showAmounts ?? true} onChange={(showAmounts) => update({ showAmounts })} /></Field>
+                    <Field label={t('goals.showPercent')}><Toggle checked={g.showPercent ?? true} onChange={(showPercent) => update({ showPercent })} /></Field>
                     <Field label={t('goals.barColor')}>
                       <ColorInput value={g.barColor} onChange={(barColor) => update({ barColor })} />
                     </Field>

@@ -1,5 +1,5 @@
 import { timerAdd, timerPause, timerReset, timerStart } from '@shared/timer';
-import type { Goal, OverlayTimer, StreamEvent } from '@shared/types';
+import type { ChatMessage, Goal, OverlayTimer, StreamEvent } from '@shared/types';
 import { emptyStats } from '@shared/defaults';
 import type { AppContext } from '../core/context';
 import { applyEventToStats } from './vars';
@@ -15,9 +15,14 @@ export function goalIncrement(goal: Goal, e: StreamEvent): number {
       return e.type === 'cheer' ? e.bits : 0;
     case 'donations':
       if (e.type !== 'donation') return 0;
+      if (goal.donationSources && ['donationalerts', 'streamlabs', 'streamelements'].includes(e.source)
+        && !goal.donationSources.includes(e.source as import('@shared/types').DonationSource)) return 0;
       // Prefer the provider's conversion into the streamer's currency; otherwise only count matching currency.
-      if (e.amountMain !== undefined) return e.amountMain;
-      return !e.currency || e.currency.toUpperCase() === goal.currency.toUpperCase() ? e.amount : 0;
+      {
+        const amount = e.amountMain ?? (!e.currency || e.currency.toUpperCase() === goal.currency.toUpperCase() ? e.amount : 0);
+        if (amount < (goal.donationMinAmount ?? 0)) return 0;
+        return goal.donationMaxAmount ? Math.min(amount, goal.donationMaxAmount) : amount;
+      }
     default:
       return 0;
   }
@@ -49,6 +54,9 @@ export type TimerOp = 'start' | 'pause' | 'reset' | 'add';
 
 /** Goals and overlay timers react to real (non-test) events. */
 export class ProgressTracker {
+  private chatSeen = new Set<string>();
+  private chatOrder: string[] = [];
+
   constructor(private ctx: AppContext) {
     ctx.bus.on('event', (e) => {
       if (e.source === 'test') return;
@@ -56,6 +64,30 @@ export class ProgressTracker {
       this.applyToTimers(e);
       this.applyToStats(e);
     });
+    ctx.bus.on('chat:message', (message) => this.applyToChatGoals(message));
+  }
+
+  private applyToChatGoals(message: ChatMessage): void {
+    const prefix = this.ctx.settings.get('bot').prefix;
+    if (message.fromSelf || !message.text.trim() || (prefix && message.text.trim().startsWith(prefix))) return;
+    if (this.chatSeen.has(message.id)) return;
+    this.chatSeen.add(message.id);
+    this.chatOrder.push(message.id);
+    if (this.chatOrder.length > 1000) this.chatSeen.delete(this.chatOrder.shift()!);
+    const key = `${message.platform}:${message.userId || message.userLogin.toLowerCase()}`;
+    let changed = false;
+    const goals = this.ctx.settings.get('goals').map((goal) => {
+      if (goal.kind === 'chatMessages') {
+        changed = true;
+        return { ...goal, current: goal.current + 1 };
+      }
+      if (goal.kind === 'chatters' && !(goal.chattersSeen ?? []).includes(key)) {
+        changed = true;
+        return { ...goal, current: goal.current + 1, chattersSeen: [...(goal.chattersSeen ?? []), key] };
+      }
+      return goal;
+    });
+    if (changed) this.ctx.settings.set('goals', goals);
   }
 
   private applyToStats(e: StreamEvent): void {
@@ -94,7 +126,11 @@ export class ProgressTracker {
   }
 
   addToGoal(goalId: string, amount: number): void {
-    this.ctx.settings.update('goals', (goals) => goals.map((g) => (g.id === goalId ? { ...g, current: Math.max(0, g.current + amount) } : g)));
+    this.ctx.settings.update('goals', (goals) => goals.map((g) => {
+      if (g.id !== goalId) return g;
+      const current = Math.max(0, g.current + amount);
+      return { ...g, current, ...(g.kind === 'chatters' && current === 0 ? { chattersSeen: [] } : {}) };
+    }));
   }
 
   controlTimer(timerId: string, op: TimerOp, seconds = 0): void {

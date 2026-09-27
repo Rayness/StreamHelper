@@ -81,6 +81,7 @@ export function defaultAlerts(lang: Language): AlertSettings {
     gapSec: 1,
     style: { fontFamily: 'Montserrat', fontSize: 40, textColor: '#ffffff', accentColor: '#9b6bff', layout: 'stacked' },
     types,
+    donationTiers: [],
   };
 }
 
@@ -233,6 +234,11 @@ export function defaultGoal(lang: Language): Goal {
     currency: 'RUB',
     barColor: '#9b6bff',
     textColor: '#ffffff',
+    donationMinAmount: 0,
+    donationMaxAmount: 0,
+    donationSources: ['donationalerts', 'streamlabs', 'streamelements'],
+    showPercent: true,
+    showAmounts: true,
   };
 }
 
@@ -304,7 +310,7 @@ export function defaultBanner(lang: Language): Banner {
 export function defaultAd(lang: Language): AdCampaign {
   return {
     id: uid('ad_'),
-    name: lang === 'ru' ? 'Рекламная кампания' : 'Ad campaign',
+    name: lang === 'ru' ? 'Баннер' : 'Banner',
     enabled: false,
     media: null,
     headline: lang === 'ru' ? 'Партнёр эфира' : 'Stream partner',
@@ -457,6 +463,7 @@ export function defaultSettings(lang: Language): Settings {
     streamelements: { enabled: false, channelId: '' },
     streamerbot: { enabled: false, port: 7474 },
     discord: { enabled: false, notifyLive: true, notifyOffline: false, notifyDonations: true },
+    subForStream: { enabled: false, port: 5000 },
     obs: { host: '127.0.0.1', port: 4455, autoConnect: true },
     bot: defaultBot(lang),
     alerts: defaultAlerts(lang),
@@ -464,6 +471,8 @@ export function defaultSettings(lang: Language): Settings {
     rewardsOverlay: { maxItems: 5, showInput: true, accentColor: '#9b6bff' },
     collabOverlay: { title: lang === 'ru' ? 'Коллаборация' : 'Collaboration', guests: [], showRaids: true, accentColor: '#9b6bff' },
     musicOverlay: { source: 'auto', style: 'card', showArtwork: true, showAlbum: true, showProgress: true, hideWhenPaused: true, accentColor: '#1db954' },
+    songRequests: { enabled: false, rewardTitle: '', minDonation: 100, autoPlay: true, pauseWindowsMusic: true, resumeWindowsMusic: true, maxQueue: 30 },
+    songQueue: [],
     goals: [defaultGoal(lang)],
     timers: [defaultTimer(lang)],
     actions: defaultActions(lang),
@@ -502,6 +511,7 @@ export function migrateSettings(s: Settings): Settings {
     ...s,
     bot: missing.length ? { ...s.bot, builtins: [...s.bot.builtins, ...missing] } : s.bot,
     ads: s.ads.map((ad) => ({ ...ad, entrance: ad.entrance ?? 'slideUp', entranceMs: ad.entranceMs ?? 550 })),
+    goals: s.goals.map((goal) => ({ ...defaultGoal(s.language), ...goal })),
   };
 }
 
