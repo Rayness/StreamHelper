@@ -9,6 +9,8 @@ import { EventBus } from '../src/main/core/eventBus';
 import { StateHub } from '../src/main/core/state';
 import { SettingsStore } from '../src/main/core/store';
 import { bannerShown } from '../src/main/features/banners';
+import { AdsService } from '../src/main/features/ads';
+import { BossService } from '../src/main/features/boss';
 import { emoteUrls } from '../src/main/features/emotes';
 import { GiveawayService, isEntry, ROLL_MS } from '../src/main/features/giveaway';
 import { leadersOf, parseVote, PollService } from '../src/main/features/poll';
@@ -16,6 +18,10 @@ import { answerVariants, isCorrectAnswer, levenshtein, maskTitle } from '../src/
 import { normalizeText, pickWeighted } from '../src/main/features/stage';
 import { applyEventToStats, resolveStreamVar } from '../src/main/features/vars';
 import { segmentAtPointer, wheelRotation, WheelService } from '../src/main/features/wheel';
+import { OverlayHub } from '../src/main/overlay/hub';
+import type { OverlayServer } from '../src/main/overlay/server';
+import type { ChatHistory } from '../src/main/features/chatHistory';
+import type { HubSources } from '../src/main/overlay/hub';
 
 let seq = 0;
 function msg(text: string, roles: Partial<ChatRoles> = {}, userId = 'u1'): ChatMessage {
@@ -45,6 +51,50 @@ function makeCtx(lang: 'ru' | 'en' = 'en') {
 }
 
 describe('shared helpers', () => {
+  it('adds new advertising and boss defaults without changing saved text banners', () => {
+    const old = defaultSettings('ru') as Partial<ReturnType<typeof defaultSettings>>;
+    const originalBanners = old.banners;
+    delete old.ads;
+    delete old.boss;
+    const upgraded = mergeDefaults(defaultSettings('ru'), old);
+    expect(upgraded.banners).toEqual(originalBanners);
+    expect(upgraded.ads).toHaveLength(1);
+    expect(upgraded.boss.maxHp).toBeGreaterThan(0);
+  });
+
+  it('keeps existing ad campaigns and gives them the original entrance effect', () => {
+    const old = defaultSettings('ru');
+    const campaign = { ...old.ads[0], headline: 'Старый партнёр' } as Record<string, unknown>;
+    delete campaign.entrance;
+    delete campaign.entranceMs;
+    old.ads = [campaign as unknown as typeof old.ads[number]];
+    const upgraded = migrateSettings(mergeDefaults(defaultSettings('ru'), old));
+    expect(upgraded.ads[0]).toMatchObject({ headline: 'Старый партнёр', entrance: 'slideUp', entranceMs: 550 });
+  });
+
+  it('adds chat appearance options without replacing an existing chat theme', () => {
+    const old = defaultSettings('ru');
+    const chat = old.chatOverlay as unknown as Record<string, unknown>;
+    chat.background = 'rgba(12,24,48,.8)';
+    delete chat.backgroundStyle;
+    delete chat.enterAnimation;
+    delete chat.showTimestamp;
+    const upgraded = mergeDefaults(defaultSettings('ru'), old);
+    expect(upgraded.chatOverlay).toMatchObject({
+      background: 'rgba(12,24,48,.8)', backgroundStyle: 'card', enterAnimation: 'slideUp', showTimestamp: false,
+    });
+  });
+
+  it('keeps old settings while adding reward and collaboration overlays', () => {
+    const old = defaultSettings('ru') as unknown as Record<string, unknown>;
+    delete old.rewardsOverlay;
+    delete old.collabOverlay;
+    const upgraded = mergeDefaults(defaultSettings('ru'), old);
+    expect(upgraded.chatOverlay.backgroundStyle).toBe('card');
+    expect(upgraded.rewardsOverlay.maxItems).toBe(5);
+    expect(upgraded.collabOverlay.guests).toEqual([]);
+  });
+
   it('picks by weight and never picks zero-weight items', () => {
     const items = [{ w: 0 }, { w: 1 }, { w: 3 }];
     expect(pickWeighted(items, (i) => i.w, () => 0)).toBe(1);
@@ -55,6 +105,64 @@ describe('shared helpers', () => {
 
   it('normalizes text for comparisons', () => {
     expect(normalizeText('  Ёжик, в ТУМАНЕ!! ')).toBe('ежик в тумане');
+  });
+});
+
+describe('reward and collaboration overlay events', () => {
+  it('routes only matching Twitch events and gives new sources their current state', () => {
+    const { ctx, bus, settings } = makeCtx();
+    const sent: { kind: string; message: OverlayMessage }[] = [];
+    const server = { broadcast: (kind: string, message: OverlayMessage) => sent.push({ kind, message }), forEachClient: vi.fn() } as unknown as OverlayServer;
+    const reward: StreamEvent = { id: 'reward-1', source: 'twitch', timestamp: 1, userName: 'Viewer', type: 'redemption', rewardTitle: 'Choose scene', cost: 500, input: 'BRB' };
+    const raid: StreamEvent = { id: 'raid-1', source: 'twitch', timestamp: 2, userName: 'Guest', type: 'raid', viewers: 42 };
+    const history = [raid, reward];
+    const sources = { alerts: () => ({ recentEvents: history }) } as unknown as HubSources;
+    const chat = { recent: () => [] } as unknown as ChatHistory;
+    const hub = new OverlayHub(ctx, server, chat, sources);
+    expect(hub.initialMessages('rewards', null)[0]).toMatchObject({ type: 'rewards', events: [reward], config: settings.get('rewardsOverlay') });
+    expect(hub.initialMessages('collab', null)[0]).toMatchObject({ type: 'collab', raids: [raid], config: settings.get('collabOverlay') });
+    bus.emit('event', reward);
+    bus.emit('event', raid);
+    expect(sent.filter((item) => item.kind === 'rewards')).toEqual([{ kind: 'rewards', message: { type: 'reward', event: reward } }]);
+    expect(sent.filter((item) => item.kind === 'collab')).toEqual([{ kind: 'collab', message: { type: 'collabRaid', event: raid } }]);
+  });
+});
+
+describe('new interactive and advertising services', () => {
+  beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(new Date('2026-01-01T00:00:00Z')); });
+  afterEach(() => vi.useRealTimers());
+
+  it('applies a personal chat cooldown and ends the boss fight exactly at zero HP', () => {
+    const { ctx, bus, settings, state, deps } = makeCtx();
+    settings.set('boss', { ...settings.get('boss'), maxHp: 30, damage: 10, cooldownSec: 30, command: 'hit', redemptionTitle: 'Strike', announce: false });
+    const boss = new BossService(ctx, deps);
+    boss.start();
+    bus.emit('chat:message', msg('!hit', {}, 'a'));
+    bus.emit('chat:message', msg('!hit', {}, 'a'));
+    expect(state.current.boss).toMatchObject({ status: 'running', hp: 20, hits: 1 });
+    bus.emit('chat:message', msg('!hit', {}, 'b'));
+    bus.emit('event', { id: 'reward1', source: 'twitch', timestamp: Date.now(), userName: 'Alice', type: 'redemption', rewardTitle: 'Strike', cost: 100, input: '' });
+    expect(state.current.boss).toMatchObject({ status: 'defeated', hp: 0, hits: 3 });
+    expect(state.current.boss.top).toHaveLength(3);
+    boss.dispose();
+  });
+
+  it('schedules a graphic ad only while live and lets a manual showing override that schedule', () => {
+    const { ctx, settings, state, deps } = makeCtx();
+    const campaign = { ...settings.get('ads')[0], media: 'sponsor.png', enabled: true, everyMin: 1, durationSec: 5, onlyWhenLive: true };
+    settings.set('ads', [campaign]);
+    const ads = new AdsService(ctx, deps);
+    ads.tick();
+    vi.advanceTimersByTime(60_000);
+    ads.tick();
+    expect(state.current.ad.activeId).toBeNull();
+    ads.show(campaign.id);
+    expect(state.current.ad.activeId).toBe(campaign.id);
+    expect(ads.overlayMessage()).toMatchObject({ type: 'ad', campaign: { media: '/media/sponsor.png' } });
+    vi.advanceTimersByTime(5000);
+    ads.tick();
+    expect(state.current.ad.activeId).toBeNull();
+    ads.stop();
   });
 });
 

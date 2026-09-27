@@ -67,6 +67,7 @@ export function EventFeed({ limit = 100 }: { limit?: number }) {
                 <b>{e.userName}</b> <span>{describeEvent(t, e)}</span>
                 {e.source === 'test' && <span className="pill">{t('feed.test')}</span>}
                 {(e.source === 'donationalerts' || e.source === 'streamlabs') && <span className="pill">{e.source === 'donationalerts' ? 'DA' : 'SL'}</span>}
+                {e.source === 'streamelements' && <span className="pill">SE</span>}
               </div>
               {msg && <div className="feed-msg">{msg}</div>}
             </div>

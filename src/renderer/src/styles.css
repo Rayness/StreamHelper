@@ -241,6 +241,10 @@ p {
 
 .content {
   overflow: auto;
+  /* Form sections can grow and shrink while editing. Keep Chromium's scroll
+     anchoring from moving the whole page to compensate for those changes. */
+  overflow-anchor: none;
+  scrollbar-gutter: stable;
   min-width: 0;
   min-height: 0;
 }

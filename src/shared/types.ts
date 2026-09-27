@@ -1,7 +1,7 @@
 // Contracts shared by the main process, the renderer UI and (as plain JSON) the overlays.
 
 export type Platform = 'twitch' | 'youtube' | 'vkplay' | 'kick';
-export type DonationSource = 'donationalerts' | 'streamlabs';
+export type DonationSource = 'donationalerts' | 'streamlabs' | 'streamelements';
 export type EventSource = Platform | DonationSource | 'test';
 export type Language = 'ru' | 'en';
 
@@ -156,6 +156,9 @@ export interface RuntimeState {
   twitchBot: ConnectionState & { deviceCode?: DeviceCodePrompt };
   donationalerts: ConnectionState;
   streamlabs: ConnectionState;
+  streamelements: ConnectionState;
+  streamerbot: ConnectionState & { actions: { id: string; name: string }[] };
+  discord: ConnectionState;
   obs: ObsState;
   stream: StreamInfo;
   alerts: { paused: boolean; queueLength: number; current: string | null };
@@ -167,6 +170,11 @@ export interface RuntimeState {
   poll: PollState | null;
   giveaway: GiveawayState;
   quiz: QuizState;
+  boss: BossState;
+  ad: { activeId: string | null; endsAt: number | null };
+  spotlight: ChatMessage | null;
+  update: UpdateState;
+  dockUrl: string;
   /** Banners currently on screen (manual toggle or schedule). */
   bannersShown: string[];
 }
@@ -269,6 +277,10 @@ export interface AlertSettings {
   types: Record<AlertType, AlertVariant>;
 }
 
+export type ChatBackgroundStyle = 'card' | 'glass' | 'gradient' | 'outline' | 'neon' | 'stripe' | 'bubble' | 'none';
+export type ChatEnterAnimation = 'none' | 'fade' | 'slideUp' | 'slideSide' | 'zoom' | 'bounce' | 'blur' | 'drop' | 'swing' | 'glitch';
+export type ChatExitAnimation = 'none' | 'fade' | 'slideSide' | 'slideUp' | 'shrink' | 'blur' | 'pop' | 'glitch';
+
 export interface ChatOverlaySettings {
   fontFamily: string;
   fontSize: number;
@@ -281,6 +293,24 @@ export interface ChatOverlaySettings {
   direction: 'up' | 'down';
   background: string;
   textColor: string;
+  accentColor: string;
+  backgroundStyle: ChatBackgroundStyle;
+  backgroundMedia: string | null;
+  backgroundMediaOpacity: number;
+  shadow: boolean;
+  borderRadius: number;
+  paddingX: number;
+  paddingY: number;
+  gap: number;
+  align: 'left' | 'right';
+  messageWidth: number;
+  enterAnimation: ChatEnterAnimation;
+  exitAnimation: ChatExitAnimation;
+  enterMs: number;
+  exitMs: number;
+  showTimestamp: boolean;
+  showReply: boolean;
+  nameColor: 'user' | 'accent' | 'text';
 }
 
 export type GoalKind = 'followers' | 'subs' | 'bits' | 'donations' | 'manual';
@@ -332,6 +362,7 @@ export type ActionStep =
   | { type: 'wheelSpin'; wheelId: string }
   | { type: 'bannerToggle'; bannerId: string }
   | { type: 'emoteBurst' }
+  | { type: 'streamerbotAction'; actionId: string }
   | { type: 'wait'; ms: number };
 
 export interface QuickAction {
@@ -377,6 +408,66 @@ export interface Banner {
   background: string;
   accentColor: string;
   align: 'left' | 'center' | 'right';
+}
+
+/** Graphic/video advertising, independent of the existing text banners. */
+export type AdEntrance = 'fade' | 'slideUp' | 'slideDown' | 'slideSide' | 'zoom' | 'bounce' | 'flip' | 'blur' | 'wipe' | 'glitch' | 'rotate' | 'drop' | 'pulse' | 'curtain';
+
+export interface RewardOverlaySettings {
+  maxItems: number;
+  showInput: boolean;
+  accentColor: string;
+}
+
+export interface CollabOverlaySettings {
+  title: string;
+  guests: string[];
+  showRaids: boolean;
+  accentColor: string;
+}
+
+export interface AdCampaign {
+  id: string;
+  name: string;
+  enabled: boolean;
+  media: string | null;
+  headline: string;
+  caption: string;
+  accentColor: string;
+  position: 'bottomLeft' | 'bottomRight' | 'topLeft' | 'topRight';
+  entrance: AdEntrance;
+  entranceMs: number;
+  width: number;
+  durationSec: number;
+  everyMin: number;
+  onlyWhenLive: boolean;
+}
+
+export interface BossSettings {
+  name: string;
+  maxHp: number;
+  damage: number;
+  cooldownSec: number;
+  command: string;
+  redemptionTitle: string;
+  accentColor: string;
+  announce: boolean;
+}
+
+export interface BossState {
+  status: 'idle' | 'running' | 'defeated';
+  hp: number;
+  maxHp: number;
+  hits: number;
+  lastHit: { user: string; damage: number } | null;
+  top: { user: string; damage: number }[];
+}
+
+export interface UpdateState {
+  status: 'idle' | 'checking' | 'available' | 'downloading' | 'ready' | 'upToDate' | 'error' | 'unsupported';
+  version: string | null;
+  progress: number;
+  error: string | null;
 }
 
 export interface Label {
@@ -600,14 +691,20 @@ export interface Settings {
   twitch: { clientId: string };
   donationalerts: { clientId: string; enabled: boolean };
   streamlabs: { enabled: boolean };
+  streamelements: { enabled: boolean; channelId: string };
+  streamerbot: { enabled: boolean; port: number };
+  discord: { enabled: boolean; notifyLive: boolean; notifyOffline: boolean; notifyDonations: boolean };
   obs: { host: string; port: number; autoConnect: boolean };
   bot: BotSettings;
   alerts: AlertSettings;
   chatOverlay: ChatOverlaySettings;
+  rewardsOverlay: RewardOverlaySettings;
+  collabOverlay: CollabOverlaySettings;
   goals: Goal[];
   timers: OverlayTimer[];
   actions: QuickAction[];
   banners: Banner[];
+  ads: AdCampaign[];
   labels: Label[];
   stats: StreamStats;
   emoteRain: EmoteRainSettings;
@@ -615,6 +712,7 @@ export interface Settings {
   poll: PollSettings;
   giveaway: GiveawaySettings;
   quiz: QuizSettings;
+  boss: BossSettings;
   kawaki: KawakiSettings;
   /** Main currency for donation totals (goals, subathon). */
   currency: string;
@@ -625,7 +723,7 @@ export type SettingsKey = keyof Settings;
 
 // ---------- Overlay wire protocol ----------
 
-export type OverlayKind = 'chat' | 'alerts' | 'goal' | 'timer' | 'events' | 'banner' | 'label' | 'emotes' | 'wheel' | 'poll' | 'giveaway' | 'kawaki' | 'quiz';
+export type OverlayKind = 'chat' | 'alerts' | 'goal' | 'timer' | 'events' | 'rewards' | 'collab' | 'banner' | 'ad' | 'label' | 'emotes' | 'wheel' | 'poll' | 'giveaway' | 'kawaki' | 'quiz' | 'boss' | 'live' | 'spotlight';
 
 export interface RenderedBanner extends Omit<Banner, 'slides'> {
   slides: { id: string; text: string; image: string | null }[];
@@ -668,7 +766,15 @@ export type OverlayMessage =
   | { type: 'timer'; timer: OverlayTimer | null; now: number }
   | { type: 'event'; event: StreamEvent }
   | { type: 'events'; events: StreamEvent[] }
+  | { type: 'rewards'; events: StreamEventOf<'redemption'>[]; config: RewardOverlaySettings }
+  | { type: 'reward'; event: StreamEventOf<'redemption'> }
+  | { type: 'collab'; config: CollabOverlaySettings; raids: StreamEventOf<'raid'>[]; lang: Language }
+  | { type: 'collabRaid'; event: StreamEventOf<'raid'> }
   | { type: 'banner'; banner: RenderedBanner | null }
+  | { type: 'ad'; campaign: AdCampaign | null; endsAt: number | null }
+  | { type: 'boss'; boss: BossState; style: BossSettings; lang: Language }
+  | { type: 'live'; stream: StreamInfo; lang: Language }
+  | { type: 'spotlight'; message: ChatMessage | null }
   | { type: 'label'; label: (Label & { text: string }) | null }
   | { type: 'emoteConfig'; config: EmoteRainSettings }
   | { type: 'emotes'; urls: string[]; burst?: boolean }
@@ -708,6 +814,14 @@ export interface IpcInvoke {
   'da:logout': () => void;
   'streamlabs:connect': (token: string) => void;
   'streamlabs:disconnect': () => void;
+  'streamelements:connect': (channelId: string, token: string) => void;
+  'streamelements:disconnect': () => void;
+  'streamerbot:connect': (port: number) => void;
+  'streamerbot:disconnect': () => void;
+  'streamerbot:refresh': () => void;
+  'discord:connect': (url: string) => void;
+  'discord:disconnect': () => void;
+  'discord:test': () => void;
   'obs:connect': (password?: string) => void;
   'obs:disconnect': () => void;
   'obs:setScene': (scene: string) => void;
@@ -735,6 +849,15 @@ export interface IpcInvoke {
   'quiz:start': () => void;
   'quiz:skip': () => void;
   'quiz:stop': () => void;
+  'boss:start': () => void;
+  'boss:reset': () => void;
+  'boss:hit': () => void;
+  'ad:show': (campaignId: string) => void;
+  'ad:hide': () => void;
+  'spotlight:show': (messageId: string) => void;
+  'spotlight:clear': () => void;
+  'update:check': () => void;
+  'update:install': () => void;
   'kawaki:login': () => void;
   'kawaki:logout': () => void;
   'kawaki:cancelLogin': () => void;

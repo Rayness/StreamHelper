@@ -19,6 +19,9 @@ export interface HubSources {
   poll: () => OverlayMessage;
   giveaway: () => OverlayMessage;
   quiz: () => OverlayMessage;
+  boss: () => OverlayMessage;
+  ad: (id?: string | null) => OverlayMessage;
+  spotlight: () => OverlayMessage;
 }
 
 /** Wires bus events and settings changes to connected overlays. */
@@ -36,15 +39,27 @@ export class OverlayHub {
     bus.on('chat:delete', ({ id }) => server.broadcast('chat', { type: 'chatDelete', id }));
     bus.on('chat:clearUser', ({ userId }) => server.broadcast('chat', { type: 'chatClearUser', userId }));
     bus.on('chat:clear', () => server.broadcast('chat', { type: 'chatClear' }));
-    bus.on('event', (event) => server.broadcast('events', { type: 'event', event }));
+    bus.on('event', (event) => {
+      server.broadcast('events', { type: 'event', event });
+      if (event.type === 'redemption') server.broadcast('rewards', { type: 'reward', event });
+      if (event.type === 'raid') server.broadcast('collab', { type: 'collabRaid', event });
+    });
+    bus.on('stream:update', (stream) => server.broadcast('live', { type: 'live', stream, lang: this.settings.language }));
     bus.on('kawaki:now', () => server.broadcast('kawaki', this.kawakiMessage()));
     bus.on('settings:changed', (key) => {
       if (key === 'chatOverlay') server.broadcast('chat', { type: 'chatConfig', config: this.settings.chatOverlay });
+      if (key === 'rewardsOverlay') server.broadcast('rewards', this.rewardsMessage());
+      if (key === 'collabOverlay') server.broadcast('collab', this.collabMessage());
       if (key === 'goals') server.forEachClient('goal', (id) => this.goalMessage(id));
       if (key === 'timers') server.forEachClient('timer', (id) => this.timerMessage(id));
       if (key === 'wheels') server.forEachClient('wheel', (id) => this.wheelMessage(id));
       if (key === 'emoteRain') server.broadcast('emotes', { type: 'emoteConfig', config: this.settings.emoteRain });
       if (key === 'kawaki') server.broadcast('kawaki', this.kawakiMessage());
+      if (key === 'ads') server.forEachClient('ad', (id) => this.sources.ad(id));
+      if (key === 'language') {
+        server.broadcast('live', { type: 'live', stream: this.ctx.state.current.stream, lang: this.settings.language });
+        server.broadcast('collab', this.collabMessage());
+      }
     });
   }
 
@@ -74,6 +89,23 @@ export class OverlayHub {
     return { type: 'kawaki', now: this.ctx.state.current.kawaki.nowWatching, style: this.settings.kawaki, lang: this.settings.language };
   }
 
+  private rewardsMessage(): OverlayMessage {
+    return {
+      type: 'rewards',
+      config: this.settings.rewardsOverlay,
+      events: this.sources.alerts().recentEvents.filter((event) => event.type === 'redemption').slice(0, 20),
+    };
+  }
+
+  private collabMessage(): OverlayMessage {
+    return {
+      type: 'collab',
+      config: this.settings.collabOverlay,
+      raids: this.sources.alerts().recentEvents.filter((event) => event.type === 'raid').slice(0, 5),
+      lang: this.settings.language,
+    };
+  }
+
   initialMessages(kind: OverlayKind, id: string | null): OverlayMessage[] {
     switch (kind) {
       case 'chat': {
@@ -90,6 +122,10 @@ export class OverlayHub {
         return [this.timerMessage(id)];
       case 'events':
         return [{ type: 'events', events: this.sources.alerts().recentEvents.slice(0, 20) }];
+      case 'rewards':
+        return [this.rewardsMessage()];
+      case 'collab':
+        return [this.collabMessage()];
       case 'alerts':
         return [];
       case 'banner':
@@ -105,6 +141,14 @@ export class OverlayHub {
         return [this.sources.giveaway()];
       case 'quiz':
         return [this.sources.quiz()];
+      case 'boss':
+        return [this.sources.boss()];
+      case 'ad':
+        return [this.sources.ad(id)];
+      case 'spotlight':
+        return [this.sources.spotlight()];
+      case 'live':
+        return [{ type: 'live', stream: this.ctx.state.current.stream, lang: this.settings.language }];
       case 'kawaki':
         return [this.kawakiMessage()];
     }

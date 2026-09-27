@@ -63,6 +63,7 @@ const Message = memo(function Message({ m, canModerate, onReply }: { m: ChatMess
       {!m.deleted && (
         <span className="chat-actions">
           <IconButton icon="replay" label={t('chat.reply')} onClick={() => onReply(m)} />
+          <IconButton icon="eye" label={t('spotlight.show')} onClick={() => void call('spotlight:show', m.id)} />
           {canModerate && !m.roles.broadcaster && (
             <>
               <IconButton icon="trash" label={t('chat.delete')} onClick={() => void call('chat:delete', m.id)} />
@@ -80,6 +81,7 @@ export function ChatView() {
   const t = useT();
   const chat = useApp((d) => d.chat);
   const connected = useApp((d) => d.state?.twitch.status === 'connected');
+  const spotlight = useApp((d) => d.state?.spotlight);
   const listRef = useRef<HTMLDivElement>(null);
   const [stick, setStick] = useState(true);
   const [text, setText] = useState('');
@@ -128,6 +130,7 @@ export function ChatView() {
           {t('chat.jump')}
         </button>
       )}
+      {spotlight && <div className="chat-replying"><span>{t('spotlight.active')}: <b>{spotlight.userName}</b> — {spotlight.text}</span><IconButton icon="x" label={t('spotlight.clear')} onClick={() => void call('spotlight:clear')} /></div>}
       {replyTo && (
         <div className="chat-replying">
           <span>

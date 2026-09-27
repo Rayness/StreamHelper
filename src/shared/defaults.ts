@@ -2,7 +2,9 @@ import type {
   AlertSettings,
   AlertType,
   AlertVariant,
+  AdCampaign,
   Banner,
+  BossSettings,
   BotSettings,
   BuiltinCommand,
   ChatOverlaySettings,
@@ -200,6 +202,24 @@ export function defaultChatOverlay(): ChatOverlaySettings {
     direction: 'up',
     background: 'rgba(0,0,0,0.35)',
     textColor: '#ffffff',
+    accentColor: '#9b6bff',
+    backgroundStyle: 'card',
+    backgroundMedia: null,
+    backgroundMediaOpacity: 35,
+    shadow: false,
+    borderRadius: 10,
+    paddingX: 10,
+    paddingY: 6,
+    gap: 6,
+    align: 'left',
+    messageWidth: 100,
+    enterAnimation: 'slideUp',
+    exitAnimation: 'slideSide',
+    enterMs: 250,
+    exitMs: 600,
+    showTimestamp: false,
+    showReply: false,
+    nameColor: 'user',
   };
 }
 
@@ -278,6 +298,38 @@ export function defaultBanner(lang: Language): Banner {
     background: 'rgba(12,12,18,0.78)',
     accentColor: '#9b6bff',
     align: 'left',
+  };
+}
+
+export function defaultAd(lang: Language): AdCampaign {
+  return {
+    id: uid('ad_'),
+    name: lang === 'ru' ? 'Рекламная кампания' : 'Ad campaign',
+    enabled: false,
+    media: null,
+    headline: lang === 'ru' ? 'Партнёр эфира' : 'Stream partner',
+    caption: '',
+    accentColor: '#9b6bff',
+    position: 'bottomRight',
+    entrance: 'slideUp',
+    entranceMs: 550,
+    width: 700,
+    durationSec: 15,
+    everyMin: 0,
+    onlyWhenLive: true,
+  };
+}
+
+export function defaultBoss(lang: Language): BossSettings {
+  return {
+    name: lang === 'ru' ? 'Босс чата' : 'Chat boss',
+    maxHp: 1000,
+    damage: 10,
+    cooldownSec: 10,
+    command: lang === 'ru' ? 'удар' : 'hit',
+    redemptionTitle: '',
+    accentColor: '#ff5d8f',
+    announce: true,
   };
 }
 
@@ -402,14 +454,20 @@ export function defaultSettings(lang: Language): Settings {
     twitch: { clientId: '' },
     donationalerts: { clientId: DEFAULT_DA_CLIENT_ID, enabled: false },
     streamlabs: { enabled: false },
+    streamelements: { enabled: false, channelId: '' },
+    streamerbot: { enabled: false, port: 7474 },
+    discord: { enabled: false, notifyLive: true, notifyOffline: false, notifyDonations: true },
     obs: { host: '127.0.0.1', port: 4455, autoConnect: true },
     bot: defaultBot(lang),
     alerts: defaultAlerts(lang),
     chatOverlay: defaultChatOverlay(),
+    rewardsOverlay: { maxItems: 5, showInput: true, accentColor: '#9b6bff' },
+    collabOverlay: { title: lang === 'ru' ? 'Коллаборация' : 'Collaboration', guests: [], showRaids: true, accentColor: '#9b6bff' },
     goals: [defaultGoal(lang)],
     timers: [defaultTimer(lang)],
     actions: defaultActions(lang),
     banners: [defaultBanner(lang)],
+    ads: [defaultAd(lang)],
     labels: [
       defaultLabel(lang),
       defaultLabel(lang, lang === 'ru' ? 'Топ донат: {topdonor} — {topdonation}' : 'Top donation: {topdonor} — {topdonation}', lang === 'ru' ? 'Топ донат' : 'Top donation'),
@@ -420,6 +478,7 @@ export function defaultSettings(lang: Language): Settings {
     poll: defaultPoll(lang),
     giveaway: defaultGiveaway(lang),
     quiz: defaultQuiz(),
+    boss: defaultBoss(lang),
     kawaki: defaultKawaki(lang),
     currency: lang === 'ru' ? 'RUB' : 'USD',
     minimizeToTray: true,
@@ -438,8 +497,11 @@ export function twitchClientId(configured: string): string {
 export function migrateSettings(s: Settings): Settings {
   const known = new Set(s.bot.builtins.map((b) => b.id));
   const missing = defaultBuiltins(s.language).filter((b) => !known.has(b.id));
-  if (missing.length === 0) return s;
-  return { ...s, bot: { ...s.bot, builtins: [...s.bot.builtins, ...missing] } };
+  return {
+    ...s,
+    bot: missing.length ? { ...s.bot, builtins: [...s.bot.builtins, ...missing] } : s.bot,
+    ads: s.ads.map((ad) => ({ ...ad, entrance: ad.entrance ?? 'slideUp', entranceMs: ad.entranceMs ?? 550 })),
+  };
 }
 
 /** Fill missing keys (new settings added in later versions) without touching user values. */

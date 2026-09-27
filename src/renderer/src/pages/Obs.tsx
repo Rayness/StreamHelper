@@ -10,6 +10,7 @@ export function Obs() {
   const t = useT();
   const obs = useApp((d) => d.state!.obs);
   const connected = obs.status === 'connected';
+  const dockUrl = useApp((d) => d.state!.dockUrl);
   return (
     <div className="page">
       <PageHeader
@@ -84,6 +85,14 @@ export function Obs() {
           </Card>
         </div>
       )}
+      <Card title={t('obs.dock')}>
+        <p className="muted small">{t('obs.dockHint')}</p>
+        <div className="row-gap wrap">
+          <input className="input mono" value={dockUrl} readOnly aria-label={t('obs.dock')} />
+          <Button disabled={!dockUrl} onClick={() => void call('clipboard:write', dockUrl)}>{t('common.copy')}</Button>
+          <Button disabled={!dockUrl} onClick={() => void call('shell:openExternal', dockUrl)}>{t('overlays.open')}</Button>
+        </div>
+      </Card>
       <Actions />
     </div>
   );
@@ -105,6 +114,7 @@ const STEP_TYPES: ActionStep['type'][] = [
   'wheelSpin',
   'bannerToggle',
   'emoteBurst',
+  'streamerbotAction',
   'wait',
 ];
 
@@ -135,6 +145,8 @@ function newStep(type: ActionStep['type']): ActionStep {
       return { type, wheelId: '' };
     case 'bannerToggle':
       return { type, bannerId: '' };
+    case 'streamerbotAction':
+      return { type, actionId: '' };
     default:
       return { type } as ActionStep;
   }
@@ -147,6 +159,7 @@ function StepEditor({ step, onChange, t }: { step: ActionStep; onChange: (s: Act
   const counters = useApp((d) => d.settings!.bot.counters);
   const wheels = useApp((d) => d.settings!.wheels);
   const banners = useApp((d) => d.settings!.banners);
+  const streamerbotActions = useApp((d) => d.state!.streamerbot.actions);
   const withCurrent = (list: string[], v: string) => (v && !list.includes(v) ? [v, ...list] : list);
   const opts = (list: string[], v: string, placeholder: string) => [{ value: '', label: placeholder }, ...withCurrent(list, v).map((x) => ({ value: x, label: x }))];
   const modes = (['toggle', 'start', 'stop'] as const).map((m) => ({ value: m, label: t(`stepMode.${m}`) }));
@@ -204,6 +217,8 @@ function StepEditor({ step, onChange, t }: { step: ActionStep; onChange: (s: Act
       return (
         <Select value={step.bannerId} onChange={(bannerId) => onChange({ ...step, bannerId })} options={[{ value: '', label: t('step.pickBanner') }, ...banners.map((b) => ({ value: b.id, label: b.name }))]} />
       );
+    case 'streamerbotAction':
+      return <Select value={step.actionId} onChange={(actionId) => onChange({ ...step, actionId })} options={[{ value: '', label: t('integration.pickSbAction') }, ...streamerbotActions.map((a) => ({ value: a.id, label: a.name }))]} />;
     default:
       return null;
   }

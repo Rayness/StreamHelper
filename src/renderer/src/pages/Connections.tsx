@@ -4,7 +4,7 @@ import type { ConnectionState, DeviceCodePrompt } from '@shared/types';
 import { Button, Card, CopyField, Field, NumberInput, PageHeader, StatusText, TextInput, Toggle } from '../components/ui';
 import { useNow } from '../hooks';
 import { useT } from '../i18n';
-import { call, saveSettings, useApp } from '../store';
+import { call, callOk, saveSettings, useApp } from '../store';
 
 function Account({ state }: { state: ConnectionState }) {
   if (!state.account) return null;
@@ -163,6 +163,82 @@ function StreamlabsCard() {
   );
 }
 
+function StreamElementsCard() {
+  const t = useT();
+  const state = useApp((d) => d.state!.streamelements);
+  const enabled = useApp((d) => d.settings!.streamelements.enabled);
+  const [channelId, setChannelId] = useState('');
+  const [token, setToken] = useState('');
+  return (
+    <Card className="conn-card" title={<span className="conn-title">StreamElements</span>} actions={<StatusText status={state.status} error={state.error} />}>
+      <p className="muted small">{t('integration.seHint')}</p>
+      {enabled ? (
+        <Button icon="logout" onClick={() => void call('streamelements:disconnect')}>{t('common.disconnect')}</Button>
+      ) : (
+        <div className="form compact">
+          <Field label={t('integration.channelId')}><TextInput value={channelId} onChange={setChannelId} mono /></Field>
+          <Field label="JWT"><TextInput type="password" value={token} onChange={setToken} mono /></Field>
+          <Button variant="primary" icon="plug" disabled={!/^[a-f\d]{24}$/i.test(channelId.trim()) || token.trim().length < 20} onClick={async () => {
+            if (await callOk('streamelements:connect', channelId, token)) setToken('');
+          }}>{t('common.connect')}</Button>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function StreamerBotCard() {
+  const t = useT();
+  const state = useApp((d) => d.state!.streamerbot);
+  const saved = useApp((d) => d.settings!.streamerbot);
+  const [port, setPort] = useState(saved.port);
+  return (
+    <Card className="conn-card" title={<span className="conn-title">Streamer.bot</span>} actions={<StatusText status={state.status} error={state.error} />}>
+      <p className="muted small">{t('integration.sbHint')}</p>
+      <div className="form compact">
+        <Field label={t('conn.port')}><NumberInput value={port} min={1} max={65535} onChange={setPort} /></Field>
+        <div className="row-gap">
+          <Button variant="primary" icon="plug" onClick={() => void call('streamerbot:connect', port)}>{saved.enabled ? t('conn.reconnect') : t('common.connect')}</Button>
+          {saved.enabled && <Button icon="logout" onClick={() => void call('streamerbot:disconnect')}>{t('common.disconnect')}</Button>}
+          {saved.enabled && <Button onClick={() => void call('streamerbot:refresh')}>{t('integration.refresh')}</Button>}
+        </div>
+        {state.status === 'connected' && <p className="muted small">{t('integration.sbActions', { count: state.actions.length })}</p>}
+      </div>
+    </Card>
+  );
+}
+
+function DiscordCard() {
+  const t = useT();
+  const state = useApp((d) => d.state!.discord);
+  const config = useApp((d) => d.settings!.discord);
+  const [url, setUrl] = useState('');
+  const setOption = (key: 'notifyLive' | 'notifyOffline' | 'notifyDonations', value: boolean) => saveSettings('discord', { ...config, [key]: value });
+  return (
+    <Card className="conn-card" title={<span className="conn-title">Discord</span>} actions={<StatusText status={state.status} error={state.error} />}>
+      <p className="muted small">{t('integration.discordHint')}</p>
+      {config.enabled ? (
+        <div className="form compact">
+          <Field label={t('integration.notifyLive')}><Toggle checked={config.notifyLive} onChange={(v) => setOption('notifyLive', v)} /></Field>
+          <Field label={t('integration.notifyOffline')}><Toggle checked={config.notifyOffline} onChange={(v) => setOption('notifyOffline', v)} /></Field>
+          <Field label={t('integration.notifyDonations')}><Toggle checked={config.notifyDonations} onChange={(v) => setOption('notifyDonations', v)} /></Field>
+          <div className="row-gap">
+            <Button onClick={() => void call('discord:test')}>{t('integration.test')}</Button>
+            <Button icon="logout" onClick={() => void call('discord:disconnect')}>{t('common.disconnect')}</Button>
+          </div>
+        </div>
+      ) : (
+        <div className="form compact">
+          <Field label="Webhook URL"><TextInput type="password" value={url} onChange={setUrl} mono /></Field>
+          <Button variant="primary" icon="plug" disabled={!url.trim()} onClick={async () => {
+            if (await callOk('discord:connect', url)) setUrl('');
+          }}>{t('common.connect')}</Button>
+        </div>
+      )}
+    </Card>
+  );
+}
+
 function ObsCard() {
   const t = useT();
   const state = useApp((d) => d.state!.obs);
@@ -227,6 +303,9 @@ export function Connections() {
         <TwitchCard account="bot" />
         <DonationAlertsCard />
         <StreamlabsCard />
+        <StreamElementsCard />
+        <StreamerBotCard />
+        <DiscordCard />
         <ObsCard />
       </div>
     </div>

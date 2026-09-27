@@ -6,19 +6,19 @@ import { Icon } from './icons';
 import { Button, IconButton } from './ui';
 
 /** Pick an imported media file (sound / image / video) or import a new one into the app's media folder. */
-export function MediaPicker({ value, onChange, kind }: { value: string | null; onChange: (v: string | null) => void; kind: 'audio' | 'visual' }) {
+export function MediaPicker({ value, onChange, kind }: { value: string | null; onChange: (v: string | null) => void; kind: 'audio' | 'visual' | 'image' }) {
   const t = useT();
   const [files, setFiles] = useState<MediaFile[]>([]);
   useEffect(() => {
     void call('media:list').then((l) => l && setFiles(l));
   }, [value]);
-  const matches = files.filter((f) => (kind === 'audio' ? f.kind === 'audio' : f.kind !== 'audio'));
+  const matches = files.filter((f) => (kind === 'audio' ? f.kind === 'audio' : kind === 'image' ? f.kind === 'image' : f.kind !== 'audio'));
   const current = files.find((f) => f.name === value);
 
   const importFile = async () => {
     const f = await call('media:import');
     if (!f) return;
-    if ((kind === 'audio') !== (f.kind === 'audio')) return;
+    if ((kind === 'audio' && f.kind !== 'audio') || (kind === 'image' && f.kind !== 'image') || (kind === 'visual' && f.kind === 'audio')) return;
     setFiles((prev) => [...prev, f]);
     onChange(f.name);
   };

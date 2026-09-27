@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>StreamHelper — Channel rewards</title>
+  <style>
+    :root { --accent: #9b6bff; }
+    html, body { margin: 0; height: 100%; overflow: hidden; background: transparent; }
+    body { color: #fff; font: 18px/1.35 'Segoe UI', system-ui, sans-serif; }
+    #list { display: flex; flex-direction: column; gap: 9px; padding: 12px; }
+    .reward { padding: 12px 16px; border-radius: 16px; background: #141420e8; border-left: 4px solid var(--accent); box-shadow: 0 9px 25px #0006; animation: appear .45s ease-out; }
+    .top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+    .name { color: var(--accent); font-weight: 800; overflow-wrap: anywhere; }
+    .cost { color: #fff9; font-size: .8em; white-space: nowrap; }
+    .title { font-weight: 700; margin-top: 3px; overflow-wrap: anywhere; }
+    .input { color: #e8e5f1; font-size: .85em; margin-top: 5px; overflow-wrap: anywhere; }
+    @keyframes appear { from { opacity: 0; transform: translateY(14px) scale(.96); } }
+    @media (prefers-reduced-motion: reduce) { .reward { animation: none; } }
+  </style>
+</head>
+<body>
+  <div id="list"></div>
+  <script src="/overlay/assets/common.js"></script>
+  <script>
+    const list = document.getElementById('list');
+    let cfg = { maxItems: 5, showInput: true, accentColor: '#9b6bff' };
+    const seen = new Set();
+    function add(event, prepend = true) {
+      if (seen.has(event.id)) return;
+      seen.add(event.id);
+      const row = SH.el('div', 'reward');
+      row.dataset.id = event.id;
+      const top = SH.el('div', 'top');
+      top.append(SH.el('span', 'name', event.userName), SH.el('span', 'cost', `${event.cost || 0} ✦`));
+      row.append(top, SH.el('div', 'title', event.rewardTitle));
+      if (cfg.showInput && event.input) row.append(SH.el('div', 'input', event.input));
+      if (prepend) list.prepend(row); else list.append(row);
+      trim();
+    }
+    function trim() {
+      const limit = Math.max(1, Math.min(12, Number(cfg.maxItems) || 5));
+      while (list.children.length > limit) {
+        seen.delete(list.lastElementChild.dataset.id);
+        list.lastElementChild.remove();
+      }
+    }
+    SH.connect('rewards', (message) => {
+      if (message.type === 'rewards') {
+        cfg = message.config || cfg;
+        document.documentElement.style.setProperty('--accent', cfg.accentColor || '#9b6bff');
+        list.replaceChildren(); seen.clear();
+        for (const event of message.events || []) add(event, false);
+      } else if (message.type === 'reward') add(message.event);
+    });
+  </script>
+</body>
+</html>

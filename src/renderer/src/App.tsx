@@ -65,6 +65,9 @@ function SideStatus() {
     { label: 'Kawaki', status: s.kawaki.status, show: s.kawaki.status !== 'disconnected' || !!s.kawaki.account, page: 'kawaki' },
     { label: 'DonationAlerts', status: s.donationalerts.status, show: s.donationalerts.status !== 'disconnected' || !!s.donationalerts.account, page: 'connections' },
     { label: 'Streamlabs', status: s.streamlabs.status, show: s.streamlabs.status !== 'disconnected', page: 'connections' },
+    { label: 'StreamElements', status: s.streamelements.status, show: s.streamelements.status !== 'disconnected', page: 'connections' },
+    { label: 'Streamer.bot', status: s.streamerbot.status, show: s.streamerbot.status !== 'disconnected', page: 'connections' },
+    { label: 'Discord', status: s.discord.status, show: s.discord.status !== 'disconnected', page: 'connections' },
   ];
   return (
     <div className="side-status">
@@ -105,7 +108,7 @@ export function App() {
   const page = ALL_PAGES.includes(nav.page) ? nav.page : 'dashboard';
   const live = useApp((d) => d.state!.stream.live);
   const lang = useApp((d) => d.settings!.language);
-  const funLive = useApp((d) => d.state!.poll?.status === 'running' || d.state!.giveaway.status === 'open' || ['question', 'reveal'].includes(d.state!.quiz.status));
+  const funLive = useApp((d) => d.state!.poll?.status === 'running' || d.state!.giveaway.status === 'open' || d.state!.boss.status === 'running' || ['question', 'reveal'].includes(d.state!.quiz.status));
   const [palette, setPalette] = useState(false);
 
   useEffect(() => {

@@ -1,7 +1,7 @@
 {
   "name": "streamhelper",
   "productName": "StreamHelper",
-  "version": "0.2.0",
+  "version": "0.4.2",
   "description": "Всё для стрима в одном приложении: оверлеи для OBS, чат-бот, объединённый чат, алерты донатов и управление трансляцией",
   "main": "./out/main/index.js",
   "author": "StreamHelper",
@@ -16,10 +16,11 @@
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
     "test": "vitest run",
     "test:watch": "vitest",
-    "dist": "electron-vite build && electron-builder --win",
+    "dist": "electron-vite build && electron-builder --win --publish never",
     "postinstall": "electron-builder install-app-deps"
   },
   "dependencies": {
+    "electron-updater": "6.8.9",
     "obs-websocket-js": "5.0.8",
     "socket.io-client-v2": "npm:socket.io-client@2.5.0",
     "ws": "8.21.3"

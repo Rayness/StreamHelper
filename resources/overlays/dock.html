@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>StreamHelper Dock</title>
+    <style>
+      :root{font:14px/1.4 system-ui,sans-serif;color:#f4f3fa;background:#17151f;color-scheme:dark}
+      *{box-sizing:border-box}body{margin:0;padding:14px}header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}h1{font-size:18px;margin:0}h2{font-size:12px;text-transform:uppercase;color:#aaa2bc;margin:16px 0 8px;letter-spacing:.08em}.badge{padding:4px 8px;border-radius:20px;background:#30253e;color:#d9baff}.badge.live{background:#8f2450;color:white}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.card{background:#211e2b;border:1px solid #383342;border-radius:12px;padding:10px;margin:8px 0}.row{display:flex;gap:8px;align-items:center;justify-content:space-between}.muted{color:#aaa2bc}.small{font-size:12px}button{font:inherit;cursor:pointer;border:1px solid #53465f;background:#342e40;color:#f4f3fa;border-radius:8px;padding:8px 10px;min-width:0;overflow:hidden;text-overflow:ellipsis}button:hover{background:#4d405b}button.active{background:#6842ae;border-color:#a675f8}button.danger{background:#82324b;border-color:#ae496b}button:disabled{opacity:.45;cursor:default}.wide{width:100%}.error{color:#ff8396;min-height:1.4em}#actions button{border-left-width:4px}
+    </style>
+  </head>
+  <body>
+    <header><h1>StreamHelper</h1><span id="live" class="badge">OFFLINE</span></header>
+    <div id="error" class="error small"></div>
+    <div class="card"><div class="row"><strong id="title">—</strong><span id="viewers" class="muted">0</span></div><div id="category" class="muted small">—</div></div>
+    <h2 data-ru="Трансляция" data-en="Stream">Трансляция</h2><div class="grid"><button id="stream" data-action="stream">Эфир</button><button id="record" data-action="record">Запись</button></div>
+    <h2 data-ru="Сцены" data-en="Scenes">Сцены</h2><div id="scenes" class="grid"></div>
+    <h2 data-ru="Алерты" data-en="Alerts">Алерты</h2><div class="grid"><button id="pause" data-action="alertsPause">Пауза</button><button data-action="alertsSkip" data-ru="Пропустить" data-en="Skip">Пропустить</button></div>
+    <h2 data-ru="Интерактив" data-en="Interactive">Интерактив</h2><div class="grid"><button data-action="pollStart" data-ru="Начать опрос" data-en="Start poll">Начать опрос</button><button data-action="pollEnd" data-ru="Завершить опрос" data-en="End poll">Завершить опрос</button><button data-action="giveawayOpen" data-ru="Открыть розыгрыш" data-en="Open giveaway">Открыть розыгрыш</button><button data-action="giveawayRoll" data-ru="Выбрать победителя" data-en="Draw winner">Выбрать победителя</button><button data-action="bossStart" data-ru="Начать босса" data-en="Start boss">Начать босса</button><button data-action="bossHit" data-ru="Ударить босса" data-en="Hit boss">Ударить босса</button></div>
+    <div id="game" class="card muted small"></div>
+    <h2 data-ru="Реклама" data-en="Advertising">Реклама</h2><div id="ads" class="grid"></div><button class="wide" data-action="adHide" data-ru="Скрыть рекламу" data-en="Hide ad">Скрыть рекламу</button>
+    <h2 data-ru="Быстрые действия" data-en="Quick actions">Быстрые действия</h2><div id="actions" class="grid"></div>
+    <script>
+      const token=new URLSearchParams(location.search).get('token');
+      const $=(id)=>document.getElementById(id);
+      const labels={ru:{streamOn:'Остановить эфир',streamOff:'Начать эфир',recOn:'Стоп запись',recOff:'Запись',pause:'Продолжить алерты',resume:'Пауза алертов',noObs:'OBS не подключён',show:'Показать'},en:{streamOn:'Stop stream',streamOff:'Start stream',recOn:'Stop recording',recOff:'Record',pause:'Resume alerts',resume:'Pause alerts',noObs:'OBS disconnected',show:'Show'}};
+      let lang='ru';
+      async function action(name,id){try{const r=await fetch('/dock/action',{method:'POST',headers:{'Content-Type':'application/json','X-StreamHelper-Dock-Token':token},body:JSON.stringify({name,id})});if(!r.ok)throw new Error(await r.text());$('error').textContent='';await refresh()}catch(e){$('error').textContent=e.message}}
+      document.querySelectorAll('[data-action]').forEach(b=>b.addEventListener('click',()=>action(b.dataset.action)));
+      function buttons(root,items,make){root.replaceChildren(...items.map(make))}
+      function btn(text,name,id,active,color){const b=document.createElement('button');b.textContent=text;b.className=active?'active':'';if(color)b.style.borderLeftColor=color;b.onclick=()=>action(name,id);return b}
+      async function refresh(){try{const r=await fetch('/dock/state?token='+encodeURIComponent(token),{cache:'no-store'});if(!r.ok)throw new Error('Dock access denied');const d=await r.json();lang=d.language;document.documentElement.lang=lang;document.querySelectorAll('[data-ru]').forEach(e=>e.textContent=e.dataset[lang]);const l=labels[lang];$('live').textContent=d.stream.live?'LIVE':'OFFLINE';$('live').classList.toggle('live',d.stream.live);$('title').textContent=d.stream.title||'—';$('category').textContent=d.stream.categoryName||'—';$('viewers').textContent=String(d.stream.viewers);$('stream').textContent=d.obs.streaming?l.streamOn:l.streamOff;$('record').textContent=d.obs.recording?l.recOn:l.recOff;$('pause').textContent=d.alerts.paused?l.pause:l.resume;$('stream').disabled=$('record').disabled=d.obs.status!=='connected';buttons($('scenes'),d.obs.scenes,s=>btn(s,'scene',s,s===d.obs.currentScene));$('game').textContent=`Poll: ${d.poll?.status||'—'} · Giveaway: ${d.giveaway.status} (${d.giveaway.count}) · Boss: ${d.boss.hp}/${d.boss.maxHp}`;buttons($('ads'),d.ads.filter(a=>a.media),a=>btn(a.name,'adShow',a.id,a.id===d.ad.activeId));buttons($('actions'),d.actions,a=>btn(a.label,'quickAction',a.id,false,a.color));if(d.obs.status!=='connected')$('error').textContent=l.noObs;else if($('error').textContent===l.noObs)$('error').textContent=''}catch(e){$('error').textContent=e.message}}
+      refresh();setInterval(refresh,1500);
+    </script>
+  </body>
+</html>
