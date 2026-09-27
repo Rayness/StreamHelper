@@ -127,6 +127,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/publish-release.ps1
 
 Перед выпуском убедитесь, что `package.json`, версия установщика и `latest.yml` совпадают. Скрипт проверяет наличие установщика и blockmap, а также что репозиторий обновлений публичный. Для регистрации своего Twitch-клиента используйте [Twitch Developer Console](https://dev.twitch.tv/console/apps): тип **Public**, OAuth Redirect URL `http://localhost`; Client ID задаётся в приложении или `DEFAULT_TWITCH_CLIENT_ID` в `src/shared/defaults.ts`. Для DonationAlerts создайте клиент с Redirect URI `http://127.0.0.1:4848/auth/donationalerts` и укажите Client ID. Клиентские секреты для этих потоков авторизации приложению не нужны.
 
+Для следующего официального выпуска предоставьте сертификат подписи кода Windows (`.pfx`/`.p12`) через переменные окружения `WIN_CSC_LINK` и `WIN_CSC_KEY_PASSWORD`; не добавляйте сертификат или пароль в репозиторий. Собирайте установщик с `--config.forceCodeSigning=true`. Скрипт публикации проверяет доверенную Authenticode-подпись и не отправляет неподписанный установщик. Подробности: [документация electron-builder](https://www.electron.build/v26/docs/features/code-signing/).
+
 ### Структура проекта
 
 ```text
