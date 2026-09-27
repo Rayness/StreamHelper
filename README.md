@@ -1,10 +1,32 @@
 # StreamHelper
 
+[Русский](README.md) · [English](README.en.md)
+
 StreamHelper — приложение для Windows, которое собирает управление стримом, чат и источники OBS в одном окне. Текущая версия: **0.4.2**. Интерфейс доступен на русском и английском.
+
+Релизы доступны [в этом репозитории](https://github.com/Rayness/StreamHelper/releases) и в [публичном репозитории обновлений](https://github.com/Rayness/StreamHelper-Releases/releases).
+
+## Скриншоты
+
+На скриншотах — демонстрационные данные, без реальных аккаунтов или токенов.
+
+**Главная панель:** чат, эфир, интерактив и OBS.
+
+![Главная панель StreamHelper](docs/screenshots/dashboard.png)
+
+**Настройки и предпросмотр чат-оверлея:**
+
+![Настройки чат-оверлея](docs/screenshots/chat-settings.png)
+
+**Награды за баллы и коллаб:**
+
+| Награды Twitch | Участники и рейды |
+| --- | --- |
+| ![Награды за баллы](docs/screenshots/rewards-settings.png) | ![Коллаб](docs/screenshots/collab-settings.png) |
 
 ## Скачать и начать работу
 
-1. Скачайте `StreamHelper-Setup-0.4.2.exe` на [странице последнего выпуска](https://github.com/Rayness/StreamHelper-Releases/releases/latest) и установите приложение. Установщик Windows сейчас не подписан сертификатом издателя.
+1. Скачайте `StreamHelper-Setup-0.4.2.exe` на [странице последнего выпуска](https://github.com/Rayness/StreamHelper/releases/latest) или из [публичного зеркала](https://github.com/Rayness/StreamHelper-Releases/releases/latest) и установите приложение. Установщик Windows сейчас не подписан сертификатом издателя.
 2. Откройте **Подключения** и войдите в Twitch как вещатель. Авторизация проходит через код на сайте Twitch. Для отправки сообщений ботом можно отдельно подключить его аккаунт.
 3. Если нужен OBS, включите **WebSocket Server** в OBS Studio и подключите его в StreamHelper на странице **Подключения**. По умолчанию используется порт 4455.
 4. Откройте **Оверлеи**, выберите источник, настройте его и нажмите **Добавить в OBS**. Кнопка создаст Browser Source в текущей сцене. При желании можно скопировать URL и добавить источник вручную.
