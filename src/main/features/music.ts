@@ -99,6 +99,50 @@ export class MusicService {
   private lastPublishAt = 0;
   private unsubscribe: () => void;
 
+  /** Pause the active Windows media session and return its app ID for later resumption. */
+  async pauseCurrent(): Promise<string | null> {
+    if (!this.manager) return null;
+    const scope = this.bindings?.createProjectedLifetimeScope();
+    try {
+      const preferred = this.ctx.state.current.music.track?.source;
+      const sessions = Array.from(this.manager.getSessions() ?? []);
+      const playing = sessions.filter((session) =>
+        session.getPlaybackInfo().playbackStatus === this.bindings?.GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing);
+      const session = playing.find((item) => musicSourceKind(item.sourceAppUserModelId) === preferred) ?? playing[0];
+      return session && await session.tryPauseAsync() ? session.sourceAppUserModelId : null;
+    } catch (error) {
+      console.warn('[music] pause failed', error);
+      return null;
+    } finally {
+      scope?.dispose();
+    }
+  }
+
+  async resumeSource(appId: string): Promise<void> {
+    if (!this.manager) return;
+    const scope = this.bindings?.createProjectedLifetimeScope();
+    try {
+      const session = Array.from(this.manager.getSessions() ?? []).find((item) => item.sourceAppUserModelId === appId);
+      await session?.tryPlayAsync();
+    } finally {
+      scope?.dispose();
+    }
+  }
+
+  async control(source: MusicSourceKind, action: 'play' | 'pause' | 'next'): Promise<void> {
+    if (!this.manager) throw new Error('Windows media sessions are unavailable');
+    const scope = this.bindings?.createProjectedLifetimeScope();
+    try {
+      const session = Array.from(this.manager.getSessions() ?? []).find((item) => musicSourceKind(item.sourceAppUserModelId) === source);
+      if (!session) throw new Error(`No ${source} media session found`);
+      const ok = action === 'play' ? await session.tryPlayAsync() : action === 'pause' ? await session.tryPauseAsync() : await session.trySkipNextAsync();
+      if (!ok) throw new Error(`The ${source} player rejected ${action}`);
+      void this.refresh();
+    } finally {
+      scope?.dispose();
+    }
+  }
+
   constructor(private ctx: AppContext, private bindingsRoot = app.getAppPath()) {
     this.unsubscribe = ctx.bus.on('settings:changed', (key) => {
       if (key === 'musicOverlay') void this.refresh();

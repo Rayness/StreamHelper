@@ -21,6 +21,7 @@ export interface HubSources {
   quiz: () => OverlayMessage;
   boss: () => OverlayMessage;
   ad: (id?: string | null) => OverlayMessage;
+  song: () => OverlayMessage;
   spotlight: () => OverlayMessage;
 }
 
@@ -135,6 +136,8 @@ export class OverlayHub {
         return [this.collabMessage()];
       case 'music':
         return [this.musicMessage()];
+      case 'song':
+        return [this.sources.song()];
       case 'alerts':
         return [];
       case 'banner':

@@ -2,7 +2,7 @@
 
 [Русский](README.md) · [English](README.en.md)
 
-StreamHelper is a Windows desktop app for managing a stream, chat, and OBS browser sources from one place. The latest published release is **0.4.2**; **0.4.3** is in development. The interface supports Russian and English.
+StreamHelper is a Windows desktop app for managing a stream, chat, and OBS browser sources from one place. The latest published release is **0.4.2**; **0.6.0** is in development. The interface supports Russian and English.
 
 Releases are available [in this repository](https://github.com/Rayness/StreamHelper/releases) and in the [public update repository](https://github.com/Rayness/StreamHelper-Releases/releases).
 
@@ -43,10 +43,10 @@ Keep StreamHelper running during the stream. Its local server on `127.0.0.1` ser
 | --- | --- |
 | Dashboard | Stream status, combined chat, replies, moderation, and recent events. |
 | Overlays | Settings, live previews, URLs, and one-click OBS browser sources. |
-| Alerts | Text, sound, media, speech, amount thresholds, and the event queue. |
+| Alerts | Text, sound, media, speech, separate donation styles by amount, and the event queue. |
 | Interactive | Wheel, poll, giveaway, chat boss, and anime quiz. |
 | Chat bot | Custom commands, scheduled messages, counters, and moderation. |
-| OBS & actions | Scenes, recording, stream controls, sources, audio, quick actions, and the OBS dock. |
+| OBS & actions | Scenes, recording, stream controls, sources, audio, quick actions, SubForStream, and the OBS dock. |
 | Connections | Twitch, OBS, donations, Streamer.bot, Discord, and Kawaki. |
 | Settings | Language, local server port, section resets, and updates. |
 
@@ -64,10 +64,11 @@ Each overlay is a separate OBS Browser Source. The **Overlays** page shows its r
 | Channel rewards | Recent Twitch custom reward redemptions with viewer, title, cost, and optional response. |
 | Collab | A manually entered list of co-stream guest channels and incoming raids. |
 | Now Playing | Track, artist, artwork, album, and progress from Windows media sessions. Supports Spotify, the Yandex Music app, and browser players. |
-| Banners | Existing text banners, ticker, and scheduled display. |
-| Advertising | Sponsor images and videos with a separate schedule and 14 entrance effects, including glitch. Text banners remain independent. |
+| Song requests | A YouTube player and queue for channel rewards, donations, and manual requests. |
+| Ticker | Scheduled text, card, or lower third. |
+| Banner | Sponsor images and videos with a separate schedule and 14 entrance effects. |
 | Live status and chat spotlight | Title, category, viewers, uptime, or one selected chat message. |
-| Goals, timers, and labels | Progress, subathon, countdown, stopwatch, and template variables. |
+| Goals, timers, and labels | Donations, followers, subscriptions, new chat message and unique chatter goals, subathon, and template variables. |
 | Interactive sources | Wheel, poll, giveaway, boss, quiz, and emote rain. |
 | Kawaki | Current title, poster, and viewing progress. |
 
@@ -76,6 +77,12 @@ Each overlay is a separate OBS Browser Source. The **Overlays** page shows its r
 **Collaborations:** enter one Twitch guest channel per line. The card updates without reloading OBS. Incoming raids are added when Twitch sends raid events. Shared chat and control of another broadcaster's channel are not connected automatically.
 
 **Music:** open **Overlays → Now Playing** and add the source to OBS. Auto mode selects an active session, preferring Spotify, then the Yandex Music app, then a browser. You can pin a source and adjust the style, accent color, artwork, album, and progress. The card hides on pause by default. StreamHelper reads local Windows media sessions, so no Spotify or Yandex sign-in is needed. Yandex Music in Chrome or Edge appears as “Browser” because Windows does not provide the tab URL. If several tabs in one browser play at once, a specific tab cannot be selected.
+
+**Song requests:** open **Overlays → Song requests**, add its separate OBS Browser Source, and enable viewer requests. Set the exact title of a custom Twitch reward; viewers enter a link to an individual YouTube video. For donations, set a minimum in the main currency; the donation message must contain the link. DonationAlerts, Streamlabs, and StreamElements are supported. The queue survives restarts and can advance automatically or be controlled from the app and OBS dock. StreamHelper can pause the active Windows media session and resume it after the queue. The YouTube video must allow embedding and be reachable from the OBS computer.
+
+**Chat activities:** in **Overlays → Goals**, choose Chat messages or Unique chatters. Bot commands and messages sent by StreamHelper do not count. Each person counts once per goal; resetting the count clears that goal's participant list.
+
+**Donations:** add amount tiers under **Alerts → Donation**. Each tier has its own text, image, sound, and animation; the highest matching threshold applies. Donation goals can filter providers, require a minimum, and cap the contribution from one donation.
 
 ## Connections and automation
 
@@ -89,12 +96,13 @@ Each overlay is a separate OBS Browser Source. The **Overlays** page shows its r
 | Streamer.bot | Enable its HTTP Server and enter the port (usually 7474) under **Connections**. Assign actions to quick buttons, hotkeys, or channel rewards. |
 | Discord | Create a text-channel webhook and paste its URL. You can enable live announcements and donation notifications and send a test message. |
 | Kawaki | Sign in through `kawaki.ru/link` for the now-watching overlay, `!аниме` command, and stream-title template. If player data is unavailable, the most recent title in Watching is used. |
+| SubForStream | Run SubForStream, then enable the integration under **OBS & actions** and set its local port (usually 5000). Add its caption overlay to OBS and clear captions from StreamHelper. |
 
 Twitch is currently the implemented chat platform. The `ChatPlatform` interface allows future YouTube, VK Play Live, and Kick connectors; working connectors for those services are not yet included.
 
 ### OBS dock
 
-In StreamHelper, open **OBS & actions → StreamHelper dock for OBS** and copy the URL. In OBS, choose **View → Docks → Custom Browser Docks**, give the dock a name, and paste the URL. It controls scenes, streaming, recording, alerts, interactive features, advertising, and quick actions. The URL contains a random access key: treat it like a password and replace it in OBS if you change the overlay port.
+In StreamHelper, open **OBS & actions → StreamHelper dock for OBS** and copy the URL. In OBS, choose **View → Docks → Custom Browser Docks**, give the dock a name, and paste the URL. It controls scenes, streaming, recording, alerts, song requests, the ticker, banners, SubForStream, Kawaki, and quick actions. The URL contains a random access key: treat it like a password and replace it in OBS if you change the overlay port.
 
 ## Updates and local data
 
@@ -123,7 +131,7 @@ npm run dev
 npm run typecheck
 npm test
 npm run build
-npx electron-builder --win --publish never --config.directories.output=dist/0.4.3
+npx electron-builder --win --publish never --config.directories.output=dist/0.6.0
 ```
 
 Generated Windows Runtime bindings are included in the repository; a normal build does not need the Windows SDK. To regenerate them on a machine with the Windows SDK, run `npm run generate:winrt`. Building an installer does not publish it. To validate and publish an update release:

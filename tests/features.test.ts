@@ -51,6 +51,29 @@ describe('goals and subathon', () => {
     expect(goalIncrement(g, { ...base, type: 'donation', amount: 5, currency: 'USD', amountMain: 450, message: '' })).toBe(450);
   });
 
+  it('uses the highest matching donation tier', () => {
+    const s = defaultAlerts('en');
+    s.donationTiers = [
+      { id: 'low', minAmount: 100, variant: { ...s.types.donation, title: 'Thanks {user}' } },
+      { id: 'high', minAmount: 500, variant: { ...s.types.donation, title: 'Big thanks {user}' }, style: { ...s.style, accentColor: '#ff0000' } },
+    ];
+    const donation = { ...base, type: 'donation' as const, amount: 600, currency: 'USD', message: '' };
+    expect(renderAlert(donation, s)?.title).toBe('Big thanks Ann');
+    expect(renderAlert(donation, s)?.style.accentColor).toBe('#ff0000');
+    expect(renderAlert({ ...donation, amount: 200 }, s)?.title).toBe('Thanks Ann');
+    expect(renderAlert({ ...donation, amount: 20 }, s)?.title).toBe('Ann donated 20 USD');
+    expect(renderAlert(donation, s, 'RUB')?.title).toBe('Ann donated 600 USD');
+    expect(renderAlert({ ...donation, amountMain: 600 }, s, 'RUB')?.title).toBe('Big thanks Ann');
+  });
+
+  it('filters donation goals by source and amount, then caps one contribution', () => {
+    const g = { ...defaultGoal('en'), kind: 'donations' as const, donationMinAmount: 100, donationMaxAmount: 500, donationSources: ['donationalerts' as const] };
+    const donation = { ...base, source: 'donationalerts' as const, type: 'donation' as const, amount: 600, currency: 'RUB', message: '' };
+    expect(goalIncrement(g, donation)).toBe(500);
+    expect(goalIncrement(g, { ...donation, amount: 50 })).toBe(0);
+    expect(goalIncrement(g, { ...donation, source: 'streamlabs' })).toBe(0);
+  });
+
   it('computes subathon seconds', () => {
     const t = defaultTimer('en');
     t.addSec = { sub: 60, giftsubPerSub: 30, bitsPer100: 10, donationPerUnit: 1, follow: 0 };

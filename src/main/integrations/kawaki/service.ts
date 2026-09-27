@@ -71,6 +71,8 @@ export class KawakiService {
   private nowWatchingMissing = false;
   private lastTitledWatch: KawakiNowWatching | null = null;
   private lastTitleAt = 0;
+  private retitleTimer: NodeJS.Timeout | null = null;
+  private refreshingNow = false;
 
   constructor(
     private ctx: AppContext,
@@ -111,8 +113,10 @@ export class KawakiService {
   stop(): void {
     if (this.pollTimer) clearInterval(this.pollTimer);
     if (this.deviceTimer) clearTimeout(this.deviceTimer);
+    if (this.retitleTimer) clearTimeout(this.retitleTimer);
     this.pollTimer = null;
     this.deviceTimer = null;
+    this.retitleTimer = null;
   }
 
   // ---------- login ----------
@@ -245,9 +249,11 @@ export class KawakiService {
   }
 
   async refresh(): Promise<void> {
-    if (!this.ctx.secrets.get('kawaki')) return;
+    if (!this.ctx.secrets.get('kawaki') || this.refreshingNow) return;
+    this.refreshingNow = true;
     try {
       const next = await this.authed((t) => this.fetchNowWatching(t));
+      if (!this.ctx.secrets.get('kawaki')) return;
       if (this.ctx.state.current.kawaki.status !== 'connected') this.ctx.state.patch('kawaki', { status: 'connected', error: undefined });
       this.setNow(next);
       if (Date.now() - this.partnerCheckedAt > PARTNER_REFRESH_MS) void this.refreshPartner();
@@ -255,6 +261,8 @@ export class KawakiService {
       if (err instanceof KawakiError && (err.code === 'INVALID_REFRESH_TOKEN' || err.code === 'BANNED')) return this.handleAuthError(err);
       console.warn('[kawaki] refresh', errorMessage(err));
       this.ctx.state.patch('kawaki', { status: 'error', error: errorMessage(err) });
+    } finally {
+      this.refreshingNow = false;
     }
   }
 
@@ -302,7 +310,10 @@ export class KawakiService {
     if (!cfg.autoTitle || !cfg.titleTemplate.trim() || !now || now.source !== 'live') return;
     if (!this.deps.canUpdateTitle() || sameWatch(this.lastTitledWatch, now)) return;
     if (Date.now() - this.lastTitleAt < TITLE_MIN_INTERVAL_MS) {
-      setTimeout(() => void this.maybeRetitle(), TITLE_MIN_INTERVAL_MS);
+      if (!this.retitleTimer) this.retitleTimer = setTimeout(() => {
+        this.retitleTimer = null;
+        void this.maybeRetitle();
+      }, TITLE_MIN_INTERVAL_MS - (Date.now() - this.lastTitleAt));
       return;
     }
     const s = this.ctx.settings.all;

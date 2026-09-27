@@ -112,9 +112,9 @@
         const pct = g.target > 0 ? Math.min(100, (g.current / g.target) * 100) : 0;
         const unit = g.kind === 'donations' ? ' ' + g.currency : '';
         root.querySelector('.title').textContent = g.title;
-        root.querySelector('.numbers').textContent = `${fmt(g.current)} / ${fmt(g.target)}${unit}`;
+        root.querySelector('.numbers').textContent = g.showAmounts === false ? '' : `${fmt(g.current)} / ${fmt(g.target)}${unit}`;
         root.querySelector('.fill').style.width = pct + '%';
-        root.querySelector('.pct').textContent = Math.floor(pct) + '%';
+        root.querySelector('.pct').textContent = g.showPercent === false ? '' : Math.floor(pct) + '%';
         root.classList.toggle('done', pct >= 100);
       });
     </script>

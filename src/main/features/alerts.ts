@@ -8,8 +8,13 @@ export function mediaUrl(name: string | null): string | null {
 }
 
 /** Turn an event into what the alert overlay shows. Returns null if this alert is disabled or below threshold. */
-export function renderAlert(e: StreamEvent, settings: AlertSettings): RenderedAlert | null {
-  const v = settings.types[e.type];
+export function renderAlert(e: StreamEvent, settings: AlertSettings, mainCurrency = e.type === 'donation' ? e.currency : ''): RenderedAlert | null {
+  const tier = e.type === 'donation' && (e.amountMain !== undefined || e.currency.toUpperCase() === mainCurrency.toUpperCase())
+    ? [...(settings.donationTiers ?? [])]
+        .filter((item) => Number.isFinite(item.minAmount) && item.minAmount <= (e.amountMain ?? e.amount))
+        .sort((a, b) => b.minAmount - a.minAmount)[0]
+    : undefined;
+  const v = tier?.variant ?? settings.types[e.type];
   if (!v?.enabled) return null;
   if (v.minAmount > 0 && eventAmount(e) < v.minAmount) return null;
   const vars = eventVars(e);
@@ -25,7 +30,7 @@ export function renderAlert(e: StreamEvent, settings: AlertSettings): RenderedAl
     image: mediaUrl(v.image),
     animation: v.animation,
     tts: v.tts,
-    style: settings.style,
+    style: tier?.style ?? settings.style,
   };
 }
 
@@ -56,7 +61,7 @@ export class AlertQueue {
   }
 
   enqueueEvent(e: StreamEvent): void {
-    const alert = renderAlert(e, this.ctx.settings.get('alerts'));
+    const alert = renderAlert(e, this.ctx.settings.get('alerts'), this.ctx.settings.get('currency'));
     if (!alert) return;
     this.queue.push(alert);
     this.sync();
@@ -115,7 +120,7 @@ export class AlertQueue {
 let testSeq = 0;
 
 /** A realistic sample event for the "Test" buttons. */
-export function sampleEvent(type: AlertType, lang: 'ru' | 'en', currency: string): StreamEvent {
+export function sampleEvent(type: AlertType, lang: 'ru' | 'en', currency: string, donationAmount?: number): StreamEvent {
   const base = { id: `test_${Date.now().toString(36)}_${testSeq++}`, source: 'test' as const, timestamp: Date.now(), userName: 'StreamHelper' };
   const msg = lang === 'ru' ? 'Это тестовое сообщение. Отличный стрим!' : 'This is a test message. Great stream!';
   switch (type) {
@@ -132,7 +137,7 @@ export function sampleEvent(type: AlertType, lang: 'ru' | 'en', currency: string
     case 'raid':
       return { ...base, type, viewers: 42 };
     case 'donation':
-      return { ...base, type, amount: currency === 'RUB' ? 500 : 10, currency, message: msg };
+      return { ...base, type, amount: donationAmount ?? (currency === 'RUB' ? 500 : 10), currency, message: msg };
     case 'redemption':
       return { ...base, type, rewardTitle: lang === 'ru' ? 'Выпить воды' : 'Hydrate', cost: 1000, input: '' };
   }

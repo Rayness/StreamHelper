@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>StreamHelper — Song requests</title>
+  <style>
+    html,body{margin:0;width:100%;height:100%;overflow:hidden;background:transparent;color:white;font:20px/1.4 system-ui,sans-serif}
+    #shell{display:none;position:absolute;inset:0;background:#080808}
+    #shell.active{display:block}
+    #player{position:absolute;inset:0;width:100%;height:100%}
+    #credit{position:absolute;left:18px;bottom:18px;max-width:70%;padding:8px 13px;border-radius:9px;background:#111c;font-weight:600;pointer-events:none}
+    #preview{display:none;padding:24px;background:#17151f;border-radius:12px}
+    body.preview #preview{display:block}
+  </style>
+</head>
+<body>
+  <div id="shell"><div id="player"></div><div id="credit"></div></div>
+  <div id="preview">🎵 Заказ музыки — добавьте этот источник в OBS</div>
+  <script src="/overlay/assets/common.js"></script>
+  <script>
+    const shell=document.getElementById('shell');
+    const credit=document.getElementById('credit');
+    let player=null,active=null,pending=null,ready=false,reported=false;
+    if(SH.preview)document.body.classList.add('preview');
+    window.onYouTubeIframeAPIReady=()=>{ready=true;if(pending)load(pending)};
+    const script=document.createElement('script');script.src='https://www.youtube.com/iframe_api';document.head.appendChild(script);
+    async function finished(error=''){
+      if(!active||reported||SH.preview)return;
+      reported=true;
+      const request=active;
+      try{await fetch('/song/finished',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:request.request.id,nonce:request.nonce,error})})}catch(_){/* reconnect will resync */}
+    }
+    function load(msg){
+      pending=msg;
+      if(SH.preview)return;
+      if(!ready)return;
+      if(!msg.request){active=null;shell.classList.remove('active');if(player)player.stopVideo();return}
+      if(active?.request.id===msg.request.id&&active.nonce===msg.nonce)return;
+      active=msg;reported=false;shell.classList.add('active');
+      credit.textContent='Заказал(а): '+msg.request.userName;
+      if(!player){
+        player=new YT.Player('player',{width:'100%',height:'100%',videoId:msg.request.videoId,playerVars:{autoplay:1,controls:1,playsinline:1,origin:location.origin},events:{onReady:()=>player.playVideo(),onStateChange:(e)=>{if(e.data===YT.PlayerState.ENDED&&player.getVideoData()?.video_id===active?.request.videoId)void finished()},onError:(e)=>void finished('YouTube error '+e.data)}});
+      }else player.loadVideoById(msg.request.videoId);
+    }
+    SH.connect('song',(msg)=>{if(msg.type==='song')load(msg)});
+  </script>
+</body>
+</html>

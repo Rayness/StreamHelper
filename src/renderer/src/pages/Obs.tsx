@@ -11,6 +11,8 @@ export function Obs() {
   const obs = useApp((d) => d.state!.obs);
   const connected = obs.status === 'connected';
   const dockUrl = useApp((d) => d.state!.dockUrl);
+  const subs = useApp((d) => d.settings!.subForStream);
+  const subsState = useApp((d) => d.state!.subForStream);
   return (
     <div className="page">
       <PageHeader
@@ -92,6 +94,20 @@ export function Obs() {
           <Button disabled={!dockUrl} onClick={() => void call('clipboard:write', dockUrl)}>{t('common.copy')}</Button>
           <Button disabled={!dockUrl} onClick={() => void call('shell:openExternal', dockUrl)}>{t('overlays.open')}</Button>
         </div>
+      </Card>
+      <Card title={t('subs.title')} actions={<StatusText status={subsState.status} error={subsState.error} />}>
+        <p className="muted small">{t('subs.hint')}</p>
+        <div className="form">
+          <Field label={t('subs.enabled')}><Toggle checked={subs.enabled} onChange={(enabled) => saveSettings('subForStream', { ...subs, enabled })} /></Field>
+          <Field label={t('subs.port')}><NumberInput value={subs.port} min={1024} max={65535} onChange={(port) => saveSettings('subForStream', { ...subs, port })} /></Field>
+        </div>
+        <div className="row-gap wrap">
+          <Button disabled={!subs.enabled} onClick={() => void call('subs:check')}>{t('common.reload')}</Button>
+          <Button disabled={!connected || !subsState.overlayUrl} onClick={() => void call('obs:addBrowserSource', 'SubForStream · Субтитры', subsState.overlayUrl, 1920, 1080)}>{t('subs.addToObs')}</Button>
+          <Button disabled={!subsState.overlayUrl} onClick={() => void call('shell:openExternal', subsState.overlayUrl + 'admin')}>{t('subs.admin')}</Button>
+          <Button disabled={!subsState.overlayUrl} onClick={() => void call('subs:clear')}>{t('subs.clear')}</Button>
+        </div>
+        {subsState.overlayUrl && <p className="muted small mono">{subsState.overlayUrl}</p>}
       </Card>
       <Actions />
     </div>

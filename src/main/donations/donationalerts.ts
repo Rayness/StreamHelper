@@ -11,6 +11,7 @@ export function normalizeDonation(d: any, anonymousName: string): StreamEvent | 
   if (!d || d.amount === undefined) return null;
   const amount = Number(d.amount);
   if (!Number.isFinite(amount)) return null;
+  const converted = d.amount_in_user_currency === undefined ? undefined : Number(d.amount_in_user_currency);
   return {
     id: `da_${d.id ?? Date.now()}`,
     source: 'donationalerts',
@@ -19,7 +20,7 @@ export function normalizeDonation(d: any, anonymousName: string): StreamEvent | 
     userName: (d.username || '').trim() || anonymousName,
     amount,
     currency: d.currency ?? '',
-    amountMain: d.amount_in_user_currency !== undefined ? Number(d.amount_in_user_currency) : undefined,
+    amountMain: converted !== undefined && Number.isFinite(converted) ? converted : undefined,
     message: d.message_type === 'audio' ? '' : (d.message ?? ''),
   };
 }

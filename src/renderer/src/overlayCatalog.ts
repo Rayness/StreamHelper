@@ -21,6 +21,7 @@ export const OVERLAYS: OverlayDef[] = [
   { kind: 'rewards', icon: 'gift', group: 'main', size: [560, 450] },
   { kind: 'collab', icon: 'broadcast', group: 'screen', size: [650, 360] },
   { kind: 'music', icon: 'music', group: 'screen', size: [650, 180] },
+  { kind: 'song', icon: 'music', group: 'screen', size: [1280, 720] },
   { kind: 'banner', icon: 'banner', group: 'screen', size: [1920, 110] },
   { kind: 'ad', icon: 'banner', group: 'screen', size: [1920, 1080] },
   { kind: 'live', icon: 'broadcast', group: 'screen', size: [650, 160] },

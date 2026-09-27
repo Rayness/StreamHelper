@@ -15,6 +15,7 @@ import { StreamlabsService } from './donations/streamlabs';
 import { StreamElementsService } from './donations/streamelements';
 import { StreamerBotService } from './integrations/streamerbot';
 import { DiscordService } from './integrations/discord';
+import { SubForStreamService } from './integrations/subForStream';
 import { ActionRunner } from './features/actions';
 import { AlertQueue, sampleEvent } from './features/alerts';
 import { TextOverlays } from './features/banners';
@@ -23,6 +24,7 @@ import { BossService } from './features/boss';
 import { ChatHistory, sampleChatMessage } from './features/chatHistory';
 import { EmoteRain } from './features/emotes';
 import { MusicService } from './features/music';
+import { SongRequestService } from './features/songRequests';
 import { GiveawayService } from './features/giveaway';
 import { PollService } from './features/poll';
 import { ProgressTracker } from './features/progress';
@@ -112,6 +114,7 @@ async function bootstrap(): Promise<void> {
   const streamelements = new StreamElementsService(ctx);
   const streamerbot = new StreamerBotService(ctx);
   const discord = new DiscordService(ctx);
+  const subForStream = new SubForStreamService(ctx);
   const progress = new ProgressTracker(ctx);
   const updater = new UpdateService(ctx);
   const music = new MusicService(ctx);
@@ -125,6 +128,7 @@ async function bootstrap(): Promise<void> {
   );
   let hub!: OverlayHub;
   let dockRoute!: ReturnType<typeof createDockRoutes>;
+  let songRequests!: SongRequestService;
   const authRoute = createAuthRoutes((token, expiresIn) => donationalerts.completeLogin(token, expiresIn));
   overlay = new OverlayServer({
     port: settings.get('overlayPort'),
@@ -134,9 +138,29 @@ async function bootstrap(): Promise<void> {
     onClientsChanged: (count, perKind) => {
       state.patch('overlayClients', count);
       state.replace('overlayKinds', perKind);
+      songRequests?.setPlayerConnected((perKind.song ?? 0) > 0);
     },
-    extraRoute: async (req, res, url) => (await authRoute(req, res, url)) || dockRoute(req, res, url),
+    extraRoute: async (req, res, url) => {
+      if (await authRoute(req, res, url)) return true;
+      if (await dockRoute(req, res, url)) return true;
+      if (url.pathname !== '/song/finished') return false;
+      if (req.method !== 'POST') { res.writeHead(405); res.end(); return true; }
+      try {
+        let body = '';
+        for await (const chunk of req) {
+          body += chunk.toString();
+          if (body.length > 1024) throw new Error('Request too large');
+        }
+        const data = JSON.parse(body) as { id?: unknown; nonce?: unknown; error?: unknown };
+        if (typeof data.id !== 'string' || typeof data.nonce !== 'string') throw new Error('Invalid request');
+        const accepted = await songRequests.playerFinished(data.id, data.nonce, typeof data.error === 'string' ? data.error : '');
+        res.writeHead(accepted ? 204 : 409); res.end();
+      } catch { res.writeHead(400); res.end(); }
+      return true;
+    },
   });
+
+  songRequests = new SongRequestService(ctx, music, (message) => overlay.broadcast('song', message));
 
   const sendToAllChats = async (text: string) => {
     const ready = platforms.ready();
@@ -171,6 +195,7 @@ async function bootstrap(): Promise<void> {
     quiz: () => quiz.overlayMessage(),
     boss: () => boss.overlayMessage(),
     ad: (id) => ads.overlayMessage(id),
+    song: () => songRequests.overlayMessage,
     spotlight: () => spotlight.overlayMessage(),
   });
 
@@ -212,6 +237,16 @@ async function bootstrap(): Promise<void> {
         case 'bossHit': return void boss.hit();
         case 'adShow': if (id) return ads.show(id); break;
         case 'adHide': return ads.hide();
+        case 'songPlay': return songRequests.play(id);
+        case 'songAdd': if (id) return songRequests.add(id); break;
+        case 'songSkip': return songRequests.skip();
+        case 'songRemove': if (id) return songRequests.remove(id); break;
+        case 'musicPlay': if (id === 'spotify' || id === 'yandex' || id === 'browser' || id === 'other') return music.control(id, 'play'); break;
+        case 'musicPause': if (id === 'spotify' || id === 'yandex' || id === 'browser' || id === 'other') return music.control(id, 'pause'); break;
+        case 'bannerToggle': if (id) return text.toggle(id); break;
+        case 'goalReset': if (id) { const goal = settings.get('goals').find((item) => item.id === id); if (goal) return progress.addToGoal(id, -goal.current); } break;
+        case 'kawakiRefresh': return kawaki.refresh();
+        case 'subsClear': return subForStream.clear();
         case 'quickAction': if (id) return actions.run(id); break;
         case 'spotlightClear': return spotlight.clear();
       }
@@ -311,13 +346,20 @@ async function bootstrap(): Promise<void> {
     'obs:toggleMute': (input) => obs.toggleMute(input),
     'obs:stream': (m) => obs.stream(m),
     'obs:record': (m) => obs.record(m),
-    'alerts:test': (type: AlertType) => bus.emit('event', sampleEvent(type, settings.get('language'), settings.get('currency'))),
+    'alerts:test': (type: AlertType, donationAmount?: number) => bus.emit('event', sampleEvent(type, settings.get('language'), settings.get('currency'), donationAmount)),
     'alerts:pause': (paused) => alerts.setPaused(paused),
     'alerts:skip': () => alerts.skip(),
     'alerts:replay': (id) => alerts.replay(id),
     'actions:run': (id) => actions.run(id),
     'timer:control': (id, op, sec) => progress.controlTimer(id, op, sec),
     'banner:showNow': (id) => text.showNow(id),
+    'song:add': (url) => songRequests.add(url),
+    'song:play': (id) => songRequests.play(id),
+    'song:skip': () => songRequests.skip(),
+    'song:remove': (id) => songRequests.remove(id),
+    'music:control': (source, action) => music.control(source, action),
+    'subs:check': () => subForStream.check(),
+    'subs:clear': () => subForStream.clear(),
     'stats:reset': () => progress.resetStats(),
     'emotes:test': () => emotes.burst(),
     'wheel:spin': (id) => wheel.spin(id, state.current.twitch.account?.displayName ?? ''),
@@ -388,6 +430,7 @@ async function bootstrap(): Promise<void> {
   streamelements.start();
   streamerbot.start();
   discord.start();
+  subForStream.start();
   void kawaki.start();
 
   app.on('before-quit', () => {
@@ -399,6 +442,7 @@ async function bootstrap(): Promise<void> {
     streamlabs.stop();
     streamelements.stop();
     streamerbot.stop();
+    subForStream.stop();
     kawaki.stop();
     text.stop();
     ads.stop();

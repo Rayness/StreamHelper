@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { ALERT_TYPES, type AlertAnimation, type AlertType, type AlertVariant } from '@shared/types';
+import { uid } from '@shared/defaults';
 import { EVENT_ICON } from '../components/EventFeed';
 import { Icon } from '../components/icons';
 import { MediaPicker } from '../components/MediaPicker';
-import { Button, Card, ColorInput, CopyField, Field, NumberInput, PageHeader, Select, TextInput, Toggle } from '../components/ui';
+import { Button, Card, ColorInput, CopyField, Field, IconButton, NumberInput, PageHeader, Select, TextInput, Toggle } from '../components/ui';
 import { useT } from '../i18n';
 import { call, saveSettings, useApp, useSub } from '../store';
 
@@ -23,12 +24,18 @@ export function Alerts() {
   const alerts = useApp((d) => d.settings!.alerts);
   const overlayUrl = useApp((d) => d.state!.overlayUrl);
   const [selected, setSelected] = useSub<AlertType>('alerts', 'follow', ALERT_TYPES);
+  const [tierId, setTierId] = useState<string>('');
   const [previewKey, setPreviewKey] = useState(0);
-  const v = alerts.types[selected];
+  const tier = selected === 'donation' ? alerts.donationTiers?.find((item) => item.id === tierId) : undefined;
+  const v = tier?.variant ?? alerts.types[selected];
+  const style = tier?.style ?? alerts.style;
 
-  const setVariant = (patch: Partial<AlertVariant>) =>
-    saveSettings('alerts', { ...alerts, types: { ...alerts.types, [selected]: { ...v, ...patch } } });
-  const setStyle = (patch: Partial<typeof alerts.style>) => saveSettings('alerts', { ...alerts, style: { ...alerts.style, ...patch } });
+  const setVariant = (patch: Partial<AlertVariant>) => saveSettings('alerts', tier
+    ? { ...alerts, donationTiers: alerts.donationTiers.map((item) => item.id === tier.id ? { ...item, variant: { ...v, ...patch } } : item) }
+    : { ...alerts, types: { ...alerts.types, [selected]: { ...v, ...patch } } });
+  const setStyle = (patch: Partial<typeof alerts.style>) => saveSettings('alerts', tier
+    ? { ...alerts, donationTiers: alerts.donationTiers.map((item) => item.id === tier.id ? { ...item, style: { ...style, ...patch } } : item) }
+    : { ...alerts, style: { ...alerts.style, ...patch } });
 
   const minLabel: Partial<Record<AlertType, string>> = {
     resub: t('alerts.minMonths'),
@@ -64,11 +71,25 @@ export function Alerts() {
           <Card
             title={t(`alertType.${selected}`)}
             actions={
-              <Button size="sm" variant="primary" icon="play" onClick={() => void call('alerts:test', selected)}>
+              <Button size="sm" variant="primary" icon="play" onClick={() => void call('alerts:test', selected, tier ? tier.minAmount : undefined)}>
                 {t('alerts.test')}
               </Button>
             }
           >
+            {selected === 'donation' && <div className="stack" style={{ marginBottom: 16 }}>
+              <p className="muted small">{t('alerts.tiersHint')}</p>
+              <div className="row-gap wrap">
+                <Button size="sm" variant={!tier ? 'primary' : 'secondary'} onClick={() => setTierId('')}>{t('alerts.defaultTier')}</Button>
+                {(alerts.donationTiers ?? []).slice().sort((a, b) => a.minAmount - b.minAmount).map((item) =>
+                  <Button key={item.id} size="sm" variant={tierId === item.id ? 'primary' : 'secondary'} onClick={() => setTierId(item.id)}>≥ {item.minAmount}</Button>)}
+                <Button size="sm" icon="plus" onClick={() => { const id = uid('donation_tier_'); saveSettings('alerts', { ...alerts, donationTiers: [...(alerts.donationTiers ?? []), { id, minAmount: 1000, variant: { ...alerts.types.donation, minAmount: 0 }, style: { ...alerts.style } }] }); setTierId(id); }}>{t('alerts.addTier')}</Button>
+              </div>
+              {tier && <div className="row-gap">
+                <Field label={t('alerts.tierFrom')}><NumberInput value={tier.minAmount} min={0} onChange={(minAmount) => saveSettings('alerts', { ...alerts, donationTiers: alerts.donationTiers.map((item) => item.id === tier.id ? { ...item, minAmount } : item) })} /></Field>
+                <Toggle checked={v.enabled} onChange={(enabled) => setVariant({ enabled })} label={t('common.on')} />
+                <IconButton icon="x" label={t('common.delete')} onClick={() => { saveSettings('alerts', { ...alerts, donationTiers: alerts.donationTiers.filter((item) => item.id !== tier.id) }); setTierId(''); }} />
+              </div>}
+            </div>}
             <div className="form">
               <Field label={t('alerts.titleTpl')} hint={`${t('alerts.vars')}: ${VARS[selected]}`} wide>
                 <TextInput value={v.title} onChange={(title) => setVariant({ title })} />
@@ -79,7 +100,7 @@ export function Alerts() {
               <Field label={t('alerts.duration')}>
                 <NumberInput value={v.durationSec} min={1} max={120} onChange={(durationSec) => setVariant({ durationSec })} />
               </Field>
-              {minLabel[selected] && (
+              {minLabel[selected] && !tier && (
                 <Field label={minLabel[selected]} hint={t('alerts.minHint')}>
                   <NumberInput value={v.minAmount} min={0} onChange={(minAmount) => setVariant({ minAmount })} />
                 </Field>
@@ -106,23 +127,23 @@ export function Alerts() {
             </div>
           </Card>
 
-          <Card title={t('alerts.style')}>
+          <Card title={tier ? `${t('alerts.style')} · ≥ ${tier.minAmount}` : t('alerts.style')}>
             <div className="form">
               <Field label={t('common.font')} hint={t('common.fontHint')}>
-                <TextInput value={alerts.style.fontFamily} onChange={(fontFamily) => setStyle({ fontFamily })} />
+                <TextInput value={style.fontFamily} onChange={(fontFamily) => setStyle({ fontFamily })} />
               </Field>
               <Field label={t('common.fontSize')}>
-                <NumberInput value={alerts.style.fontSize} min={12} max={160} onChange={(fontSize) => setStyle({ fontSize })} />
+                <NumberInput value={style.fontSize} min={12} max={160} onChange={(fontSize) => setStyle({ fontSize })} />
               </Field>
               <Field label={t('common.textColor')}>
-                <ColorInput value={alerts.style.textColor} onChange={(textColor) => setStyle({ textColor })} />
+                <ColorInput value={style.textColor} onChange={(textColor) => setStyle({ textColor })} />
               </Field>
               <Field label={t('alerts.accent')}>
-                <ColorInput value={alerts.style.accentColor} onChange={(accentColor) => setStyle({ accentColor })} />
+                <ColorInput value={style.accentColor} onChange={(accentColor) => setStyle({ accentColor })} />
               </Field>
               <Field label={t('alerts.layout')}>
                 <Select
-                  value={alerts.style.layout}
+                  value={style.layout}
                   onChange={(layout) => setStyle({ layout })}
                   options={[
                     { value: 'stacked', label: t('alerts.layoutStacked') },
