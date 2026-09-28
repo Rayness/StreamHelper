@@ -18,6 +18,7 @@ interface Command {
 const PAGES: { page: Page; icon: IconName; key: Parameters<TFn>[0]; kw: string }[] = [
   { page: 'dashboard', icon: 'dashboard', key: 'nav.dashboard', kw: 'dashboard главная' },
   { page: 'interactive', icon: 'sparkle', key: 'nav.interactive', kw: 'interactive игры' },
+  { page: 'profiles', icon: 'users', key: 'nav.profiles', kw: 'profiles профили сцены' },
   { page: 'alerts', icon: 'alert', key: 'nav.alerts', kw: 'alerts' },
   { page: 'overlays', icon: 'layers', key: 'nav.overlays', kw: 'overlays obs' },
   { page: 'bot', icon: 'bot', key: 'nav.bot', kw: 'bot commands команды' },
@@ -46,6 +47,16 @@ function buildCommands(t: TFn): Command[] {
     out.push({ id: 'give:roll', label: t('give.roll'), group: fun, icon: 'trophy', keywords: 'giveaway winner победитель', run: () => void call('giveaway:roll') });
   if (['idle', 'finished', 'error'].includes(state.quiz.status)) out.push({ id: 'quiz:start', label: t('quiz.start'), group: fun, icon: 'quiz', keywords: 'quiz квиз anime', run: () => void call('quiz:start') });
   else out.push({ id: 'quiz:stop', label: t('quiz.stop'), group: fun, icon: 'quiz', keywords: 'quiz', run: () => void call('quiz:stop') });
+  const q = state.viewerQueue;
+  out.push({ id: 'queue:open', label: q.open ? t('queue.close') : t('queue.open'), group: fun, icon: 'users', keywords: 'queue очередь join', run: () => void call('queue:open', !q.open) });
+  if (q.entries.length) out.push({ id: 'queue:next', label: `${t('queue.next')}: ${q.entries[0].userName}`, group: fun, icon: 'users', keywords: 'queue next очередь следующий', run: () => void call('queue:next') });
+  if (state.guess.status === 'running') out.push({ id: 'guess:stop', label: t('guess.stop'), group: fun, icon: 'hash', keywords: 'guess number число', run: () => void call('guess:stop') });
+  else out.push({ id: 'guess:start', label: `${t('fun.guess')}: ${t('guess.start')}`, group: fun, icon: 'hash', keywords: 'guess number угадай число', run: () => void call('guess:start') });
+  if (state.boss.status !== 'running') out.push({ id: 'boss:start', label: `${t('fun.boss')}: ${t('boss.start')}`, group: fun, icon: 'target', keywords: 'boss босс', run: () => void call('boss:start') });
+  for (const c of settings.counterOverlays) {
+    out.push({ id: `counter+:${c.id}`, label: `${c.title} +1`, group: t('dash.counters'), icon: 'hash', keywords: `counter счётчик ${c.counter}`, run: () => void call('counter:add', c.counter, 1) });
+    out.push({ id: `counter-:${c.id}`, label: `${c.title} −1`, group: t('dash.counters'), icon: 'hash', keywords: `counter счётчик ${c.counter}`, run: () => void call('counter:add', c.counter, -1) });
+  }
   out.push({ id: 'emotes', label: t('emotes.test'), group: fun, icon: 'smile', keywords: 'emotes rain дождь', run: () => void call('emotes:test') });
 
   const screen = t('ovGroup.screen');

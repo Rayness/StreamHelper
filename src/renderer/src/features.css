@@ -742,9 +742,68 @@
   gap: 10px;
   min-height: 30px;
 }
-.fun-row > svg {
-  color: var(--muted);
+.fun-row-icon {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
   flex: none;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.fun-row-icon:hover {
+  background: var(--panel-3);
+  color: var(--text);
+}
+.fun-row-icon.static {
+  cursor: default;
+  background: transparent;
+}
+.fun-row.live .fun-row-icon {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.hype-mini {
+  flex: 1;
+  min-width: 60px;
+}
+.counter-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.counter-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.counter-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+.counter-num {
+  min-width: 44px;
+  text-align: center;
+  font-size: 20px;
+  font-variant-numeric: tabular-nums;
+}
+.mute-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+.chip.muted-chip {
+  color: var(--danger);
+  text-decoration: line-through;
 }
 .fun-row-main {
   display: flex;
