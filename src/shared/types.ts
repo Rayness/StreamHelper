@@ -180,6 +180,11 @@ export interface RuntimeState {
   dockUrl: string;
   /** Banners currently on screen (manual toggle or schedule). */
   bannersShown: string[];
+  viewerQueue: ViewerQueueState;
+  guess: GuessState;
+  hype: HypeState;
+  /** Most active chatters since the app started (or the last reset). */
+  chatLeaders: ChatLeader[];
 }
 
 // ---------- Settings ----------
@@ -744,6 +749,117 @@ export interface QuizState {
   error?: string;
 }
 
+// ---------- Viewer queue, guess the number, counters, hype, chat leaders ----------
+
+export interface ViewerQueueSettings {
+  title: string;
+  /** Chat commands without prefix. */
+  joinCommand: string;
+  leaveCommand: string;
+  eligible: Permission;
+  /** 0 = unlimited. */
+  maxSize: number;
+  /** Subscribers join ahead of non-subscribers. */
+  subPriority: boolean;
+  announce: boolean;
+  /** Names shown on the overlay. */
+  showCount: number;
+  accentColor: string;
+  fontFamily: string;
+}
+
+export interface QueueEntry {
+  userId: string;
+  userName: string;
+  platform: Platform;
+  sub: boolean;
+  joinedAt: number;
+}
+
+export interface ViewerQueueState {
+  open: boolean;
+  entries: QueueEntry[];
+  /** Picked viewers ("playing now"), latest first. */
+  picked: QueueEntry[];
+}
+
+export interface GuessSettings {
+  min: number;
+  max: number;
+  /** 0 = until someone guesses. */
+  durationSec: number;
+  /** Per-viewer pause between guesses. */
+  cooldownSec: number;
+  announce: boolean;
+  accentColor: string;
+  fontFamily: string;
+}
+
+export interface GuessState {
+  status: 'idle' | 'running' | 'won' | 'ended';
+  min: number;
+  max: number;
+  /** The range still possible after the "higher / lower" hints. */
+  low: number;
+  high: number;
+  attempts: number;
+  endsAt: number | null;
+  winner: string | null;
+  /** Revealed only when the round is over. */
+  answer: number | null;
+  lastGuess: { user: string; value: number; hint: 'higher' | 'lower' | 'exact' } | null;
+}
+
+export interface CounterOverlay {
+  id: string;
+  /** Bot counter name, e.g. "deaths" ({count:deaths}). */
+  counter: string;
+  title: string;
+  style: 'card' | 'minimal' | 'badge';
+  fontFamily: string;
+  fontSize: number;
+  textColor: string;
+  accentColor: string;
+}
+
+export interface HypeSettings {
+  title: string;
+  /** Points needed for each level. */
+  levelPoints: number;
+  maxLevel: number;
+  points: { follow: number; sub: number; bitsPer100: number; donationPerUnit: number; raidPerViewer: number; chatMessage: number; redemption: number };
+  /** Percent of points lost per minute without new hype. */
+  decayPerMin: number;
+  hideWhenEmpty: boolean;
+  accentColor: string;
+  fontFamily: string;
+}
+
+export interface HypeState {
+  points: number;
+  level: number;
+  /** 0..1 inside the current level. */
+  progress: number;
+  lastBumpAt: number;
+}
+
+export interface LeadersOverlaySettings {
+  title: string;
+  count: number;
+  showCounts: boolean;
+  /** Logins never ranked (bots). */
+  exclude: string[];
+  accentColor: string;
+  fontFamily: string;
+}
+
+export interface ChatLeader {
+  userId: string;
+  userName: string;
+  color?: string;
+  messages: number;
+}
+
 // ---------- Kawaki ----------
 
 export interface KawakiNowWatching {
@@ -823,6 +939,11 @@ export interface Settings {
   quiz: QuizSettings;
   boss: BossSettings;
   kawaki: KawakiSettings;
+  viewerQueue: ViewerQueueSettings;
+  guess: GuessSettings;
+  counterOverlays: CounterOverlay[];
+  hype: HypeSettings;
+  leadersOverlay: LeadersOverlaySettings;
   /** Main currency for donation totals (goals, subathon). */
   currency: string;
   minimizeToTray: boolean;
@@ -830,7 +951,7 @@ export interface Settings {
   activeProfileId: string;
 }
 
-export type ProfileSettingsKey = 'bot' | 'alerts' | 'chatOverlay' | 'spotlightOverlay' | 'rewardsOverlay' | 'collabOverlay' | 'musicOverlay' | 'songRequests' | 'goals' | 'timers' | 'actions' | 'banners' | 'ads' | 'labels' | 'emoteRain' | 'wheels' | 'poll' | 'giveaway' | 'quiz' | 'boss' | 'kawaki';
+export type ProfileSettingsKey = 'bot' | 'alerts' | 'chatOverlay' | 'spotlightOverlay' | 'rewardsOverlay' | 'collabOverlay' | 'musicOverlay' | 'songRequests' | 'goals' | 'timers' | 'actions' | 'banners' | 'ads' | 'labels' | 'emoteRain' | 'wheels' | 'poll' | 'giveaway' | 'quiz' | 'boss' | 'kawaki' | 'viewerQueue' | 'guess' | 'counterOverlays' | 'hype' | 'leadersOverlay';
 export type ProfileConfig = Pick<Settings, ProfileSettingsKey>;
 export interface StreamProfile { id: string; name: string; config: ProfileConfig; overlays: OverlayKind[] }
 
@@ -838,7 +959,7 @@ export type SettingsKey = keyof Settings;
 
 // ---------- Overlay wire protocol ----------
 
-export type OverlayKind = 'chat' | 'alerts' | 'goal' | 'timer' | 'events' | 'rewards' | 'collab' | 'music' | 'song' | 'banner' | 'ad' | 'label' | 'emotes' | 'wheel' | 'poll' | 'giveaway' | 'kawaki' | 'quiz' | 'boss' | 'live' | 'spotlight';
+export type OverlayKind = 'chat' | 'alerts' | 'goal' | 'timer' | 'events' | 'rewards' | 'collab' | 'music' | 'song' | 'banner' | 'ad' | 'label' | 'emotes' | 'wheel' | 'poll' | 'giveaway' | 'kawaki' | 'quiz' | 'boss' | 'live' | 'spotlight' | 'queue' | 'guess' | 'counter' | 'hype' | 'leaders';
 
 export interface RenderedBanner extends Omit<Banner, 'slides'> {
   slides: { id: string; text: string; image: string | null }[];
@@ -890,7 +1011,7 @@ export type OverlayMessage =
   | { type: 'song'; request: SongRequest | null; nonce: string | null; config: SongRequestSettings; queue: SongRequest[]; lang: Language }
   | { type: 'banner'; banner: RenderedBanner | null }
   | { type: 'ad'; campaign: AdCampaign | null; endsAt: number | null }
-  | { type: 'boss'; boss: BossState; style: BossSettings; lang: Language }
+  | { type: 'boss'; boss: BossState; style: BossSettings; lang: Language; prefix: string }
   | { type: 'live'; stream: StreamInfo; lang: Language }
   | { type: 'spotlight'; message: ChatMessage | null }
   | { type: 'spotlightConfig'; config: SpotlightOverlaySettings }
@@ -905,6 +1026,11 @@ export type OverlayMessage =
   | { type: 'giveaway'; state: GiveawayOverlayState; style: GiveawaySettings; lang: Language }
   | { type: 'kawaki'; now: KawakiNowWatching | null; style: KawakiSettings; lang: Language }
   | { type: 'quiz'; quiz: QuizState; style: QuizSettings; now: number; lang: Language }
+  | { type: 'queue'; state: ViewerQueueState; style: ViewerQueueSettings; lang: Language; prefix: string }
+  | { type: 'guess'; guess: GuessState; style: GuessSettings; now: number; lang: Language }
+  | { type: 'counter'; counter: (CounterOverlay & { value: number }) | null }
+  | { type: 'hype'; hype: HypeState; style: HypeSettings; lang: Language }
+  | { type: 'leaders'; leaders: ChatLeader[]; style: LeadersOverlaySettings; lang: Language }
   | { type: 'reload' };
 
 // ---------- IPC ----------
@@ -918,7 +1044,8 @@ export interface MediaFile {
 /** Request/response calls from renderer to main. */
 export interface IpcInvoke {
   'app:init': () => { settings: Settings; state: RuntimeState; chat: ChatMessage[]; events: StreamEvent[]; version: string };
-  'settings:set': <K extends SettingsKey>(key: K, value: Settings[K], profileId?: string) => void;
+  /** `base` is the value the editor started from, so changes made by the app meanwhile survive the save. */
+  'settings:set': <K extends SettingsKey>(key: K, value: Settings[K], profileId?: string, base?: Settings[K]) => void;
   'settings:reset': (key: SettingsKey) => Settings;
   'profiles:create': (name: string) => Settings;
   'profiles:rename': (id: string, name: string) => Settings;
@@ -990,6 +1117,16 @@ export interface IpcInvoke {
   'spotlight:show': (messageId: string) => void;
   'spotlight:test': () => void;
   'spotlight:clear': () => void;
+  'queue:open': (open: boolean) => void;
+  'queue:next': (random?: boolean) => void;
+  'queue:remove': (userId: string) => void;
+  'queue:clear': () => void;
+  'guess:start': () => void;
+  'guess:stop': () => void;
+  'counter:add': (name: string, delta: number) => void;
+  'hype:add': (points: number) => void;
+  'hype:reset': () => void;
+  'leaders:reset': () => void;
   'update:check': () => void;
   'update:install': () => void;
   'kawaki:login': () => void;

@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>StreamHelper — Top chatters</title>
+    <style>
+      :root {
+        --accent: #9b6bff;
+      }
+      html,
+      body {
+        margin: 0;
+        background: transparent;
+        overflow: hidden;
+      }
+      #leaders {
+        margin: 10px;
+        padding: 16px 18px;
+        border-radius: 16px;
+        background: rgba(12, 12, 18, 0.84);
+        box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4);
+        color: #fff;
+        opacity: 0;
+        transition: opacity 0.4s ease;
+      }
+      #leaders.on {
+        opacity: 1;
+      }
+      .title {
+        font-size: 22px;
+        font-weight: 800;
+        margin-bottom: 8px;
+      }
+      ol {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+      }
+      li {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        height: 38px;
+        padding: 0 12px;
+        margin-top: 6px;
+        border-radius: 10px;
+        background: rgba(255, 255, 255, 0.07);
+        font-size: 18px;
+        font-weight: 700;
+      }
+      li:first-child {
+        background: color-mix(in srgb, var(--accent) 35%, rgba(255, 255, 255, 0.05));
+      }
+      .n {
+        width: 26px;
+        font-weight: 900;
+        color: var(--accent);
+        font-variant-numeric: tabular-nums;
+      }
+      li:first-child .n {
+        color: #fff;
+      }
+      .name {
+        flex: 1;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .count {
+        opacity: 0.75;
+        font-variant-numeric: tabular-nums;
+        font-size: 16px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="leaders"><div class="title"></div><ol></ol></div>
+    <script src="/overlay/assets/common.js"></script>
+    <script>
+      const root = document.getElementById('leaders');
+      const list = root.querySelector('ol');
+
+      SH.connect('leaders', (msg) => {
+        if (msg.type !== 'leaders') return;
+        const s = msg.style;
+        let leaders = msg.leaders;
+        if (SH.preview && !leaders.length) {
+          leaders = ['КиберКотик', 'Viewer_42', 'NightOwl', 'Alice', 'Bob', 'Mira', 'Zed'].map((userName, i) => ({ userId: String(i), userName, messages: [48, 31, 22, 17, 9, 6, 3][i] }));
+        }
+        leaders = leaders.slice(0, Math.max(1, s.count));
+        SH.useFont(root, s.fontFamily);
+        root.style.setProperty('--accent', s.accentColor);
+        root.classList.toggle('on', leaders.length > 0);
+        root.querySelector('.title').textContent = s.title;
+        list.innerHTML = '';
+        leaders.forEach((l, i) => {
+          const li = SH.el('li');
+          li.append(SH.el('span', 'n', String(i + 1)), SH.el('span', 'name', l.userName));
+          if (s.showCounts) li.append(SH.el('span', 'count', `${l.messages} ${SH.tr(msg.lang, 'сообщ.', 'msgs')}`));
+          list.appendChild(li);
+        });
+      });
+    </script>
+  </body>
+</html>

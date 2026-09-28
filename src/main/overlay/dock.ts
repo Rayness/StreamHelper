@@ -60,6 +60,10 @@ export function createDockRoutes(opts: DockOptions) {
         chat: chat.filter((m) => !m.deleted).slice(-15).reverse().map((m) => ({ id: m.id, userName: m.userName, text: m.text.slice(0, 180) })),
         actions: settings.actions.filter((a) => a.showOnDashboard).map((a) => ({ id: a.id, label: a.label, color: a.color })),
         ads: settings.ads.map((a) => ({ id: a.id, name: a.name, media: !!a.media })),
+        viewerQueue: { open: state.viewerQueue.open, entries: state.viewerQueue.entries.slice(0, 10).map((e) => e.userName), count: state.viewerQueue.entries.length, picked: state.viewerQueue.picked[0]?.userName ?? null },
+        guess: { status: state.guess.status, low: state.guess.low, high: state.guess.high, attempts: state.guess.attempts, winner: state.guess.winner, answer: state.guess.answer },
+        hype: state.hype,
+        counters: settings.counterOverlays.map((c) => ({ name: c.counter, title: c.title, value: settings.bot.counters[c.counter] ?? 0 })),
         language: settings.language,
       });
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });

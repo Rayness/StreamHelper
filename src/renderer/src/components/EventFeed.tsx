@@ -1,5 +1,6 @@
 import type { StreamEvent } from '@shared/types';
 import { formatAmount } from '@shared/events';
+import { useClock } from '../hooks';
 import { useT, type TFn } from '../i18n';
 import { call, useApp } from '../store';
 import { Icon, type IconName } from './icons';
@@ -45,6 +46,7 @@ function eventMessage(e: StreamEvent): string {
 
 export function EventFeed({ limit = 100 }: { limit?: number }) {
   const t = useT();
+  const clock = useClock();
   const events = useApp((d) => d.events);
   if (events.length === 0) {
     return (
@@ -71,7 +73,7 @@ export function EventFeed({ limit = 100 }: { limit?: number }) {
               </div>
               {msg && <div className="feed-msg">{msg}</div>}
             </div>
-            <span className="feed-time">{new Date(e.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+            <span className="feed-time">{clock(e.timestamp)}</span>
             <IconButton icon="replay" label={t('feed.replay')} onClick={() => void call('alerts:replay', e.id)} />
           </li>
         );

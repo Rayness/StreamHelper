@@ -17,7 +17,7 @@ export class BossService {
       }
     });
     ctx.bus.on('settings:changed', (key) => {
-      if (key === 'boss' || key === 'language') this.push();
+      if (key === 'boss' || key === 'language' || key === 'bot') this.push();
     });
   }
 
@@ -26,7 +26,7 @@ export class BossService {
   }
 
   overlayMessage(): OverlayMessage {
-    return { type: 'boss', boss: this.ctx.state.current.boss, style: this.cfg, lang: this.ctx.settings.get('language') };
+    return { type: 'boss', boss: this.ctx.state.current.boss, style: this.cfg, lang: this.ctx.settings.get('language'), prefix: this.ctx.settings.get('bot').prefix };
   }
 
   start(): void {

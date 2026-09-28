@@ -825,9 +825,10 @@ kbd {
 
 .dashboard {
   display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(360px, 1fr);
-  gap: 16px;
-  padding: 20px;
+  grid-template-columns: minmax(0, 1.35fr) minmax(340px, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 14px;
+  padding: 16px 20px 20px;
   height: 100%;
   min-height: 0;
 }
@@ -843,7 +844,7 @@ kbd {
 .dash-cols {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 14px;
   overflow-y: auto;
   min-height: 0;
   padding-right: 2px;
@@ -851,19 +852,20 @@ kbd {
 .dash-col {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 14px;
   min-width: 0;
 }
-/* A second monitor has room for three columns: chat | controls | feed. */
-@media (min-width: 1560px) {
+/* A 1360px window already has room for three columns: chat | controls | stream info. */
+@media (min-width: 1280px) {
   .dashboard {
-    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1.6fr);
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.75fr);
   }
   .dash-cols {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 0.85fr);
+    grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
     align-items: start;
     overflow: hidden;
+    padding-right: 0;
   }
   .dash-col {
     max-height: 100%;
@@ -873,6 +875,98 @@ kbd {
   .dash-col:last-child {
     height: 100%;
   }
+}
+@media (min-width: 1680px) {
+  .dashboard {
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.6fr);
+  }
+}
+
+/* ---------- live strip ---------- */
+
+.live-strip {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+.strip-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.strip-group + .strip-group {
+  padding-left: 18px;
+  border-left: 1px solid var(--border);
+}
+.strip-stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.strip-stat b {
+  color: var(--text);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+.strip-session .strip-stat {
+  gap: 5px;
+}
+.strip-alerts {
+  gap: 4px;
+  margin-left: auto;
+}
+.strip-alert-text {
+  max-width: 260px;
+  margin-right: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.strip-obs {
+  gap: 6px;
+}
+.strip-scene {
+  max-width: 160px;
+  margin-right: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.strip-out {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--panel-2);
+  color: var(--text-2);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.strip-out:hover {
+  border-color: #3a3a4c;
+  color: var(--text);
+}
+.strip-out.on {
+  border-color: #ff5d6c66;
+  background: var(--danger-soft);
+  color: #fff;
+}
+.strip-out.on svg {
+  color: var(--danger);
 }
 .dash-feed {
   flex: 1;
@@ -1739,6 +1833,7 @@ kbd {
 @media (max-width: 1100px) {
   .dashboard {
     grid-template-columns: 1fr;
+    grid-template-rows: auto;
     height: auto;
   }
   .dash-chat {

@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import { renderTemplate } from '@shared/template';
 import { enExtra, ruExtra } from './i18n.extra';
+import { enMore, ruMore } from './i18n.more';
 import { useApp } from './store';
 
 const ruBase = {
@@ -413,7 +414,7 @@ const ruBase = {
   'toast.twitchSessionExpired': 'Сессия Twitch истекла — войдите снова',
 };
 
-const ru = { ...ruBase, ...ruExtra };
+const ru = { ...ruBase, ...ruExtra, ...ruMore };
 export type TKey = keyof typeof ru;
 
 const enBase: Record<keyof typeof ruBase, string> = {
@@ -826,7 +827,7 @@ const enBase: Record<keyof typeof ruBase, string> = {
   'toast.twitchSessionExpired': 'Twitch session expired — please log in again',
 };
 
-const en: Record<TKey, string> = { ...enBase, ...enExtra };
+const en: Record<TKey, string> = { ...enBase, ...enExtra, ...enMore };
 
 const DICTS = { ru, en } as const;
 type Params = Record<string, string | number>;

@@ -1,5 +1,6 @@
 import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { ChatMessage } from '@shared/types';
+import { useClock } from '../hooks';
 import { useT } from '../i18n';
 import { call, callOk, useApp } from '../store';
 import { Icon } from './icons';
@@ -23,6 +24,7 @@ function readable(color: string): string {
 
 const Message = memo(function Message({ m, canModerate, onReply }: { m: ChatMessage; canModerate: boolean; onReply: (m: ChatMessage) => void }) {
   const t = useT();
+  const clock = useClock();
   const color = readable(m.color || colorFor(m.userLogin));
   return (
     <div className={`chat-msg ${m.deleted ? 'deleted' : ''} ${m.highlighted ? 'highlighted' : ''} ${m.fromSelf ? 'self' : ''}`}>
@@ -31,7 +33,7 @@ const Message = memo(function Message({ m, canModerate, onReply }: { m: ChatMess
           <Icon name="replay" size={12} /> @{m.replyTo.userName}: {m.replyTo.text}
         </div>
       )}
-      <span className="chat-time">{new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+      <span className="chat-time">{clock(m.timestamp)}</span>
       {m.badges.map((b) => (b.imageUrl ? <img key={b.id} className="chat-badge" src={b.imageUrl} alt={b.title ?? b.id} title={b.title ?? b.id} /> : null))}
       <span className="chat-name" style={{ color }}>
         {m.userName}

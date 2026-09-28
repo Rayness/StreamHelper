@@ -1,16 +1,17 @@
 import { useState } from 'react';
 import { defaultWheel, uid, WHEEL_COLORS } from '@shared/defaults';
 import type { GiveawaySettings, Permission, PollSettings, QuizDifficulty, QuizSettings, Wheel, WheelSegment } from '@shared/types';
-import { Icon } from '../components/icons';
+import { Icon, type IconName } from '../components/icons';
+import { GuessTab, QueueTab } from './InteractiveExtra';
 import { MediaPicker } from '../components/MediaPicker';
 import { InstancePicker, OverlayBar, OverlayPreview, pickInstance } from '../components/overlay';
 import { Button, Card, ColorInput, Empty, Field, IconButton, LinesInput, NumberInput, PageHeader, Select, Tabs, TextInput, Toggle } from '../components/ui';
-import { useNow } from '../hooks';
+import { useClock, useNow } from '../hooks';
 import { useT, type TFn } from '../i18n';
 import { call, callOk, navigate, saveSettings, useApp, useSub } from '../store';
 
-type Tab = 'wheel' | 'poll' | 'giveaway' | 'quiz' | 'boss';
-const TABS: Tab[] = ['wheel', 'poll', 'giveaway', 'quiz', 'boss'];
+type Tab = 'wheel' | 'poll' | 'giveaway' | 'queue' | 'guess' | 'quiz' | 'boss';
+const TABS: Tab[] = ['wheel', 'poll', 'giveaway', 'queue', 'guess', 'quiz', 'boss'];
 const PERMISSIONS: Permission[] = ['everyone', 'subscriber', 'vip', 'moderator', 'broadcaster'];
 const permOptions = (t: TFn) => PERMISSIONS.map((p) => ({ value: p, label: t(`perm.${p}`) }));
 
@@ -21,6 +22,8 @@ export function Interactive() {
   const giveawayLive = useApp((d) => d.state!.giveaway.status === 'open');
   const quizLive = useApp((d) => ['question', 'reveal', 'loading'].includes(d.state!.quiz.status));
   const bossLive = useApp((d) => d.state!.boss.status === 'running');
+  const queueLive = useApp((d) => d.state!.viewerQueue.open);
+  const guessLive = useApp((d) => d.state!.guess.status === 'running');
   return (
     <div className="page page-wide">
       <PageHeader title={t('nav.interactive')} subtitle={t('fun.subtitle')} />
@@ -31,6 +34,8 @@ export function Interactive() {
           { id: 'wheel', label: <TabLabel icon="wheel" text={t('fun.wheel')} /> },
           { id: 'poll', label: <TabLabel icon="poll" text={t('fun.poll')} live={pollLive} /> },
           { id: 'giveaway', label: <TabLabel icon="gift" text={t('fun.giveaway')} live={giveawayLive} /> },
+          { id: 'queue', label: <TabLabel icon="users" text={t('fun.queue')} live={queueLive} /> },
+          { id: 'guess', label: <TabLabel icon="hash" text={t('fun.guess')} live={guessLive} /> },
           { id: 'quiz', label: <TabLabel icon="quiz" text={t('fun.quiz')} live={quizLive} /> },
           { id: 'boss', label: <TabLabel icon="target" text={t('fun.boss')} live={bossLive} /> },
         ]}
@@ -38,13 +43,15 @@ export function Interactive() {
       {tab === 'wheel' && <WheelTab />}
       {tab === 'poll' && <PollTab />}
       {tab === 'giveaway' && <GiveawayTab />}
+      {tab === 'queue' && <QueueTab />}
+      {tab === 'guess' && <GuessTab />}
       {tab === 'quiz' && <QuizTab />}
       {tab === 'boss' && <BossTab />}
     </div>
   );
 }
 
-function TabLabel({ icon, text, live }: { icon: 'wheel' | 'poll' | 'gift' | 'quiz' | 'target'; text: string; live?: boolean }) {
+function TabLabel({ icon, text, live }: { icon: IconName; text: string; live?: boolean }) {
   return (
     <span className="tab-label">
       <Icon name={icon} size={15} />
@@ -340,6 +347,7 @@ function formatLeft(ms: number): string {
 
 function GiveawayTab() {
   const t = useT();
+  const clock = useClock();
   const cfg = useApp((d) => d.settings!.giveaway);
   const g = useApp((d) => d.state!.giveaway);
   const [filter, setFilter] = useState('');
@@ -398,7 +406,7 @@ function GiveawayTab() {
                 ) : (
                   g.winnerMessages.map((m, i) => (
                     <p key={i}>
-                      <span className="muted small">{new Date(m.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span> {m.text}
+                      <span className="muted small">{clock(m.at)}</span> {m.text}
                     </p>
                   ))
                 )}

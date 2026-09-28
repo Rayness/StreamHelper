@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>StreamHelper — Guess the number</title>
+    <style>
+      :root {
+        --accent: #3fa7ff;
+      }
+      html,
+      body {
+        margin: 0;
+        background: transparent;
+        overflow: hidden;
+      }
+      #guess {
+        margin: 10px;
+        padding: 18px 22px 20px;
+        border-radius: 16px;
+        background: rgba(12, 12, 18, 0.84);
+        box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4);
+        color: #fff;
+        opacity: 0;
+        transform: translateY(16px);
+        transition:
+          opacity 0.4s ease,
+          transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      #guess.on {
+        opacity: 1;
+        transform: none;
+      }
+      .head {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .title {
+        flex: 1;
+        font-size: 24px;
+        font-weight: 800;
+      }
+      .timer {
+        min-width: 58px;
+        padding: 5px 10px;
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--accent) 25%, transparent);
+        font-weight: 800;
+        font-size: 18px;
+        text-align: center;
+        font-variant-numeric: tabular-nums;
+      }
+      .range {
+        display: flex;
+        align-items: baseline;
+        justify-content: center;
+        gap: 18px;
+        margin: 14px 0 10px;
+        font-size: 44px;
+        font-weight: 900;
+        font-variant-numeric: tabular-nums;
+      }
+      .range .dash {
+        font-size: 28px;
+        opacity: 0.6;
+      }
+      .range.win {
+        color: var(--accent);
+        animation: pop 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      .track {
+        position: relative;
+        height: 16px;
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.1);
+        overflow: hidden;
+      }
+      .window {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        border-radius: 8px;
+        background: var(--accent);
+        transition:
+          left 0.6s cubic-bezier(0.22, 1, 0.36, 1),
+          width 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      .foot {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        margin-top: 12px;
+        font-size: 17px;
+        font-weight: 700;
+      }
+      .foot .muted {
+        opacity: 0.7;
+        font-weight: 600;
+      }
+      .last.flash {
+        animation: flash 0.5s;
+      }
+      @keyframes pop {
+        40% {
+          transform: scale(1.12);
+        }
+      }
+      @keyframes flash {
+        from {
+          color: var(--accent);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="guess">
+      <div class="head"><div class="title"></div><div class="timer"></div></div>
+      <div class="range"><span class="lo"></span><span class="dash">—</span><span class="hi"></span></div>
+      <div class="track"><div class="window"></div></div>
+      <div class="foot"><span class="last"></span><span class="muted attempts"></span></div>
+    </div>
+    <script src="/overlay/assets/common.js"></script>
+    <script>
+      const root = document.getElementById('guess');
+      const range = root.querySelector('.range');
+      const timerEl = root.querySelector('.timer');
+      let g = null;
+      let lang = 'ru';
+      let skew = 0;
+      let lastKey = '';
+
+      function tick() {
+        if (!g) return;
+        if (g.status === 'won') timerEl.textContent = '✓';
+        else if (g.status === 'ended') timerEl.textContent = SH.tr(lang, 'Итог', 'End');
+        else timerEl.textContent = g.endsAt ? SH.formatClock(g.endsAt - (Date.now() + skew)) : '∞';
+      }
+
+      SH.connect('guess', (msg) => {
+        if (msg.type !== 'guess') return;
+        g = msg.guess;
+        lang = msg.lang;
+        skew = msg.now - Date.now();
+        const s = msg.style;
+        if (SH.preview && g.status === 'idle') {
+          g = { status: 'running', min: s.min, max: s.max, low: Math.round(s.min + (s.max - s.min) * 0.3), high: Math.round(s.min + (s.max - s.min) * 0.62), attempts: 9, endsAt: null, winner: null, answer: null, lastGuess: { user: 'Viewer_42', value: Math.round(s.min + (s.max - s.min) * 0.63), hint: 'lower' } };
+        }
+        SH.useFont(root, s.fontFamily);
+        root.style.setProperty('--accent', s.accentColor);
+        root.classList.toggle('on', g.status !== 'idle');
+        root.querySelector('.title').textContent = SH.tr(lang, 'Угадай число', 'Guess the number');
+        const done = g.status === 'won' || g.status === 'ended';
+        const win = g.status === 'won';
+        if (done) {
+          range.querySelector('.lo').textContent = g.answer ?? '?';
+          range.querySelector('.hi').textContent = '';
+          range.querySelector('.dash').textContent = '';
+        } else {
+          range.querySelector('.lo').textContent = g.low;
+          range.querySelector('.hi').textContent = g.high;
+          range.querySelector('.dash').textContent = '—';
+        }
+        range.classList.toggle('win', win);
+        const span = Math.max(1, g.max - g.min + 1);
+        const w = root.querySelector('.window');
+        w.style.left = ((g.low - g.min) / span) * 100 + '%';
+        w.style.width = Math.max(1.5, ((g.high - g.low + 1) / span) * 100) + '%';
+        const last = root.querySelector('.last');
+        const lg = g.lastGuess;
+        if (win) last.textContent = SH.tr(lang, `🎉 ${g.winner} угадал(а)!`, `🎉 ${g.winner} got it!`);
+        else if (g.status === 'ended') last.textContent = SH.tr(lang, 'Никто не угадал', 'Nobody guessed it');
+        else if (lg) last.textContent = `${lg.user}: ${lg.value} ${lg.hint === 'higher' ? SH.tr(lang, '— больше ↑', '— higher ↑') : SH.tr(lang, '— меньше ↓', '— lower ↓')}`;
+        else last.textContent = SH.tr(lang, 'Пишите число в чат', 'Type a number in chat');
+        const key = lg ? `${lg.user}:${lg.value}` : '';
+        if (key && key !== lastKey) {
+          last.classList.remove('flash');
+          void last.offsetWidth;
+          last.classList.add('flash');
+        }
+        lastKey = key;
+        root.querySelector('.attempts').textContent = SH.tr(lang, `${g.attempts} ${SH.plural(g.attempts, 'попытка', 'попытки', 'попыток')}`, `${g.attempts} tries`);
+        tick();
+      });
+      setInterval(tick, 250);
+    </script>
+  </body>
+</html>

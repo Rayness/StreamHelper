@@ -83,16 +83,24 @@ export async function callOk<K extends keyof IpcInvoke>(channel: K, ...args: Par
  */
 let pendingSaves = 0;
 let settingsWrite: Promise<unknown> = Promise.resolve();
+/** Last settings received from main: what the open forms are based on (see `settings:set`). */
+let confirmed: Settings | null = null;
+
+function applySettings(settings: Settings): void {
+  confirmed = settings;
+  set({ settings });
+}
 
 /** Optimistically update a settings section and persist it. */
 export function saveSettings<K extends SettingsKey>(key: K, value: Settings[K]): void {
   if (!data.settings) return;
   const profileId = data.settings.activeProfileId;
+  const base = confirmed?.activeProfileId === profileId ? confirmed[key] : undefined;
   set({ settings: { ...data.settings, [key]: value } });
   pendingSaves++;
   // Keep writes in edit order. Concurrent IPC calls could previously finish out of order,
   // briefly restoring an older value in the form and persisting the wrong final setting.
-  settingsWrite = settingsWrite.then(() => call('settings:set', key, value, profileId)).finally(() => pendingSaves--);
+  settingsWrite = settingsWrite.then(() => call('settings:set', key, value, profileId, base)).finally(() => pendingSaves--);
 }
 
 export async function profileAction<K extends 'profiles:create' | 'profiles:rename' | 'profiles:activate' | 'profiles:delete' | 'profiles:overlay'>(
@@ -103,7 +111,7 @@ export async function profileAction<K extends 'profiles:create' | 'profiles:rena
   const operation = settingsWrite.then(async () => {
     const settings = await call(channel, ...args);
     if (!settings) return false;
-    set({ settings });
+    applySettings(settings);
     return true;
   });
   settingsWrite = operation.finally(() => pendingSaves--);
@@ -168,7 +176,7 @@ export function useSub<T extends string>(page: Page, fallback: T, allowed?: read
 export async function init(): Promise<void> {
   window.api.on('state', (state) => set({ state }));
   window.api.on('settings', (settings) => {
-    if (pendingSaves === 0) set({ settings });
+    if (pendingSaves === 0) applySettings(settings);
   });
   window.api.on('chat:message', (m) => {
     const chat = data.chat.length >= CHAT_LIMIT ? data.chat.slice(-CHAT_LIMIT + 1) : data.chat.slice();
@@ -184,5 +192,6 @@ export async function init(): Promise<void> {
   window.api.on('toast', (t) => toast(t.kind, t.key, t.params));
 
   const initial = await window.api.invoke('app:init');
+  confirmed = initial.settings;
   set({ ready: true, ...initial });
 }

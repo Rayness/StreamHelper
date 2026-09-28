@@ -24,6 +24,8 @@ export interface ActionTargets {
 /** Runs dashboard buttons / global hotkeys. Each step is independent: one failing step doesn't stop the rest. */
 export class ActionRunner {
   private registered: string[] = [];
+  /** Hotkey → action id of the last registration, so label edits don't re-register (and re-warn). */
+  private bound = '';
 
   constructor(
     private ctx: AppContext,
@@ -96,12 +98,17 @@ export class ActionRunner {
   }
 
   registerHotkeys(): void {
+    const actions = (this.ctx.settings.get('actions') as QuickAction[]).filter((a) => a.hotkey.trim());
+    const bound = JSON.stringify(actions.map((a) => [a.hotkey.trim(), a.id]));
+    // Typing an action's label saves the whole list on every keystroke: nothing to re-bind then.
+    if (bound === this.bound) return;
+    this.bound = bound;
     for (const acc of this.registered) globalShortcut.unregister(acc);
     this.registered = [];
     const failed: string[] = [];
-    for (const a of this.ctx.settings.get('actions') as QuickAction[]) {
+    for (const a of actions) {
       const acc = a.hotkey.trim();
-      if (!acc || this.registered.includes(acc)) continue;
+      if (this.registered.includes(acc)) continue;
       try {
         if (globalShortcut.register(acc, () => void this.run(a.id))) this.registered.push(acc);
         else failed.push(acc);
@@ -115,5 +122,6 @@ export class ActionRunner {
   dispose(): void {
     for (const acc of this.registered) globalShortcut.unregister(acc);
     this.registered = [];
+    this.bound = '';
   }
 }

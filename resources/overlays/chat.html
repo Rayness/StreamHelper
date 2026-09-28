@@ -192,7 +192,7 @@
         }
       }
       line.appendChild(text);
-      const time = new Date(m.timestamp || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const time = new Date(m.timestamp || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
       line.appendChild(SH.el('span', 'timestamp', time));
       row.appendChild(line);
       return row;

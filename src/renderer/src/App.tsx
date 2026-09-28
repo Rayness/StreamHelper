@@ -83,7 +83,7 @@ function SideStatus() {
         ))}
       <span className="side-overlays">
         <Icon name="layers" size={13} />
-        {t('overlays.clients', { n: s.overlayClients })}
+        {t('side.overlays', { n: s.overlayClients })}
       </span>
     </div>
   );
@@ -111,7 +111,7 @@ export function App() {
   const live = useApp((d) => d.state!.stream.live);
   const lang = useApp((d) => d.settings!.language);
   const profileName = useApp((d) => d.settings!.profiles.find((p) => p.id === d.settings!.activeProfileId)?.name ?? '—');
-  const funLive = useApp((d) => d.state!.poll?.status === 'running' || d.state!.giveaway.status === 'open' || d.state!.boss.status === 'running' || ['question', 'reveal'].includes(d.state!.quiz.status));
+  const funLive = useApp((d) => d.state!.poll?.status === 'running' || d.state!.giveaway.status === 'open' || d.state!.boss.status === 'running' || d.state!.viewerQueue.open || d.state!.guess.status === 'running' || ['question', 'reveal'].includes(d.state!.quiz.status));
   const [palette, setPalette] = useState(false);
 
   useEffect(() => {

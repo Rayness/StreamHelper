@@ -32,6 +32,9 @@ import { QuizService } from './features/quiz';
 import { SpotlightService } from './features/spotlight';
 import type { StageDeps } from './features/stage';
 import { WheelService } from './features/wheel';
+import { ViewerQueueService } from './features/viewerQueue';
+import { GuessService } from './features/guess';
+import { HypeService } from './features/hype';
 import { KawakiService } from './integrations/kawaki/service';
 import { push, registerIpc } from './ipc';
 import { ObsService } from './obs/obs';
@@ -186,6 +189,9 @@ async function bootstrap(): Promise<void> {
   const ads = new AdsService(ctx, stage);
   const spotlight = new SpotlightService(ctx, stage, chatHistory);
   const emotes = new EmoteRain(ctx, stage);
+  const viewerQueue = new ViewerQueueService(ctx, stage);
+  const guess = new GuessService(ctx, stage);
+  const hype = new HypeService(ctx, stage);
   const text = new TextOverlays(ctx, () => overlay);
   hub = new OverlayHub(ctx, overlay, chatHistory, {
     alerts: () => alerts,
@@ -197,6 +203,10 @@ async function bootstrap(): Promise<void> {
     ad: (id) => ads.overlayMessage(id),
     song: () => songRequests.overlayMessage,
     spotlight: () => spotlight.overlayMessage(),
+    queue: () => viewerQueue.overlayMessage(),
+    guess: () => guess.overlayMessage(),
+    hype: () => hype.hypeMessage(),
+    leaders: () => hype.leadersMessage(),
   });
 
   const bot = new BotService(ctx, platforms, twitch);
@@ -272,6 +282,13 @@ async function bootstrap(): Promise<void> {
         case 'quickAction': if (id) return actions.run(id); break;
         case 'spotlightClear': return spotlight.clear();
         case 'spotlightShow': if (id) return spotlight.show(id); break;
+        case 'queueOpen': return viewerQueue.setOpen(!state.current.viewerQueue.open);
+        case 'queueNext': return void viewerQueue.next(id === 'random');
+        case 'queueClear': return viewerQueue.clear();
+        case 'guessStart': return guess.start();
+        case 'guessStop': return guess.stop();
+        case 'hypeReset': return hype.reset();
+        case 'counterAdd': if (id) { const [name, delta] = id.split(':'); if (name && /^-?\d{1,4}$/.test(delta ?? '')) return void bot.addCounter(name, Number(delta)); } break;
       }
       throw new Error('Unknown dock action');
     },
@@ -331,7 +348,7 @@ async function bootstrap(): Promise<void> {
       events: alerts.recentEvents,
       version: app.getVersion(),
     }),
-    'settings:set': (key, value, profileId) => settings.setForProfile(key, value, profileId),
+    'settings:set': (key, value, profileId, base) => settings.setForProfile(key, value, profileId, base),
     'settings:reset': (key) => {
       settings.reset(key);
       return settings.all;
@@ -409,6 +426,16 @@ async function bootstrap(): Promise<void> {
     'spotlight:show': (id) => spotlight.show(id),
     'spotlight:test': () => spotlight.test(),
     'spotlight:clear': () => spotlight.clear(),
+    'queue:open': (open) => viewerQueue.setOpen(open),
+    'queue:next': (random) => void viewerQueue.next(!!random),
+    'queue:remove': (userId) => viewerQueue.remove(userId),
+    'queue:clear': () => viewerQueue.clear(),
+    'guess:start': () => guess.start(),
+    'guess:stop': () => guess.stop(),
+    'counter:add': (name, delta) => void bot.addCounter(name, delta),
+    'hype:add': (points) => hype.add(points),
+    'hype:reset': () => hype.reset(),
+    'leaders:reset': () => hype.resetLeaders(),
     'update:check': () => updater.check(),
     'update:install': () => updater.install(),
     'kawaki:login': () => void kawaki.login(),
@@ -448,6 +475,7 @@ async function bootstrap(): Promise<void> {
   await startOverlay();
   text.start();
   ads.start();
+  hype.start();
   updater.start();
   music.start();
   bot.start();
@@ -475,6 +503,9 @@ async function bootstrap(): Promise<void> {
     kawaki.stop();
     text.stop();
     ads.stop();
+    hype.stop();
+    viewerQueue.dispose();
+    guess.dispose();
     updater.stop();
     music.stop();
     boss.dispose();
