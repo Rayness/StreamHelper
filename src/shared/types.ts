@@ -890,7 +890,7 @@ export type OverlayMessage =
   | { type: 'song'; request: SongRequest | null; nonce: string | null; config: SongRequestSettings; queue: SongRequest[]; lang: Language }
   | { type: 'banner'; banner: RenderedBanner | null }
   | { type: 'ad'; campaign: AdCampaign | null; endsAt: number | null }
-  | { type: 'boss'; boss: BossState; style: BossSettings; lang: Language }
+  | { type: 'boss'; boss: BossState; style: BossSettings; lang: Language; prefix: string }
   | { type: 'live'; stream: StreamInfo; lang: Language }
   | { type: 'spotlight'; message: ChatMessage | null }
   | { type: 'spotlightConfig'; config: SpotlightOverlaySettings }
@@ -918,7 +918,8 @@ export interface MediaFile {
 /** Request/response calls from renderer to main. */
 export interface IpcInvoke {
   'app:init': () => { settings: Settings; state: RuntimeState; chat: ChatMessage[]; events: StreamEvent[]; version: string };
-  'settings:set': <K extends SettingsKey>(key: K, value: Settings[K], profileId?: string) => void;
+  /** `base` is the value the editor started from, so changes made by the app meanwhile survive the save. */
+  'settings:set': <K extends SettingsKey>(key: K, value: Settings[K], profileId?: string, base?: Settings[K]) => void;
   'settings:reset': (key: SettingsKey) => Settings;
   'profiles:create': (name: string) => Settings;
   'profiles:rename': (id: string, name: string) => Settings;

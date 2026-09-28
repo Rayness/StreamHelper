@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from '
 import { dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { defaultSettings, mergeDefaults, migrateSettings } from '@shared/defaults';
+import { merge3 } from '@shared/merge';
 import { ALL_OVERLAY_KINDS, PROFILE_KEYS, profileSnapshot } from '@shared/profiles';
 import type { Language, OverlayKind, ProfileConfig, ProfileSettingsKey, Settings, SettingsKey } from '@shared/types';
 import type { EventBus } from './eventBus';
@@ -73,18 +74,24 @@ export class SettingsStore {
     if (!opts.silent) this.bus.emit('settings:changed', key);
   }
 
-  /** Save an edit to the profile that owned the form, even if OBS switched profiles meanwhile. */
-  setForProfile<K extends SettingsKey>(key: K, value: Settings[K], profileId?: string): void {
+  /**
+   * Save an edit from the UI to the profile that owned the form, even if OBS switched profiles
+   * meanwhile. With `base` (what the form started from), fields the form didn't touch keep the
+   * app's newer values: goal progress, counters and subathon time move while the streamer edits.
+   */
+  setForProfile<K extends SettingsKey>(key: K, value: Settings[K], profileId?: string, base?: Settings[K]): void {
     if (profileId && profileId !== this.data.activeProfileId && PROFILE_KEYS.includes(key as ProfileSettingsKey)) {
-      if (!this.data.profiles.some((profile) => profile.id === profileId)) return;
+      const target = this.data.profiles.find((profile) => profile.id === profileId);
+      if (!target) return;
+      const merged = base === undefined ? value : merge3(base, value, target.config[key as ProfileSettingsKey]);
       this.data = { ...this.data, profiles: this.data.profiles.map((profile) => profile.id === profileId
-        ? { ...profile, config: { ...profile.config, [key]: structuredClone(value) } as ProfileConfig }
+        ? { ...profile, config: { ...profile.config, [key]: structuredClone(merged) } as ProfileConfig }
         : profile) };
       this.scheduleSave();
       this.bus.emit('settings:changed', 'profiles');
       return;
     }
-    this.set(key, value);
+    this.set(key, base === undefined ? value : merge3(base, value, this.data[key]));
   }
 
   /** Mutate a section in place (for high-frequency internal updates like goal progress). */

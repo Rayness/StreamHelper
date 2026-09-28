@@ -331,7 +331,7 @@ async function bootstrap(): Promise<void> {
       events: alerts.recentEvents,
       version: app.getVersion(),
     }),
-    'settings:set': (key, value, profileId) => settings.setForProfile(key, value, profileId),
+    'settings:set': (key, value, profileId, base) => settings.setForProfile(key, value, profileId, base),
     'settings:reset': (key) => {
       settings.reset(key);
       return settings.all;

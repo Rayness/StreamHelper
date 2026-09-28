@@ -11,6 +11,8 @@ export class ObsService {
 
   constructor(private ctx: AppContext) {
     this.obs.on('ConnectionClosed', (err) => {
+      // Our own disconnect before a reconnect: connect() reports the outcome itself.
+      if (this.connecting && this.ctx.state.current.obs.status === 'connecting') return;
       const wasConnected = this.ctx.state.current.obs.status === 'connected';
       this.ctx.state.patch('obs', { status: 'disconnected', error: wasConnected ? undefined : err?.message });
       if (wasConnected && !this.manualDisconnect) this.ctx.toast('info', 'toast.obsDisconnected');
@@ -62,6 +64,9 @@ export class ObsService {
         eventSubscriptions: EventSubscription.General | EventSubscription.Scenes | EventSubscription.SceneItems | EventSubscription.Inputs | EventSubscription.Outputs,
       });
       this.ctx.state.patch('obs', { status: 'connected', error: undefined });
+      // A retry scheduled by a close during this attempt would reconnect a healthy session.
+      if (this.retryTimer) clearTimeout(this.retryTimer);
+      this.retryTimer = null;
       await Promise.all([this.refreshScenes(), this.refreshInputs(), this.refreshOutputs()]);
       if (!silent) this.ctx.toast('success', 'toast.obsConnected');
     } catch (err) {

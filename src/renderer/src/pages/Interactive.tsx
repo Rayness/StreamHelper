@@ -5,7 +5,7 @@ import { Icon } from '../components/icons';
 import { MediaPicker } from '../components/MediaPicker';
 import { InstancePicker, OverlayBar, OverlayPreview, pickInstance } from '../components/overlay';
 import { Button, Card, ColorInput, Empty, Field, IconButton, LinesInput, NumberInput, PageHeader, Select, Tabs, TextInput, Toggle } from '../components/ui';
-import { useNow } from '../hooks';
+import { useClock, useNow } from '../hooks';
 import { useT, type TFn } from '../i18n';
 import { call, callOk, navigate, saveSettings, useApp, useSub } from '../store';
 
@@ -340,6 +340,7 @@ function formatLeft(ms: number): string {
 
 function GiveawayTab() {
   const t = useT();
+  const clock = useClock();
   const cfg = useApp((d) => d.settings!.giveaway);
   const g = useApp((d) => d.state!.giveaway);
   const [filter, setFilter] = useState('');
@@ -398,7 +399,7 @@ function GiveawayTab() {
                 ) : (
                   g.winnerMessages.map((m, i) => (
                     <p key={i}>
-                      <span className="muted small">{new Date(m.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span> {m.text}
+                      <span className="muted small">{clock(m.at)}</span> {m.text}
                     </p>
                   ))
                 )}

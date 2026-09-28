@@ -67,8 +67,9 @@ export class TextOverlays {
 
   /** Hotkey / action: flip the manual toggle. */
   toggle(id: string): void {
-    this.ctx.settings.update('banners', (list) => list.map((b) => (b.id === id ? { ...b, visible: !b.visible } : b)));
+    // Drop the pop-up window first: the settings change re-renders right away.
     this.showUntil.delete(id);
+    this.ctx.settings.update('banners', (list) => list.map((b) => (b.id === id ? { ...b, visible: !b.visible } : b)));
   }
 
   private runSchedule(now: number): void {
