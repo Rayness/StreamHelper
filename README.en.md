@@ -10,7 +10,7 @@ Releases are available [in this repository](https://github.com/Rayness/StreamHel
 
 These screenshots use fictional demo data; they contain no real accounts or tokens.
 
-**Dashboard:** chat, stream status, interactive tools, and OBS.
+**Dashboard:** live status bar, chat, viewer activities, counters, and OBS.
 
 ![StreamHelper dashboard](docs/screenshots/dashboard-en.png)
 
@@ -41,11 +41,11 @@ Keep StreamHelper running during the stream. Its local server on `127.0.0.1` ser
 
 | Section | What it does |
 | --- | --- |
-| Dashboard | Stream status, combined chat, replies, moderation, and recent events. |
+| Dashboard | Live status bar (viewers, uptime, this stream's totals, alerts, OBS output), combined chat with moderation, quick actions, every viewer activity in one card, counters, scenes, and recent events. |
 | Profiles | Separate sets of overlay, alert, interactive, bot, and quick action settings. |
 | Overlays | Settings, live previews, URLs, and one-click OBS browser sources. |
 | Alerts | Text, sound, media, speech, separate donation styles by amount, and the event queue. |
-| Interactive | Wheel, poll, giveaway, chat boss, and anime quiz. |
+| Interactive | Wheel, poll, giveaway, viewer queue, guess the number, chat boss, and anime quiz. |
 | Chat bot | Custom commands, scheduled messages, counters, and moderation. |
 | OBS & actions | Scenes, recording, stream controls, sources, audio, quick actions, SubForStream, and the OBS dock. |
 | Connections | Twitch, OBS, donations, Streamer.bot, Discord, and Kawaki. |
@@ -70,7 +70,10 @@ Each overlay is a separate OBS Browser Source. The **Overlays** page shows its r
 | Banner | Sponsor images and videos with a separate schedule and 14 entrance effects. |
 | Live status and chat spotlight | Title, category, viewers, uptime, or one selected chat message. |
 | Goals, timers, and labels | Donations, followers, subscriptions, new chat message and unique chatter goals, subathon, and template variables. |
-| Interactive sources | Wheel, poll, giveaway, boss, quiz, and emote rain. |
+| Counter | A bot counter (deaths, wins...) as a card, text, or badge. |
+| Hype meter | Fills up from follows, subs, bits, donations, raids, rewards, and chat, cools down over time, with levels. |
+| Top chatters | The most active viewers of the stream; bots are excluded. |
+| Interactive sources | Wheel, poll, giveaway, viewer queue, guess the number, boss, quiz, and emote rain. |
 | Kawaki | Current title, poster, and viewing progress. |
 
 **Channel points:** StreamHelper subscribes to Twitch's `channel.channel_points_custom_reward_redemption.add` event when custom rewards are available and the broadcaster grants `channel:read:redemptions`. Twitch's built-in rewards do not appear in this feed. A custom reward title can also trigger a wheel spin, boss hit, or quick action. If Twitch does not provide these events, the reward overlay stays empty without affecting other features.
