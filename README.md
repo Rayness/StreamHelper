@@ -2,7 +2,7 @@
 
 [Русский](README.md) · [English](README.en.md)
 
-StreamHelper — приложение для Windows, которое собирает управление стримом, чат и источники OBS в одном окне. Последний опубликованный выпуск: **0.7.0**. Интерфейс доступен на русском и английском.
+StreamHelper — приложение для Windows, которое собирает управление стримом, чат и источники OBS в одном окне. Последний опубликованный выпуск: **0.8.0**. Интерфейс доступен на русском и английском.
 
 Релизы доступны [в этом репозитории](https://github.com/Rayness/StreamHelper/releases) и в [публичном репозитории обновлений](https://github.com/Rayness/StreamHelper-Releases/releases).
 
@@ -30,7 +30,7 @@ StreamHelper — приложение для Windows, которое собир�
 
 ## Скачать и начать работу
 
-1. Скачайте `StreamHelper-Setup-0.7.0.exe` на [странице последнего выпуска](https://github.com/Rayness/StreamHelper/releases/latest) или из [публичного зеркала](https://github.com/Rayness/StreamHelper-Releases/releases/latest) и установите приложение. Установщик Windows сейчас не подписан сертификатом издателя.
+1. Скачайте `StreamHelper-Setup-0.8.0.exe` на [странице последнего выпуска](https://github.com/Rayness/StreamHelper/releases/latest) или из [публичного зеркала](https://github.com/Rayness/StreamHelper-Releases/releases/latest) и установите приложение. Установщик Windows сейчас не подписан сертификатом издателя.
 2. Откройте **Подключения** и войдите в Twitch как вещатель. Авторизация проходит через код на сайте Twitch. Для отправки сообщений ботом можно отдельно подключить его аккаунт.
 3. Если нужен OBS, включите **WebSocket Server** в OBS Studio и подключите его в StreamHelper на странице **Подключения**. По умолчанию используется порт 4455.
 4. Откройте **Оверлеи**, выберите источник, настройте его и нажмите **Добавить в OBS**. Кнопка создаст Browser Source в текущей сцене. При желании можно скопировать URL и добавить источник вручную.
@@ -139,7 +139,7 @@ npm run dev
 npm run typecheck
 npm test
 npm run build
-npx electron-builder --win --publish never --config.directories.output=dist/0.7.0
+npx electron-builder --win --publish never --config.directories.output=dist/0.8.0
 ```
 
 Сгенерированные привязки Windows Runtime уже включены в репозиторий; для обычной сборки Windows SDK не нужен. Чтобы пересоздать их на машине с Windows SDK, выполните `npm run generate:winrt`. Сборка установщика остаётся локальной, пока явно не запущен скрипт публикации. Для выпуска в публичный репозиторий обновлений:

@@ -2,7 +2,7 @@
 
 [Русский](README.md) · [English](README.en.md)
 
-StreamHelper is a Windows desktop app for managing a stream, chat, and OBS browser sources from one place. The latest published release is **0.7.0**. The interface supports Russian and English.
+StreamHelper is a Windows desktop app for managing a stream, chat, and OBS browser sources from one place. The latest published release is **0.8.0**. The interface supports Russian and English.
 
 Releases are available [in this repository](https://github.com/Rayness/StreamHelper/releases) and in the [public update repository](https://github.com/Rayness/StreamHelper-Releases/releases).
 
@@ -30,7 +30,7 @@ These screenshots use fictional demo data; they contain no real accounts or toke
 
 ## Download and first run
 
-1. Download `StreamHelper-Setup-0.7.0.exe` from the [latest release](https://github.com/Rayness/StreamHelper/releases/latest) or its [public mirror](https://github.com/Rayness/StreamHelper-Releases/releases/latest), then run the installer. The Windows installer is currently **not signed** with a publisher certificate.
+1. Download `StreamHelper-Setup-0.8.0.exe` from the [latest release](https://github.com/Rayness/StreamHelper/releases/latest) or its [public mirror](https://github.com/Rayness/StreamHelper-Releases/releases/latest), then run the installer. The Windows installer is currently **not signed** with a publisher certificate.
 2. Open **Connections** and sign in to Twitch as the broadcaster. Twitch uses a device code shown in the app. A separate bot account is optional.
 3. To control OBS, enable the **WebSocket Server** in OBS Studio and connect it in StreamHelper's **Connections** page. The usual OBS port is 4455.
 4. Open **Overlays**, choose and configure a source, and click **Add to OBS**. StreamHelper creates a Browser Source in the current scene. You can also copy the URL and add it manually.
@@ -139,7 +139,7 @@ npm run dev
 npm run typecheck
 npm test
 npm run build
-npx electron-builder --win --publish never --config.directories.output=dist/0.7.0
+npx electron-builder --win --publish never --config.directories.output=dist/0.8.0
 ```
 
 Generated Windows Runtime bindings are included in the repository; a normal build does not need the Windows SDK. To regenerate them on a machine with the Windows SDK, run `npm run generate:winrt`. Building an installer does not publish it. To validate and publish an update release:
