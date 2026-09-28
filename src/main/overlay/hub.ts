@@ -24,6 +24,10 @@ export interface HubSources {
   ad: (id?: string | null) => OverlayMessage;
   song: () => OverlayMessage;
   spotlight: () => OverlayMessage;
+  queue: () => OverlayMessage;
+  guess: () => OverlayMessage;
+  hype: () => OverlayMessage;
+  leaders: () => OverlayMessage;
 }
 
 /** Wires bus events and settings changes to connected overlays. */
@@ -63,6 +67,7 @@ export class OverlayHub {
       if (key === 'goals') server.forEachClient('goal', (id) => this.goalMessage(id));
       if (key === 'timers') server.forEachClient('timer', (id) => this.timerMessage(id));
       if (key === 'wheels') server.forEachClient('wheel', (id) => this.wheelMessage(id));
+      if (key === 'counterOverlays' || key === 'bot') server.forEachClient('counter', (id) => this.counterMessage(id));
       if (key === 'emoteRain') server.broadcast('emotes', { type: 'emoteConfig', config: this.settings.emoteRain });
       if (key === 'kawaki') server.broadcast('kawaki', this.kawakiMessage());
       if (key === 'ads') server.forEachClient('ad', (id) => this.sources.ad(id));
@@ -95,6 +100,12 @@ export class OverlayHub {
     const last = this.ctx.state.current.wheel.lastResult;
     const lastWinnerId = wheel && last?.wheelId === wheel.id ? (wheel.segments.find((s) => s.label === last.label)?.id ?? null) : null;
     return { type: 'wheel', wheel, lastWinnerId };
+  }
+
+  private counterMessage(id: string | null): OverlayMessage {
+    const list = this.settings.counterOverlays;
+    const c = (id ? list.find((x) => x.id === id) : list[0]) ?? null;
+    return { type: 'counter', counter: c ? { ...c, value: this.settings.bot.counters[c.counter] ?? 0 } : null };
   }
 
   private kawakiMessage(): OverlayMessage {
@@ -176,6 +187,16 @@ export class OverlayHub {
         return [{ type: 'live', stream: this.ctx.state.current.stream, lang: this.settings.language }];
       case 'kawaki':
         return [this.kawakiMessage()];
+      case 'counter':
+        return [this.counterMessage(id)];
+      case 'queue':
+        return [this.sources.queue()];
+      case 'guess':
+        return [this.sources.guess()];
+      case 'hype':
+        return [this.sources.hype()];
+      case 'leaders':
+        return [this.sources.leaders()];
     }
   }
 }

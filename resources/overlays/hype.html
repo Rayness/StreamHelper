@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>StreamHelper — Hype meter</title>
+    <style>
+      :root {
+        --accent: #ff7a45;
+      }
+      html,
+      body {
+        margin: 0;
+        background: transparent;
+        overflow: hidden;
+      }
+      #hype {
+        margin: 10px;
+        padding: 16px 20px 18px;
+        border-radius: 16px;
+        background: rgba(12, 12, 18, 0.84);
+        box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4);
+        color: #fff;
+        opacity: 0;
+        transform: translateY(16px);
+        transition:
+          opacity 0.5s ease,
+          transform 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      #hype.on {
+        opacity: 1;
+        transform: none;
+      }
+      .head {
+        display: flex;
+        align-items: baseline;
+        gap: 12px;
+        margin-bottom: 10px;
+      }
+      .title {
+        flex: 1;
+        font-size: 24px;
+        font-weight: 800;
+      }
+      .level {
+        font-size: 20px;
+        font-weight: 900;
+        color: var(--accent);
+        font-variant-numeric: tabular-nums;
+      }
+      .level.up {
+        animation: up 0.8s cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      .track {
+        position: relative;
+        height: 24px;
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.1);
+        overflow: hidden;
+      }
+      .fill {
+        position: absolute;
+        inset: 0 auto 0 0;
+        width: 0;
+        overflow: hidden;
+        border-radius: 12px;
+        background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 60%, #ffd166), var(--accent));
+        transition: width 0.9s cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      .fill::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+        transform: translateX(-100%);
+        animation: shine 2.2s infinite;
+      }
+      .pips {
+        display: flex;
+        gap: 6px;
+        margin-top: 10px;
+      }
+      .pips span {
+        flex: 1;
+        height: 6px;
+        border-radius: 3px;
+        background: rgba(255, 255, 255, 0.12);
+        transition: background 0.4s;
+      }
+      .pips span.on {
+        background: var(--accent);
+      }
+      .max .fill {
+        animation: glow 1.2s infinite;
+      }
+      @keyframes shine {
+        60%,
+        100% {
+          transform: translateX(100%);
+        }
+      }
+      @keyframes up {
+        40% {
+          transform: scale(1.35);
+        }
+      }
+      @keyframes glow {
+        50% {
+          filter: brightness(1.35);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="hype">
+      <div class="head"><div class="title"></div><div class="level"></div></div>
+      <div class="track"><div class="fill"></div></div>
+      <div class="pips"></div>
+    </div>
+    <script src="/overlay/assets/common.js"></script>
+    <script>
+      const root = document.getElementById('hype');
+      const levelEl = root.querySelector('.level');
+      let lastLevel = null;
+
+      SH.connect('hype', (msg) => {
+        if (msg.type !== 'hype') return;
+        const s = msg.style;
+        let h = msg.hype;
+        if (SH.preview && h.level === 0) h = { level: 2, progress: 0.6, points: s.levelPoints * 1.6 };
+        const maxLevel = Math.max(1, s.maxLevel);
+        root.classList.toggle('on', h.level > 0 || !s.hideWhenEmpty);
+        root.classList.toggle('max', h.level >= maxLevel && h.progress >= 1);
+        SH.useFont(root, s.fontFamily);
+        root.style.setProperty('--accent', s.accentColor);
+        root.querySelector('.title').textContent = s.title;
+        levelEl.textContent = h.level ? SH.tr(msg.lang, `Уровень ${h.level}`, `Level ${h.level}`) : '';
+        if (lastLevel !== null && h.level > lastLevel) {
+          levelEl.classList.remove('up');
+          void levelEl.offsetWidth;
+          levelEl.classList.add('up');
+        }
+        lastLevel = h.level;
+        root.querySelector('.fill').style.width = (h.level ? h.progress * 100 : 0) + '%';
+        const pips = root.querySelector('.pips');
+        if (pips.children.length !== maxLevel) {
+          pips.innerHTML = '';
+          for (let i = 0; i < maxLevel; i++) pips.appendChild(SH.el('span'));
+        }
+        [...pips.children].forEach((p, i) => p.classList.toggle('on', i < h.level));
+      });
+    </script>
+  </body>
+</html>

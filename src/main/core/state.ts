@@ -31,6 +31,10 @@ export function initialRuntimeState(): RuntimeState {
     update: { status: 'idle', version: null, progress: 0, error: null },
     dockUrl: '',
     bannersShown: [],
+    viewerQueue: { open: false, entries: [], picked: [] },
+    guess: { status: 'idle', min: 1, max: 100, low: 1, high: 100, attempts: 0, endsAt: null, winner: null, answer: null, lastGuess: null },
+    hype: { points: 0, level: 0, progress: 0, lastBumpAt: 0 },
+    chatLeaders: [],
   };
 }
 

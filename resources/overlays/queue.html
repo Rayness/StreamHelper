@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>StreamHelper — Viewer queue</title>
+    <style>
+      :root {
+        --accent: #37d399;
+      }
+      html,
+      body {
+        margin: 0;
+        background: transparent;
+        overflow: hidden;
+      }
+      #queue {
+        margin: 10px;
+        padding: 18px 20px;
+        border-radius: 16px;
+        background: rgba(12, 12, 18, 0.84);
+        box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4);
+        color: #fff;
+        opacity: 0;
+        transform: translateY(16px);
+        transition:
+          opacity 0.4s ease,
+          transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      #queue.on {
+        opacity: 1;
+        transform: none;
+      }
+      .head {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .title {
+        flex: 1;
+        font-size: 24px;
+        font-weight: 800;
+      }
+      .state {
+        padding: 5px 12px;
+        border-radius: 999px;
+        font-size: 15px;
+        font-weight: 800;
+        background: color-mix(in srgb, var(--accent) 25%, transparent);
+      }
+      .state.closed {
+        background: rgba(255, 255, 255, 0.12);
+        opacity: 0.8;
+      }
+      .help {
+        margin-top: 4px;
+        font-size: 16px;
+        font-weight: 600;
+        opacity: 0.75;
+      }
+      .now {
+        margin-top: 14px;
+        padding: 12px 14px;
+        border-radius: 12px;
+        background: color-mix(in srgb, var(--accent) 30%, rgba(0, 0, 0, 0.3));
+        font-size: 20px;
+        font-weight: 800;
+      }
+      .now small {
+        display: block;
+        font-size: 13px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        opacity: 0.8;
+      }
+      .now.pop {
+        animation: pop 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      ol {
+        list-style: none;
+        margin: 12px 0 0;
+        padding: 0;
+      }
+      li {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        height: 40px;
+        padding: 0 12px;
+        margin-top: 6px;
+        border-radius: 10px;
+        background: rgba(255, 255, 255, 0.07);
+        font-size: 19px;
+        font-weight: 700;
+        animation: enter 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      li .n {
+        width: 26px;
+        height: 26px;
+        display: grid;
+        place-items: center;
+        border-radius: 7px;
+        background: rgba(0, 0, 0, 0.35);
+        font-size: 14px;
+        flex: none;
+      }
+      li .name {
+        flex: 1;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      li .sub {
+        color: var(--accent);
+        font-size: 14px;
+      }
+      .more {
+        margin-top: 8px;
+        font-size: 15px;
+        font-weight: 600;
+        opacity: 0.7;
+      }
+      @keyframes enter {
+        from {
+          opacity: 0;
+          transform: translateX(-14px);
+        }
+      }
+      @keyframes pop {
+        40% {
+          transform: scale(1.04);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="queue">
+      <div class="head"><div class="title"></div><div class="state"></div></div>
+      <div class="help"></div>
+      <div class="now" hidden><small></small><span></span></div>
+      <ol></ol>
+      <div class="more"></div>
+    </div>
+    <script src="/overlay/assets/common.js"></script>
+    <script>
+      const root = document.getElementById('queue');
+      const list = root.querySelector('ol');
+      let lastPicked = null;
+
+      SH.connect('queue', (msg) => {
+        if (msg.type !== 'queue') return;
+        let q = msg.state;
+        const s = msg.style;
+        const lang = msg.lang;
+        if (SH.preview && !q.open && !q.entries.length && !q.picked.length) {
+          const names = ['Viewer_42', 'КиберКотик', 'NightOwl', 'Alice', 'Bob', 'Zed', 'Mira'];
+          q = { open: true, entries: names.map((userName, i) => ({ userId: String(i), userName, sub: i % 3 === 1 })), picked: [{ userId: 'x', userName: 'StreamHelper' }] };
+        }
+        const visible = q.open || q.entries.length > 0 || q.picked.length > 0;
+        root.classList.toggle('on', visible);
+        SH.useFont(root, s.fontFamily);
+        root.style.setProperty('--accent', s.accentColor);
+        root.querySelector('.title').textContent = s.title;
+        const state = root.querySelector('.state');
+        state.textContent = q.open ? SH.tr(lang, 'Открыта', 'Open') : SH.tr(lang, 'Закрыта', 'Closed');
+        state.classList.toggle('closed', !q.open);
+        root.querySelector('.help').textContent = q.open
+          ? SH.tr(lang, `Пишите ${msg.prefix}${s.joinCommand}, чтобы записаться · ${q.entries.length} в очереди`, `Type ${msg.prefix}${s.joinCommand} to join · ${q.entries.length} in line`)
+          : SH.tr(lang, `${q.entries.length} в очереди`, `${q.entries.length} in line`);
+        const now = root.querySelector('.now');
+        const picked = q.picked[0];
+        now.hidden = !picked;
+        if (picked) {
+          now.querySelector('small').textContent = SH.tr(lang, 'Сейчас играет', 'Up now');
+          now.querySelector('span').textContent = picked.userName;
+          if (lastPicked !== null && lastPicked !== picked.userName) {
+            now.classList.remove('pop');
+            void now.offsetWidth;
+            now.classList.add('pop');
+          }
+        }
+        lastPicked = picked ? picked.userName : '';
+        const shown = q.entries.slice(0, Math.max(1, s.showCount));
+        const keys = shown.map((e) => e.userId).join('|');
+        if (list.dataset.keys !== keys) {
+          list.dataset.keys = keys;
+          list.innerHTML = '';
+          shown.forEach((e, i) => {
+            const li = SH.el('li');
+            li.append(SH.el('span', 'n', String(i + 1)), SH.el('span', 'name', e.userName));
+            if (e.sub) li.append(SH.el('span', 'sub', '★'));
+            list.appendChild(li);
+          });
+        }
+        const rest = q.entries.length - shown.length;
+        root.querySelector('.more').textContent = rest > 0 ? SH.tr(lang, `и ещё ${rest}`, `and ${rest} more`) : '';
+      });
+    </script>
+  </body>
+</html>

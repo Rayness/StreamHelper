@@ -1,6 +1,11 @@
 import type {
   AlertSettings,
   AlertType,
+  CounterOverlay,
+  GuessSettings,
+  HypeSettings,
+  LeadersOverlaySettings,
+  ViewerQueueSettings,
   AlertVariant,
   AdCampaign,
   Banner,
@@ -435,6 +440,63 @@ export function defaultQuiz(): QuizSettings {
   };
 }
 
+export function defaultViewerQueue(lang: Language): ViewerQueueSettings {
+  const ru = lang === 'ru';
+  return {
+    title: ru ? 'Очередь зрителей' : 'Viewer queue',
+    joinCommand: ru ? 'очередь' : 'join',
+    leaveCommand: ru ? 'выйти' : 'leave',
+    eligible: 'everyone',
+    maxSize: 50,
+    subPriority: false,
+    announce: true,
+    showCount: 6,
+    accentColor: '#37d399',
+    fontFamily: 'Montserrat',
+  };
+}
+
+export function defaultGuess(): GuessSettings {
+  return { min: 1, max: 100, durationSec: 0, cooldownSec: 5, announce: true, accentColor: '#3fa7ff', fontFamily: 'Montserrat' };
+}
+
+export function defaultCounterOverlay(lang: Language, counter = 'deaths'): CounterOverlay {
+  return {
+    id: uid('counter_'),
+    counter,
+    title: lang === 'ru' ? 'Смерти' : 'Deaths',
+    style: 'card',
+    fontFamily: 'Montserrat',
+    fontSize: 44,
+    textColor: '#ffffff',
+    accentColor: '#ff5d8f',
+  };
+}
+
+export function defaultHype(lang: Language): HypeSettings {
+  return {
+    title: lang === 'ru' ? 'Хайп' : 'Hype',
+    levelPoints: 100,
+    maxLevel: 5,
+    points: { follow: 5, sub: 25, bitsPer100: 10, donationPerUnit: lang === 'ru' ? 0.1 : 5, raidPerViewer: 1, chatMessage: 0.5, redemption: 5 },
+    decayPerMin: 20,
+    hideWhenEmpty: true,
+    accentColor: '#ff7a45',
+    fontFamily: 'Montserrat',
+  };
+}
+
+export function defaultLeaders(lang: Language): LeadersOverlaySettings {
+  return {
+    title: lang === 'ru' ? 'Самые активные в чате' : 'Top chatters',
+    count: 5,
+    showCounts: true,
+    exclude: ['nightbot', 'streamelements', 'moobot', 'wizebot', 'streamlabs'],
+    accentColor: '#9b6bff',
+    fontFamily: 'Montserrat',
+  };
+}
+
 export const DEFAULT_KAWAKI_URL = 'https://kawaki.ru';
 
 export function defaultKawaki(lang: Language): KawakiSettings {
@@ -491,6 +553,11 @@ export function defaultSettings(lang: Language): Settings {
     quiz: defaultQuiz(),
     boss: defaultBoss(lang),
     kawaki: defaultKawaki(lang),
+    viewerQueue: defaultViewerQueue(lang),
+    guess: defaultGuess(),
+    counterOverlays: [defaultCounterOverlay(lang)],
+    hype: defaultHype(lang),
+    leadersOverlay: defaultLeaders(lang),
     currency: lang === 'ru' ? 'RUB' : 'USD',
     minimizeToTray: true,
     profiles: [],

@@ -10,6 +10,7 @@ import { Button, Card, ColorInput, Field, IconButton, LinesInput, NumberInput, P
 import { useNow } from '../hooks';
 import { useT, type TKey } from '../i18n';
 import { OVERLAYS, type OverlayGroup } from '../overlayCatalog';
+import { CounterDetail, HypeDetail, LeadersDetail } from './OverlaysExtra';
 import { call, callOk, navigate, saveSettings, useApp, useSub } from '../store';
 
 const KINDS = OVERLAYS.map((o) => o.kind);
@@ -73,7 +74,7 @@ export function Overlays() {
 }
 
 /** Settings on the left, the live preview on the right. */
-function Split({ settings, preview, stacked }: { settings: ReactNode; preview: ReactNode; stacked?: boolean }) {
+export function Split({ settings, preview, stacked }: { settings: ReactNode; preview: ReactNode; stacked?: boolean }) {
   return (
     <div className={`ov-split ${stacked ? 'stacked' : ''}`}>
       <div className="ov-settings">{settings}</div>
@@ -134,7 +135,15 @@ function OverlayDetail({ kind }: { kind: OverlayKind }) {
     case 'giveaway':
     case 'quiz':
     case 'boss':
+    case 'queue':
+    case 'guess':
       return <InteractiveDetail kind={kind} />;
+    case 'counter':
+      return <CounterDetail />;
+    case 'hype':
+      return <HypeDetail />;
+    case 'leaders':
+      return <LeadersDetail />;
   }
 }
 
@@ -612,7 +621,7 @@ function BannersDetail() {
   );
 }
 
-function DeleteInstance({ onDelete }: { onDelete: () => void }) {
+export function DeleteInstance({ onDelete }: { onDelete: () => void }) {
   const t = useT();
   return (
     <div className="danger-row">
@@ -981,7 +990,7 @@ function EmotesDetail() {
 
 // ---------- interactive overlays point to their control page ----------
 
-const INTERACTIVE_TAB: Partial<Record<OverlayKind, string>> = { wheel: 'wheel', poll: 'poll', giveaway: 'giveaway', quiz: 'quiz', boss: 'boss' };
+const INTERACTIVE_TAB: Partial<Record<OverlayKind, string>> = { wheel: 'wheel', poll: 'poll', giveaway: 'giveaway', quiz: 'quiz', boss: 'boss', queue: 'queue', guess: 'guess' };
 
 function InteractiveDetail({ kind }: { kind: OverlayKind }) {
   const t = useT();
