@@ -272,6 +272,11 @@ export interface AlertStyle {
   textColor: string;
   accentColor: string;
   layout: 'stacked' | 'side';
+  /** Position in the browser source, in percent. */
+  x: number;
+  y: number;
+  width: number;
+  anchor: 'center' | 'topLeft' | 'topRight' | 'bottomLeft' | 'bottomRight';
 }
 
 export interface AlertSettings {
@@ -315,6 +320,22 @@ export interface ChatOverlaySettings {
   showTimestamp: boolean;
   showReply: boolean;
   nameColor: 'user' | 'accent' | 'text';
+}
+
+export interface SpotlightOverlaySettings {
+  autoHighlighted: boolean;
+  mode: 'single' | 'stack' | 'rain';
+  cardStyle: 'solid' | 'glass' | 'outline';
+  fontSize: number;
+  accentColor: string;
+  textColor: string;
+  background: string;
+  durationSec: number;
+  maxMessages: number;
+  gravity: number;
+  bounce: number;
+  x: number;
+  y: number;
 }
 
 export type GoalKind = 'followers' | 'subs' | 'bits' | 'donations' | 'chatMessages' | 'chatters' | 'manual';
@@ -475,6 +496,16 @@ export interface SongRequestSettings {
   pauseWindowsMusic: boolean;
   resumeWindowsMusic: boolean;
   maxQueue: number;
+  videoLayout: 'full' | 'compact' | 'queue';
+  videoPosition: 'left' | 'right';
+  videoWidth: number;
+  showRequester: boolean;
+  showTitle: boolean;
+  showQueueCount: boolean;
+  showControls: boolean;
+  volume: number;
+  accentColor: string;
+  backgroundOpacity: number;
 }
 
 export interface SongRequestState {
@@ -492,6 +523,11 @@ export interface MusicOverlaySettings {
   showProgress: boolean;
   hideWhenPaused: boolean;
   accentColor: string;
+  layout: 'horizontal' | 'vertical';
+  coverSize: number;
+  fontSize: number;
+  backgroundOpacity: number;
+  showSource: boolean;
 }
 
 export interface AdCampaign {
@@ -767,6 +803,7 @@ export interface Settings {
   bot: BotSettings;
   alerts: AlertSettings;
   chatOverlay: ChatOverlaySettings;
+  spotlightOverlay: SpotlightOverlaySettings;
   rewardsOverlay: RewardOverlaySettings;
   collabOverlay: CollabOverlaySettings;
   musicOverlay: MusicOverlaySettings;
@@ -789,7 +826,13 @@ export interface Settings {
   /** Main currency for donation totals (goals, subathon). */
   currency: string;
   minimizeToTray: boolean;
+  profiles: StreamProfile[];
+  activeProfileId: string;
 }
+
+export type ProfileSettingsKey = 'bot' | 'alerts' | 'chatOverlay' | 'spotlightOverlay' | 'rewardsOverlay' | 'collabOverlay' | 'musicOverlay' | 'songRequests' | 'goals' | 'timers' | 'actions' | 'banners' | 'ads' | 'labels' | 'emoteRain' | 'wheels' | 'poll' | 'giveaway' | 'quiz' | 'boss' | 'kawaki';
+export type ProfileConfig = Pick<Settings, ProfileSettingsKey>;
+export interface StreamProfile { id: string; name: string; config: ProfileConfig; overlays: OverlayKind[] }
 
 export type SettingsKey = keyof Settings;
 
@@ -827,6 +870,7 @@ export interface RenderedAlert {
 }
 
 export type OverlayMessage =
+  | { type: 'profileVisibility'; visible: boolean }
   | { type: 'chat'; message: ChatMessage }
   | { type: 'chatDelete'; id: string }
   | { type: 'chatClearUser'; userId: string }
@@ -843,12 +887,15 @@ export type OverlayMessage =
   | { type: 'collab'; config: CollabOverlaySettings; raids: StreamEventOf<'raid'>[]; lang: Language }
   | { type: 'collabRaid'; event: StreamEventOf<'raid'> }
   | { type: 'music'; track: MusicTrack | null; config: MusicOverlaySettings; lang: Language }
-  | { type: 'song'; request: SongRequest | null; nonce: string | null }
+  | { type: 'song'; request: SongRequest | null; nonce: string | null; config: SongRequestSettings; queue: SongRequest[]; lang: Language }
   | { type: 'banner'; banner: RenderedBanner | null }
   | { type: 'ad'; campaign: AdCampaign | null; endsAt: number | null }
   | { type: 'boss'; boss: BossState; style: BossSettings; lang: Language }
   | { type: 'live'; stream: StreamInfo; lang: Language }
   | { type: 'spotlight'; message: ChatMessage | null }
+  | { type: 'spotlightConfig'; config: SpotlightOverlaySettings }
+  | { type: 'spotlightRemove'; id: string }
+  | { type: 'spotlightRemoveUser'; userId: string }
   | { type: 'label'; label: (Label & { text: string }) | null }
   | { type: 'emoteConfig'; config: EmoteRainSettings }
   | { type: 'emotes'; urls: string[]; burst?: boolean }
@@ -871,8 +918,13 @@ export interface MediaFile {
 /** Request/response calls from renderer to main. */
 export interface IpcInvoke {
   'app:init': () => { settings: Settings; state: RuntimeState; chat: ChatMessage[]; events: StreamEvent[]; version: string };
-  'settings:set': <K extends SettingsKey>(key: K, value: Settings[K]) => void;
+  'settings:set': <K extends SettingsKey>(key: K, value: Settings[K], profileId?: string) => void;
   'settings:reset': (key: SettingsKey) => Settings;
+  'profiles:create': (name: string) => Settings;
+  'profiles:rename': (id: string, name: string) => Settings;
+  'profiles:activate': (id: string) => Settings;
+  'profiles:delete': (id: string) => Settings;
+  'profiles:overlay': (id: string, kind: OverlayKind, enabled: boolean) => Settings;
   'twitch:login': (account: 'broadcaster' | 'bot') => void;
   'twitch:logout': (account: 'broadcaster' | 'bot') => void;
   'twitch:cancelLogin': (account: 'broadcaster' | 'bot') => void;
@@ -936,6 +988,7 @@ export interface IpcInvoke {
   'ad:show': (campaignId: string) => void;
   'ad:hide': () => void;
   'spotlight:show': (messageId: string) => void;
+  'spotlight:test': () => void;
   'spotlight:clear': () => void;
   'update:check': () => void;
   'update:install': () => void;

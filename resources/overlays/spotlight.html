@@ -1,4 +1,101 @@
 <!doctype html>
-<html lang="ru"><head><meta charset="utf-8"><title>StreamHelper — Chat Spotlight</title><style>html,body{margin:0;width:100%;height:100%;background:transparent;overflow:hidden;font-family:Inter,'Segoe UI',sans-serif;color:#fff}#card{box-sizing:border-box;margin:20px;width:calc(100% - 40px);height:calc(100% - 40px);padding:24px 30px;border-radius:22px;background:#17131fed;border:1px solid #ffffff35;box-shadow:0 15px 40px #0009;opacity:0;transform:translateY(18px);transition:opacity .35s,transform .35s;display:flex;flex-direction:column;justify-content:center}#card.show{opacity:1;transform:none}#name{font-size:23px;font-weight:800;color:#bd96ff;margin-bottom:12px}#text{font-size:30px;font-weight:650;line-height:1.3;overflow:hidden;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow-wrap:anywhere}</style></head><body><div id="card"><div id="name"></div><div id="text"></div></div><script src="/overlay/assets/common.js"></script><script>
-const card=document.getElementById('card');SH.connect('spotlight',m=>{if(m.type!=='spotlight')return;const x=m.message;if(!x&&!SH.preview){card.classList.remove('show');return}document.getElementById('name').textContent=x?.userName||'Viewer';document.getElementById('text').textContent=x?.text||'Выделенное сообщение появится здесь';document.getElementById('name').style.color=x?.color||'#bd96ff';card.classList.add('show')});
-</script></body></html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>StreamHelper — Messages on screen</title>
+  <style>
+    :root { --accent:#bd96ff; --text:#fff; --bg:#17131f; --size:38px; }
+    html,body { margin:0; width:100%; height:100%; overflow:hidden; background:transparent; font-family:Inter,'Segoe UI',sans-serif; color:var(--text); }
+    #stage { position:relative; width:100%; height:100%; overflow:hidden; pointer-events:none; }
+    #stack { position:absolute; right:3%; bottom:4%; display:flex; flex-direction:column-reverse; align-items:flex-end; gap:14px; max-height:92%; }
+    .message-card { box-sizing:border-box; width:min(640px,90vw); padding:22px 28px; border-radius:22px; border:1px solid #ffffff35; box-shadow:0 15px 40px #0009; background:var(--bg); color:var(--text); overflow:hidden; opacity:0; animation:appear .35s ease-out forwards; }
+    .message-card.glass { background:color-mix(in srgb,var(--bg) 70%,transparent); backdrop-filter:blur(14px); }
+    .message-card.outline { background:color-mix(in srgb,var(--bg) 32%,transparent); border:3px solid var(--accent); }
+    .message-card.single { position:absolute; max-width:90%; transform:translate(-50%,-50%); }
+    .message-card.rain { position:absolute; width:min(520px,43vw); transform-origin:center center; animation:none; opacity:1; }
+    .message-card.leaving { opacity:0 !important; transition:opacity .35s ease-in; }
+    .name { color:var(--accent); font-size:calc(var(--size) * .65); font-weight:800; margin-bottom:8px; overflow-wrap:anywhere; }
+    .body { font-size:var(--size); font-weight:650; line-height:1.26; overflow-wrap:anywhere; display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:4; overflow:hidden; }
+    @keyframes appear { from { opacity:0; filter:blur(8px); } to { opacity:1; filter:none; } }
+    @media (prefers-reduced-motion:reduce) { .message-card { animation:none; opacity:1; } }
+  </style>
+</head>
+<body>
+  <div id="stage"><div id="stack"></div></div>
+  <script src="/overlay/assets/common.js"></script>
+  <script>
+    const stage=document.getElementById('stage');
+    const stack=document.getElementById('stack');
+    const reduced=matchMedia('(prefers-reduced-motion: reduce)');
+    const defaults={mode:'single',cardStyle:'solid',fontSize:38,accentColor:'#bd96ff',textColor:'#fff',background:'#17131f',durationSec:12,maxMessages:6,gravity:1,bounce:.55,x:50,y:75};
+    let config={...defaults};
+    let lastMessage=null;
+    let cards=[];
+    let animationFrame=0;
+    let lastFrame=0;
+    function clamp(value,min,max){return Math.min(max,Math.max(min,Number(value)||0))}
+    function remove(item){clearTimeout(item.timer);cards=cards.filter(x=>x!==item);item.el.classList.add('leaving');setTimeout(()=>item.el.remove(),360)}
+    function clear(){for(const item of cards){clearTimeout(item.timer);item.el.remove()}cards=[];cancelAnimationFrame(animationFrame);animationFrame=0;lastFrame=0}
+    function makeCard(message){
+      const card=document.createElement('div');card.className='message-card '+config.cardStyle;
+      const name=document.createElement('div');name.className='name';name.textContent=message.userName||'Viewer';
+      const body=document.createElement('div');body.className='body';body.textContent=message.text||'';
+      card.append(name,body);return card;
+    }
+    function animate(now){
+      const dt=lastFrame?Math.min((now-lastFrame)/1000,.05):0;lastFrame=now;
+      let moving=false;
+      for(const item of cards){
+        if(!item.physics||item.settled)continue;
+        moving=true;
+        item.vy+=clamp(config.gravity,.2,3)*900*dt;
+        item.y+=item.vy*dt;
+        item.x+=item.vx*dt;
+        const floor=Math.max(0,stage.clientHeight-item.el.offsetHeight-20);
+        if(item.y>=floor){item.y=floor;item.vy=-item.vy*clamp(config.bounce,0,.9);item.vx*=.78;item.hits++;
+          if(item.hits>=6||Math.abs(item.vy)<35){item.vy=0;item.vx=0;item.settled=true}}
+        item.x=clamp(item.x,0,Math.max(0,stage.clientWidth-item.el.offsetWidth));
+        item.el.style.transform=`translate(${item.x}px,${item.y}px) rotate(${item.rotation}deg)`;
+      }
+      animationFrame=moving?requestAnimationFrame(animate):0;
+      if(!moving)lastFrame=0;
+    }
+    function show(message){
+      if(!message){clear();return}
+      if(config.mode==='single')clear();
+      const card=makeCard(message);
+      const item={el:card,id:message.id,userId:message.userId,timer:0,physics:config.mode==='rain',settled:false,x:0,y:0,vx:(Math.random()-.5)*90,vy:0,hits:0,rotation:(Math.random()-.5)*8};
+      if(config.mode==='rain'){
+        card.classList.add('rain');stage.append(card);
+        item.x=Math.random()*Math.max(0,stage.clientWidth-card.offsetWidth);
+        item.y=-card.offsetHeight;
+        if(reduced.matches){item.y=Math.max(0,stage.clientHeight-card.offsetHeight-20);item.settled=true}
+        card.style.transform=`translate(${item.x}px,${item.y}px) rotate(${item.rotation}deg)`;
+        if(!item.settled&&!animationFrame)animationFrame=requestAnimationFrame(animate);
+      }else if(config.mode==='stack'){
+        stack.prepend(card);
+      }else{
+        card.classList.add('single');card.style.left=clamp(config.x,0,100)+'%';card.style.top=clamp(config.y,0,100)+'%';stage.append(card);
+      }
+      cards.push(item);
+      while(cards.length>clamp(config.maxMessages,1,20))remove(cards[0]);
+      item.timer=setTimeout(()=>remove(item),clamp(config.durationSec,2,120)*1000);
+    }
+    function applyConfig(next){
+      config={...defaults,...next};
+      const s=document.documentElement.style;
+      s.setProperty('--accent',config.accentColor);s.setProperty('--text',config.textColor);s.setProperty('--bg',config.background);s.setProperty('--size',clamp(config.fontSize,16,100)+'px');
+      clear();if(lastMessage)show(lastMessage);else if(SH.preview)show({userName:'Viewer',text:'Сообщение появится здесь'});
+    }
+    SH.connect('spotlight',m=>{
+      if(m.type==='spotlightConfig')applyConfig(m.config);
+      if(m.type==='spotlight'){
+        lastMessage=m.message;
+        if(m.message)show(m.message);else if(!SH.preview)clear();
+      }
+      if(m.type==='spotlightRemove')cards.filter(item=>item.id===m.id).forEach(remove);
+      if(m.type==='spotlightRemoveUser')cards.filter(item=>item.userId===m.userId).forEach(remove);
+    });
+  </script>
+</body>
+</html>

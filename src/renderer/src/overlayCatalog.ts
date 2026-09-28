@@ -25,7 +25,7 @@ export const OVERLAYS: OverlayDef[] = [
   { kind: 'banner', icon: 'banner', group: 'screen', size: [1920, 110] },
   { kind: 'ad', icon: 'banner', group: 'screen', size: [1920, 1080] },
   { kind: 'live', icon: 'broadcast', group: 'screen', size: [650, 160] },
-  { kind: 'spotlight', icon: 'chat', group: 'screen', size: [820, 220] },
+  { kind: 'spotlight', icon: 'chat', group: 'screen', size: [1920, 1080] },
   { kind: 'label', icon: 'tag', group: 'screen', size: [700, 70] },
   { kind: 'goal', icon: 'target', group: 'screen', size: [600, 90] },
   { kind: 'timer', icon: 'clock', group: 'screen', size: [500, 150] },

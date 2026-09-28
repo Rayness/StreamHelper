@@ -11,6 +11,7 @@
     const id = params.get('id');
     const url = `ws://${location.host}/ws?kind=${kind}${id ? `&id=${encodeURIComponent(id)}` : ''}${preview ? '&preview=1' : ''}`;
     let ws;
+    let profileVisible = true;
     const open = () => {
       ws = new WebSocket(url);
       ws.onmessage = (e) => {
@@ -21,6 +22,20 @@
           return;
         }
         if (msg.type === 'reload') return location.reload();
+        if (msg.type === 'profileVisibility') {
+          const wasVisible = profileVisible;
+          profileVisible = preview || !!msg.visible;
+          document.documentElement.style.visibility = profileVisible ? '' : 'hidden';
+          if (!profileVisible) {
+            onMessage(msg);
+            if (kind === 'alerts') onMessage({ type: 'alertSkip' });
+            if (kind === 'spotlight') onMessage({ type: 'spotlight', message: null });
+            document.querySelectorAll('audio,video').forEach((media) => media.pause());
+            if ('speechSynthesis' in window) speechSynthesis.cancel();
+          } else if (!wasVisible) return location.reload();
+          return;
+        }
+        if (!profileVisible) return;
         onMessage(msg);
       };
       ws.onclose = () => setTimeout(open, 2000);

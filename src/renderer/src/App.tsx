@@ -12,6 +12,7 @@ import { Interactive } from './pages/Interactive';
 import { Kawaki } from './pages/Kawaki';
 import { Obs } from './pages/Obs';
 import { Overlays } from './pages/Overlays';
+import { Profiles } from './pages/Profiles';
 import { Settings } from './pages/Settings';
 import { dismissToast, navigate, useApp, useNav, type Page } from './store';
 
@@ -33,6 +34,7 @@ const NAV: { title: TKey | null; items: NavItem[] }[] = [
   {
     title: 'navGroup.look',
     items: [
+      { id: 'profiles', icon: 'users', label: 'nav.profiles' },
       { id: 'alerts', icon: 'alert', label: 'nav.alerts' },
       { id: 'overlays', icon: 'layers', label: 'nav.overlays' },
     ],
@@ -108,6 +110,7 @@ export function App() {
   const page = ALL_PAGES.includes(nav.page) ? nav.page : 'dashboard';
   const live = useApp((d) => d.state!.stream.live);
   const lang = useApp((d) => d.settings!.language);
+  const profileName = useApp((d) => d.settings!.profiles.find((p) => p.id === d.settings!.activeProfileId)?.name ?? '—');
   const funLive = useApp((d) => d.state!.poll?.status === 'running' || d.state!.giveaway.status === 'open' || d.state!.boss.status === 'running' || ['question', 'reveal'].includes(d.state!.quiz.status));
   const [palette, setPalette] = useState(false);
 
@@ -136,6 +139,9 @@ export function App() {
           <span className="logo-text">StreamHelper</span>
           {live && <span className="live-pill">LIVE</span>}
         </div>
+        <button type="button" className="profile-current" onClick={() => navigate('profiles')} title={t('nav.profiles')}>
+          <Icon name="users" size={15} /><span>{profileName}</span><Icon name="chevron" size={14} />
+        </button>
         <button type="button" className="search-btn" onClick={() => setPalette(true)}>
           <Icon name="search" size={15} />
           <span>{t('palette.button')}</span>
@@ -164,6 +170,7 @@ export function App() {
         {page === 'interactive' && <Interactive />}
         {page === 'alerts' && <Alerts />}
         {page === 'overlays' && <Overlays />}
+        {page === 'profiles' && <Profiles />}
         {page === 'bot' && <Bot />}
         {page === 'obs' && <Obs />}
         {page === 'kawaki' && <Kawaki />}

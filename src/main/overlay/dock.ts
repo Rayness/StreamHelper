@@ -1,12 +1,12 @@
 import { timingSafeEqual } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { RuntimeState, Settings } from '@shared/types';
+import type { ChatMessage, RuntimeState, Settings } from '@shared/types';
 
 export interface DockOptions {
   token: string;
   htmlPath: string;
-  snapshot: () => { state: RuntimeState; settings: Settings };
+  snapshot: () => { state: RuntimeState; settings: Settings; chat?: ChatMessage[] };
   action: (name: string, id?: string) => void | Promise<void>;
 }
 
@@ -32,22 +32,32 @@ export function createDockRoutes(opts: DockOptions) {
       return true;
     }
     if (url.pathname === '/dock/state' && req.method === 'GET') {
-      const { state, settings } = opts.snapshot();
+      const { state, settings, chat = [] } = opts.snapshot();
       const body = JSON.stringify({
         obs: state.obs,
         stream: state.stream,
         alerts: state.alerts,
+        profiles: settings.profiles.map((p) => ({ id: p.id, name: p.name })),
+        activeProfileId: settings.activeProfileId,
+        overlayKinds: state.overlayKinds,
+        wheel: state.wheel,
+        wheels: settings.wheels.map((w) => ({ id: w.id, name: w.name, segments: w.segments.length })),
         poll: state.poll,
         giveaway: { status: state.giveaway.status, count: state.giveaway.entrants.length, winner: state.giveaway.winner?.userName },
         boss: state.boss,
+        quiz: state.quiz,
         ad: state.ad,
         songRequests: state.songRequests,
+        songDisplay: { videoLayout: settings.songRequests.videoLayout, volume: settings.songRequests.volume },
         music: { track: state.music.track, sources: state.music.sources },
+        musicDisplay: { showArtwork: settings.musicOverlay.showArtwork },
         goals: settings.goals.map((goal) => ({ id: goal.id, title: goal.title, current: goal.current, target: goal.target, currency: goal.kind === 'donations' ? goal.currency : '' })),
+        timers: settings.timers.map((timer) => ({ id: timer.id, title: timer.title, running: timer.running })),
         banners: settings.banners.map((banner) => ({ id: banner.id, name: banner.name, visible: banner.visible })),
         subForStream: state.subForStream,
         kawaki: { status: state.kawaki.status, nowWatching: state.kawaki.nowWatching },
         spotlight: state.spotlight && { userName: state.spotlight.userName, text: state.spotlight.text },
+        chat: chat.filter((m) => !m.deleted).slice(-15).reverse().map((m) => ({ id: m.id, userName: m.userName, text: m.text.slice(0, 180) })),
         actions: settings.actions.filter((a) => a.showOnDashboard).map((a) => ({ id: a.id, label: a.label, color: a.color })),
         ads: settings.ads.map((a) => ({ id: a.id, name: a.name, media: !!a.media })),
         language: settings.language,

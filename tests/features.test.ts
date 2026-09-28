@@ -19,6 +19,7 @@ describe('renderAlert', () => {
     expect(a.message).toBe('gg');
     expect(a.sound).toBe('/media/coin%20drop.mp3');
     expect(a.image).toBeNull();
+    expect(a.style).toMatchObject({ x: 50, y: 50, width: 90, anchor: 'center' });
   });
 
   it('respects enabled flag and minimum amount', () => {

@@ -20,17 +20,18 @@
       #stage {
         position: absolute;
         inset: 0;
-        display: grid;
-        place-items: center;
         font-family: var(--font);
         color: var(--text);
+        pointer-events: none;
       }
+      .alert-position { position: absolute; }
       .alert {
         display: flex;
         flex-direction: column;
         align-items: center;
         gap: 14px;
-        max-width: 90vw;
+        width: 100%;
+        max-width: 100%;
         text-align: center;
       }
       .alert.side {
@@ -187,6 +188,14 @@
         s.setProperty('--text', a.style.textColor);
         s.setProperty('--accent', a.style.accentColor);
 
+        const position = SH.el('div', 'alert-position');
+        const style = a.style || {};
+        const clamp = (value, fallback, min, max) => Math.min(max, Math.max(min, Number.isFinite(Number(value)) ? Number(value) : fallback));
+        position.style.left = clamp(style.x, 50, 0, 100) + '%';
+        position.style.top = clamp(style.y, 50, 0, 100) + '%';
+        position.style.width = clamp(style.width, 90, 10, 100) + '%';
+        const anchors = { center: 'translate(-50%,-50%)', topLeft: 'none', topRight: 'translateX(-100%)', bottomLeft: 'translateY(-100%)', bottomRight: 'translate(-100%,-100%)' };
+        position.style.transform = anchors[style.anchor] || anchors.center;
         const box = SH.el('div', `alert ${a.animation} enter ${a.style.layout === 'side' ? 'side' : ''}`);
         if (a.image) {
           const media = isVideo(a.image) ? SH.el('video', 'media') : SH.el('img', 'media');
@@ -212,8 +221,9 @@
         texts.appendChild(title);
         texts.appendChild(SH.el('div', 'message', a.message));
         box.appendChild(texts);
-        stage.appendChild(box);
-        current = box;
+        position.appendChild(box);
+        stage.appendChild(position);
+        current = position;
 
         if (a.sound) {
           audio = new Audio(a.sound);
@@ -235,13 +245,14 @@
           audio = null;
         }
         if ('speechSynthesis' in window) speechSynthesis.cancel();
-        const box = current;
+        const position = current;
         current = null;
-        if (!box) return;
-        if (immediate) return box.remove();
+        if (!position) return;
+        const box = position.firstElementChild;
+        if (immediate || !box) return position.remove();
         box.classList.remove('enter');
         box.classList.add('exit');
-        setTimeout(() => box.remove(), 600);
+        setTimeout(() => position.remove(), 600);
       }
 
       SH.connect('alerts', (msg) => {

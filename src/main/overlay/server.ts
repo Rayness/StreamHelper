@@ -3,6 +3,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { extname, join, normalize, sep } from 'node:path';
 import { WebSocketServer, type WebSocket } from 'ws';
 import type { OverlayKind, OverlayMessage } from '@shared/types';
+import { ALL_OVERLAY_KINDS } from '@shared/profiles';
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -24,7 +25,7 @@ const MIME: Record<string, string> = {
   '.woff2': 'font/woff2',
 };
 
-export const OVERLAY_KINDS: OverlayKind[] = ['chat', 'alerts', 'goal', 'timer', 'events', 'rewards', 'collab', 'music', 'song', 'banner', 'ad', 'label', 'emotes', 'wheel', 'poll', 'giveaway', 'kawaki', 'quiz', 'boss', 'live', 'spotlight'];
+export const OVERLAY_KINDS: readonly OverlayKind[] = ALL_OVERLAY_KINDS;
 
 interface Client {
   ws: WebSocket;

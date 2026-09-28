@@ -118,7 +118,7 @@ function OverlayDetail({ kind }: { kind: OverlayKind }) {
     case 'live':
       return <SimpleDetail kind="live" />;
     case 'spotlight':
-      return <SimpleDetail kind="spotlight" />;
+      return <SpotlightDetail />;
     case 'label':
       return <LabelsDetail />;
     case 'goal':
@@ -138,12 +138,37 @@ function OverlayDetail({ kind }: { kind: OverlayKind }) {
   }
 }
 
-function SimpleDetail({ kind }: { kind: 'live' | 'spotlight' }) {
+function SimpleDetail({ kind }: { kind: 'live' }) {
   const t = useT();
-  const spotlight = useApp((d) => d.state!.spotlight);
   return <>
     <OverlayBar kind={kind} name={t(`ov.${kind}`)} />
-    <Split settings={<Card><p className="muted">{t(`simple.${kind}`)}</p>{kind === 'spotlight' && spotlight && <Button onClick={() => void call('spotlight:clear')}>{t('spotlight.clear')}</Button>}</Card>} preview={<OverlayPreview kind={kind} />} />
+    <Split settings={<Card><p className="muted">{t(`simple.${kind}`)}</p></Card>} preview={<OverlayPreview kind={kind} />} />
+  </>;
+}
+
+function SpotlightDetail() {
+  const t = useT();
+  const cfg = useApp((d) => d.settings!.spotlightOverlay);
+  const spotlight = useApp((d) => d.state!.spotlight);
+  const set = (patch: Partial<typeof cfg>) => saveSettings('spotlightOverlay', { ...cfg, ...patch });
+  return <>
+    <OverlayBar kind="spotlight" name={t('ov.spotlight')} />
+    <Split settings={<>
+      <Card title={t('spotlight.mode')}><div className="form">
+        <Field label={t('spotlight.autoHighlighted')} wide><Toggle checked={cfg.autoHighlighted} onChange={(autoHighlighted) => set({ autoHighlighted })} /></Field>
+        <Field label={t('spotlight.mode')}><Select value={cfg.mode} onChange={(mode) => set({ mode })} options={(['single', 'stack', 'rain'] as const).map((mode) => ({ value: mode, label: t(`spotlight.mode_${mode}`) }))} /></Field>
+        <Field label={t('spotlight.cardStyle')}><Select value={cfg.cardStyle} onChange={(cardStyle) => set({ cardStyle })} options={(['solid', 'glass', 'outline'] as const).map((cardStyle) => ({ value: cardStyle, label: t(`spotlight.cardStyle_${cardStyle}`) }))} /></Field>
+        <Field label={t('common.fontSize')}><NumberInput value={cfg.fontSize} min={16} max={100} onChange={(fontSize) => set({ fontSize })} /></Field>
+        <Field label={t('common.textColor')}><ColorInput value={cfg.textColor} onChange={(textColor) => set({ textColor })} /></Field>
+        <Field label={t('common.accent')}><ColorInput value={cfg.accentColor} onChange={(accentColor) => set({ accentColor })} /></Field>
+        <Field label={t('common.background')}><ColorInput value={cfg.background} onChange={(background) => set({ background })} /></Field>
+        <Field label={t('spotlight.duration')}><NumberInput value={cfg.durationSec} min={2} max={120} onChange={(durationSec) => set({ durationSec })} /></Field>
+        {cfg.mode !== 'single' && <Field label={t('spotlight.maxMessages')}><NumberInput value={cfg.maxMessages} min={1} max={20} onChange={(maxMessages) => set({ maxMessages })} /></Field>}
+        {cfg.mode === 'single' && <><Field label={t('spotlight.x')}><NumberInput value={cfg.x} min={0} max={100} onChange={(x) => set({ x })} /></Field><Field label={t('spotlight.y')}><NumberInput value={cfg.y} min={0} max={100} onChange={(y) => set({ y })} /></Field></>}
+        {cfg.mode === 'rain' && <><Field label={t('spotlight.gravity')}><NumberInput value={cfg.gravity} min={0.2} max={3} step={0.1} onChange={(gravity) => set({ gravity })} /></Field><Field label={t('spotlight.bounce')}><NumberInput value={cfg.bounce} min={0} max={0.9} step={0.05} onChange={(bounce) => set({ bounce })} /></Field></>}
+      </div></Card>
+      <Card><div className="row-gap wrap"><Button icon="play" onClick={() => void call('spotlight:test')}>{t('spotlight.test')}</Button>{spotlight && <Button onClick={() => void call('spotlight:clear')}>{t('spotlight.clear')}</Button>}</div></Card>
+    </>} preview={<OverlayPreview kind="spotlight" />} />
   </>;
 }
 
@@ -171,8 +196,16 @@ function MusicDetail() {
         { value: 'glass', label: t('music.style.glass') },
         { value: 'minimal', label: t('music.style.minimal') },
       ]} /></Field>
+      <Field label={t('music.layout')}><Select value={cfg.layout} onChange={(layout) => set({ layout })} options={[
+        { value: 'horizontal', label: t('music.layout.horizontal') },
+        { value: 'vertical', label: t('music.layout.vertical') },
+      ]} /></Field>
+      <Field label={t('music.coverSize')}><NumberInput value={cfg.coverSize} min={60} max={240} onChange={(coverSize) => set({ coverSize })} /></Field>
+      <Field label={t('music.fontSize')}><NumberInput value={cfg.fontSize} min={16} max={48} onChange={(fontSize) => set({ fontSize })} /></Field>
+      <Field label={t('music.opacity')}><NumberInput value={cfg.backgroundOpacity} min={0} max={100} onChange={(backgroundOpacity) => set({ backgroundOpacity })} /></Field>
       <Field label={t('common.accent')}><ColorInput value={cfg.accentColor} onChange={(accentColor) => set({ accentColor })} /></Field>
       <Field label={t('overlays.options')} wide><div className="stack">
+        <Toggle checked={cfg.showSource} onChange={(showSource) => set({ showSource })} label={t('music.showSource')} />
         <Toggle checked={cfg.showArtwork} onChange={(showArtwork) => set({ showArtwork })} label={t('music.artwork')} />
         <Toggle checked={cfg.showAlbum} onChange={(showAlbum) => set({ showAlbum })} label={t('music.album')} />
         <Toggle checked={cfg.showProgress} onChange={(showProgress) => set({ showProgress })} label={t('music.progress')} />
@@ -199,7 +232,7 @@ function SongDetail() {
         <div className="row-gap wrap"><TextInput value={link} onChange={setLink} placeholder="https://www.youtube.com/watch?v=…" /><Button onClick={async () => { if (await callOk('song:add', link)) setLink(''); }}>{t('common.add')}</Button></div>
         {state.current && <div className="card"><strong>{t('song.now')}</strong><p>{state.current.userName} · {state.current.url}</p><Button size="sm" onClick={() => void call('song:skip')}>{t('song.skip')}</Button></div>}
         {state.queue.length === 0 && !state.current && <p className="muted">{t('song.empty')}</p>}
-        <ul className="source-list">{state.queue.map((item) => <li key={item.id}><span>{item.userName} · {item.url}</span><div className="row-gap"><Button size="sm" disabled={!state.playerConnected} onClick={() => void call('song:play', item.id)}>{t('song.play')}</Button><IconButton icon="x" label={t('common.delete')} onClick={() => void call('song:remove', item.id)} /></div></li>)}</ul>
+        <ul className="source-list">{state.queue.map((item) => <li key={item.id}><span>{item.userName} · {item.url}</span><div className="row-gap"><Button size="sm" disabled={!state.playerConnected || cfg.videoLayout === 'queue'} onClick={() => void call('song:play', item.id)}>{t('song.play')}</Button><IconButton icon="x" label={t('common.delete')} onClick={() => void call('song:remove', item.id)} /></div></li>)}</ul>
       </Card>
       <Card title={t('song.settings')}><div className="form">
         <Field label={t('song.enabled')} wide><Toggle checked={cfg.enabled} onChange={(enabled) => set({ enabled })} /></Field>
@@ -209,6 +242,29 @@ function SongDetail() {
         <Field label={t('song.autoPlay')} wide><Toggle checked={cfg.autoPlay} onChange={(autoPlay) => set({ autoPlay })} /></Field>
         <Field label={t('song.pauseWindows')} wide><Toggle checked={cfg.pauseWindowsMusic} onChange={(pauseWindowsMusic) => set({ pauseWindowsMusic })} /></Field>
         <Field label={t('song.resumeWindows')} wide><Toggle checked={cfg.resumeWindowsMusic} onChange={(resumeWindowsMusic) => set({ resumeWindowsMusic })} /></Field>
+      </div></Card>
+      <Card title={t('song.display')}><div className="form">
+        <Field label={t('song.videoLayout')} wide><Select value={cfg.videoLayout} onChange={(videoLayout) => set({ videoLayout })} options={[
+          { value: 'full', label: t('song.video.full') },
+          { value: 'compact', label: t('song.video.compact') },
+          { value: 'queue', label: t('song.video.queue') },
+        ]} /></Field>
+        {cfg.videoLayout === 'queue' ? <p className="muted small">{t('song.queueOnlyHint')}</p> : <>
+          {cfg.videoLayout === 'compact' && <>
+            <Field label={t('song.videoPosition')}><Select value={cfg.videoPosition} onChange={(videoPosition) => set({ videoPosition })} options={[{ value: 'left', label: t('song.left') }, { value: 'right', label: t('song.right') }]} /></Field>
+            <Field label={t('song.videoWidth')}><NumberInput value={cfg.videoWidth} min={25} max={70} onChange={(videoWidth) => set({ videoWidth })} /></Field>
+          </>}
+          <Field label={t('song.volume')}><NumberInput value={cfg.volume} min={0} max={100} onChange={(volume) => set({ volume })} /></Field>
+          <Field label={t('song.showControls')} wide><Toggle checked={cfg.showControls} onChange={(showControls) => set({ showControls })} /></Field>
+          <p className="muted small">{t('song.youtubeHint')}</p>
+        </>}
+        <Field label={t('song.opacity')}><NumberInput value={cfg.backgroundOpacity} min={0} max={100} onChange={(backgroundOpacity) => set({ backgroundOpacity })} /></Field>
+        <Field label={t('common.accent')}><ColorInput value={cfg.accentColor} onChange={(accentColor) => set({ accentColor })} /></Field>
+        <Field label={t('overlays.options')} wide><div className="stack">
+          <Toggle checked={cfg.showTitle} onChange={(showTitle) => set({ showTitle })} label={t('song.showTitle')} />
+          <Toggle checked={cfg.showRequester} onChange={(showRequester) => set({ showRequester })} label={t('song.showRequester')} />
+          <Toggle checked={cfg.showQueueCount} onChange={(showQueueCount) => set({ showQueueCount })} label={t('song.showQueueCount')} />
+        </div></Field>
       </div></Card>
     </>} preview={<OverlayPreview kind="song" maxHeight={360} />} />
   </>;

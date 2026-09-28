@@ -1,56 +1,146 @@
 <!doctype html>
 <html lang="ru">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>StreamHelper Dock</title>
-    <style>
-      :root{font:14px/1.4 system-ui,sans-serif;color:#f4f3fa;background:#17151f;color-scheme:dark}
-      *{box-sizing:border-box}body{margin:0;padding:14px}header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}h1{font-size:18px;margin:0}h2{font-size:12px;text-transform:uppercase;color:#aaa2bc;margin:16px 0 8px;letter-spacing:.08em}.badge{padding:4px 8px;border-radius:20px;background:#30253e;color:#d9baff}.badge.live{background:#8f2450;color:white}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.card{background:#211e2b;border:1px solid #383342;border-radius:12px;padding:10px;margin:8px 0}.row{display:flex;gap:8px;align-items:center;justify-content:space-between}.row span{min-width:0;overflow-wrap:anywhere}.muted{color:#aaa2bc}.small{font-size:12px}button{font:inherit;cursor:pointer;border:1px solid #53465f;background:#342e40;color:#f4f3fa;border-radius:8px;padding:8px 10px;min-width:0;overflow:hidden;text-overflow:ellipsis}button:hover{background:#4d405b}button.active{background:#6842ae;border-color:#a675f8}button.danger{background:#82324b;border-color:#ae496b}button:disabled{opacity:.45;cursor:default}.wide{width:100%}.error{color:#ff8396;min-height:1.4em}#actions button{border-left-width:4px}
-    </style>
-  </head>
-  <body>
-    <header><h1>StreamHelper</h1><span id="live" class="badge">OFFLINE</span></header>
-    <div id="error" class="error small"></div>
-    <div class="card"><div class="row"><strong id="title">—</strong><span id="viewers" class="muted">0</span></div><div id="category" class="muted small">—</div></div>
-    <h2 data-ru="Трансляция" data-en="Stream">Трансляция</h2><div class="grid"><button id="stream" data-action="stream">Эфир</button><button id="record" data-action="record">Запись</button></div>
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>StreamHelper Dock</title>
+  <style>
+    :root { font:14px/1.4 system-ui,sans-serif; color:#f4f3fa; background:#17151f; color-scheme:dark; }
+    * { box-sizing:border-box; }
+    body { margin:0; padding:12px; }
+    header { display:flex; justify-content:space-between; align-items:center; gap:8px; }
+    h1 { font-size:18px; margin:0; }
+    h2 { font-size:12px; text-transform:uppercase; color:#aaa2bc; margin:18px 0 8px; letter-spacing:.08em; }
+    .badge { padding:4px 8px; border-radius:20px; background:#30253e; color:#d9baff; white-space:nowrap; }
+    .badge.live { background:#8f2450; color:white; }
+    .card { background:#211e2b; border:1px solid #383342; border-radius:12px; padding:10px; margin:8px 0; }
+    .row { display:flex; gap:8px; align-items:center; justify-content:space-between; }
+    .row span { min-width:0; overflow-wrap:anywhere; }
+    .muted { color:#aaa2bc; }
+    .small { font-size:12px; }
+    .grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:7px; }
+    button,select,input { font:inherit; }
+    button { cursor:pointer; border:1px solid #53465f; background:#342e40; color:#f4f3fa; border-radius:8px; padding:8px 10px; min-width:0; overflow:hidden; text-overflow:ellipsis; }
+    button:hover { background:#4d405b; }
+    button.active { background:#6842ae; border-color:#a675f8; }
+    button.danger { background:#82324b; border-color:#ae496b; }
+    button:disabled { opacity:.45; cursor:default; }
+    select,input { width:100%; min-width:0; background:#211e2b; color:white; border:1px solid #53465f; border-radius:8px; padding:8px; }
+    .wide { width:100%; }
+    .error { color:#ff8396; min-height:1.4em; }
+    .tabs { position:sticky; top:0; z-index:4; display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:4px; margin:12px -12px 0; padding:6px 12px; background:#17151f; border-bottom:1px solid #383342; }
+    .tabs button { padding:7px 3px; font-size:12px; }
+    [hidden] { display:none !important; }
+    #actions button { border-left-width:4px; }
+    .stack { display:flex; flex-direction:column; gap:7px; }
+    .item { display:flex; align-items:center; justify-content:space-between; gap:6px; padding:8px; border:1px solid #383342; border-radius:9px; background:#211e2b; }
+    .item .label { flex:1; min-width:0; overflow-wrap:anywhere; }
+    .item button { flex:none; padding:6px 8px; }
+    .item.off { opacity:.6; }
+    .item .buttons { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:5px; }
+    .summary { margin-top:8px; }
+    @media (max-width:340px) { .grid { grid-template-columns:1fr; } .tabs button { font-size:11px; } }
+  </style>
+</head>
+<body>
+  <header><h1>StreamHelper</h1><span id="live" class="badge">OFFLINE</span></header>
+  <div id="error" class="error small" role="status"></div>
+  <div class="card"><div class="row"><strong id="title">—</strong><span id="viewers" class="muted">0</span></div><div id="category" class="muted small">—</div></div>
+  <div class="row"><span class="muted small" data-ru="Профиль" data-en="Profile">Профиль</span><select id="profile" aria-label="Profile" style="max-width:70%"></select></div>
+  <nav class="tabs" aria-label="Dock sections">
+    <button data-tab="live" class="active" data-ru="Эфир" data-en="Live">Эфир</button>
+    <button data-tab="events" data-ru="События" data-en="Events">События</button>
+    <button data-tab="fun" data-ru="Интерактив" data-en="Interactive">Интерактив</button>
+    <button data-tab="tools" data-ru="Инструменты" data-en="Tools">Инструменты</button>
+  </nav>
+  <section data-panel="live">
+    <h2 data-ru="Трансляция" data-en="Stream">Трансляция</h2>
+    <div class="grid"><button id="stream" data-action="stream">Эфир</button><button id="record" data-action="record">Запись</button></div>
     <h2 data-ru="Сцены" data-en="Scenes">Сцены</h2><div id="scenes" class="grid"></div>
-    <h2 data-ru="Алерты" data-en="Alerts">Алерты</h2><div class="grid"><button id="pause" data-action="alertsPause">Пауза</button><button data-action="alertsSkip" data-ru="Пропустить" data-en="Skip">Пропустить</button></div>
-    <h2 data-ru="Интерактив" data-en="Interactive">Интерактив</h2><div class="grid"><button data-action="pollStart" data-ru="Начать опрос" data-en="Start poll">Начать опрос</button><button data-action="pollEnd" data-ru="Завершить опрос" data-en="End poll">Завершить опрос</button><button data-action="giveawayOpen" data-ru="Открыть розыгрыш" data-en="Open giveaway">Открыть розыгрыш</button><button data-action="giveawayRoll" data-ru="Выбрать победителя" data-en="Draw winner">Выбрать победителя</button><button data-action="bossStart" data-ru="Начать босса" data-en="Start boss">Начать босса</button><button data-action="bossHit" data-ru="Ударить босса" data-en="Hit boss">Ударить босса</button></div>
-    <div id="game" class="card muted small"></div>
-    <h2 data-ru="Заказ музыки" data-en="Song requests">Заказ музыки</h2>
-    <div id="song-status" class="muted small"></div><div class="row"><input id="song-url" placeholder="YouTube URL" style="min-width:0;flex:1;background:#211e2b;color:white;border:1px solid #53465f;border-radius:8px;padding:8px"><button id="song-add" data-ru="Добавить" data-en="Add">Добавить</button></div>
-    <div id="song-current" class="card muted small"></div><div class="grid"><button id="song-skip" data-action="songSkip" data-ru="Следующий трек" data-en="Skip song">Следующий трек</button></div><div id="song-queue"></div>
-    <h2 data-ru="Плееры Windows" data-en="Windows players">Плееры Windows</h2><div id="music-sources"></div>
-    <h2 data-ru="Цели" data-en="Goals">Цели</h2><div id="goals"></div>
+    <h2 data-ru="Источники текущей сцены" data-en="Current scene sources">Источники текущей сцены</h2><div id="sources" class="stack"></div>
+    <h2 data-ru="Звук" data-en="Audio">Звук</h2><div id="audio" class="stack"></div>
+    <h2 data-ru="Быстрые действия" data-en="Quick actions">Быстрые действия</h2><div id="actions" class="grid"></div>
+  </section>
+  <section data-panel="events" hidden>
+    <h2 data-ru="Алерты" data-en="Alerts">Алерты</h2>
+    <div id="alert-current" class="muted small"></div>
+    <div class="grid"><button id="pause" data-action="alertsPause">Пауза</button><button data-action="alertsSkip" data-ru="Пропустить" data-en="Skip">Пропустить</button></div>
+    <div id="alert-tests" class="grid summary"></div>
+    <h2 data-ru="Сообщения на экране" data-en="Messages on screen">Сообщения на экране</h2>
+    <div class="row"><span id="spotlight-current" class="muted small">—</span><button data-action="spotlightClear" data-ru="Очистить" data-en="Clear">Очистить</button></div>
+    <div id="chat" class="stack summary"></div>
+    <h2 data-ru="Цели" data-en="Goals">Цели</h2><div id="goals" class="stack"></div>
+    <h2 data-ru="Таймеры" data-en="Timers">Таймеры</h2><div id="timers" class="stack"></div>
     <h2 data-ru="Бегущая строка" data-en="Ticker">Бегущая строка</h2><div id="banners" class="grid"></div>
-    <h2 data-ru="Баннер" data-en="Banner">Баннер</h2><div id="ads" class="grid"></div><button class="wide" data-action="adHide" data-ru="Скрыть баннер" data-en="Hide banner">Скрыть баннер</button>
+    <h2 data-ru="Баннеры" data-en="Banners">Баннеры</h2><div id="ads" class="grid"></div><button class="wide summary" data-action="adHide" data-ru="Скрыть баннер" data-en="Hide banner">Скрыть баннер</button>
+  </section>
+  <section data-panel="fun" hidden>
+    <h2 data-ru="Колесо" data-en="Wheel">Колесо</h2><div id="wheels" class="stack"></div>
+    <h2 data-ru="Голосование" data-en="Poll">Голосование</h2><div id="poll-status" class="muted small"></div><div class="grid"><button data-action="pollStart" data-ru="Начать" data-en="Start">Начать</button><button data-action="pollEnd" data-ru="Завершить" data-en="End">Завершить</button><button data-action="pollClear" data-ru="Очистить" data-en="Clear">Очистить</button></div>
+    <h2 data-ru="Розыгрыш" data-en="Giveaway">Розыгрыш</h2><div id="giveaway-status" class="muted small"></div><div class="grid"><button data-action="giveawayOpen" data-ru="Открыть" data-en="Open">Открыть</button><button data-action="giveawayClose" data-ru="Закрыть" data-en="Close">Закрыть</button><button data-action="giveawayRoll" data-ru="Выбрать победителя" data-en="Draw winner">Выбрать победителя</button><button data-action="giveawayReset" data-ru="Сброс" data-en="Reset">Сброс</button></div>
+    <h2 data-ru="Босс чата" data-en="Chat boss">Босс чата</h2><div id="boss-status" class="muted small"></div><div class="grid"><button data-action="bossStart" data-ru="Начать" data-en="Start">Начать</button><button data-action="bossHit" data-ru="Удар" data-en="Hit">Удар</button><button data-action="bossReset" data-ru="Сброс" data-en="Reset">Сброс</button></div>
+    <h2 data-ru="Аниме-квиз" data-en="Anime quiz">Аниме-квиз</h2><div id="quiz-status" class="muted small"></div><div class="grid"><button data-action="quizStart" data-ru="Начать" data-en="Start">Начать</button><button data-action="quizSkip" data-ru="Пропустить" data-en="Skip">Пропустить</button><button data-action="quizStop" data-ru="Остановить" data-en="Stop">Остановить</button></div>
+    <h2 data-ru="Эмоуты" data-en="Emotes">Эмоуты</h2><button class="wide" data-action="emoteBurst" data-ru="Дождь эмоутов" data-en="Emote burst">Дождь эмоутов</button>
+  </section>
+  <section data-panel="tools" hidden>
+    <h2 data-ru="Заказ музыки" data-en="Song requests">Заказ музыки</h2>
+    <div class="card stack"><label for="song-layout" data-ru="Видео в OBS" data-en="Video in OBS">Видео в OBS</label><select id="song-layout"><option value="full" data-ru="На всю область" data-en="Full area">На всю область</option><option value="compact" data-ru="Маленькое окно" data-en="Small window">Маленькое окно</option><option value="queue" data-ru="Только очередь, без звука" data-en="Queue only, no audio">Только очередь, без звука</option></select><label for="song-volume" data-ru="Громкость YouTube" data-en="YouTube volume">Громкость YouTube</label><div class="row"><input id="song-volume" type="range" min="0" max="100" step="5"><span id="song-volume-value">100%</span></div></div>
+    <div id="song-status" class="muted small"></div><div class="row"><input id="song-url" placeholder="YouTube URL"><button id="song-add" data-ru="Добавить" data-en="Add">Добавить</button></div>
+    <div id="song-current" class="card muted small"></div><button id="song-skip" data-action="songSkip" data-ru="Следующий трек" data-en="Skip song">Следующий трек</button><div id="song-queue" class="stack summary"></div>
+    <h2 data-ru="Плееры Windows" data-en="Windows players">Плееры Windows</h2><div id="music-current" class="muted small"></div><button id="music-artwork" data-action="musicArtwork"></button><div id="music-sources" class="stack summary"></div>
     <h2>SubForStream</h2><div id="subs-status" class="muted small"></div><button data-action="subsClear" data-ru="Очистить субтитры" data-en="Clear captions">Очистить субтитры</button>
     <h2>Kawaki</h2><div id="kawaki" class="muted small"></div><button data-action="kawakiRefresh" data-ru="Обновить Kawaki" data-en="Refresh Kawaki">Обновить Kawaki</button>
-    <h2 data-ru="Быстрые действия" data-en="Quick actions">Быстрые действия</h2><div id="actions" class="grid"></div>
-    <script>
-      const token=new URLSearchParams(location.search).get('token');
-      const $=(id)=>document.getElementById(id);
-      const labels={ru:{streamOn:'Остановить эфир',streamOff:'Начать эфир',recOn:'Стоп запись',recOff:'Запись',pause:'Продолжить алерты',resume:'Пауза алертов',noObs:'OBS не подключён',show:'Показать'},en:{streamOn:'Stop stream',streamOff:'Start stream',recOn:'Stop recording',recOff:'Record',pause:'Resume alerts',resume:'Pause alerts',noObs:'OBS disconnected',show:'Show'}};
-      let lang='ru';
-      async function action(name,id){try{const r=await fetch('/dock/action',{method:'POST',headers:{'Content-Type':'application/json','X-StreamHelper-Dock-Token':token},body:JSON.stringify({name,id})});if(!r.ok)throw new Error(await r.text());$('error').textContent='';await refresh();return true}catch(e){$('error').textContent=e.message;return false}}
-      document.querySelectorAll('[data-action]').forEach(b=>b.addEventListener('click',()=>action(b.dataset.action)));
-      $('song-add').onclick=async()=>{const value=$('song-url').value.trim();if(value&&await action('songAdd',value))$('song-url').value=''};
-      function buttons(root,items,make){root.replaceChildren(...items.map(make))}
-      function btn(text,name,id,active,color){const b=document.createElement('button');b.textContent=text;b.className=active?'active':'';if(color)b.style.borderLeftColor=color;b.onclick=()=>action(name,id);return b}
-      async function refresh(){try{const r=await fetch('/dock/state?token='+encodeURIComponent(token),{cache:'no-store'});if(!r.ok)throw new Error('Dock access denied');const d=await r.json();lang=d.language;document.documentElement.lang=lang;document.querySelectorAll('[data-ru]').forEach(e=>e.textContent=e.dataset[lang]);const l=labels[lang];$('live').textContent=d.stream.live?'LIVE':'OFFLINE';$('live').classList.toggle('live',d.stream.live);$('title').textContent=d.stream.title||'—';$('category').textContent=d.stream.categoryName||'—';$('viewers').textContent=String(d.stream.viewers);$('stream').textContent=d.obs.streaming?l.streamOn:l.streamOff;$('record').textContent=d.obs.recording?l.recOn:l.recOff;$('pause').textContent=d.alerts.paused?l.pause:l.resume;$('stream').disabled=$('record').disabled=d.obs.status!=='connected';buttons($('scenes'),d.obs.scenes,s=>btn(s,'scene',s,s===d.obs.currentScene));$('game').textContent=`Poll: ${d.poll?.status||'—'} · Giveaway: ${d.giveaway.status} (${d.giveaway.count}) · Boss: ${d.boss.hp}/${d.boss.maxHp}`;
-        $('song-status').textContent=d.songRequests.playerConnected?(lang==='ru'?'Плеер OBS подключён':'OBS player connected'):(lang==='ru'?'Добавьте источник заказа музыки в OBS':'Add the song player to OBS');
-        $('song-current').textContent=d.songRequests.current?`${d.songRequests.current.userName}: ${d.songRequests.current.url}`:(lang==='ru'?'Сейчас ничего не играет':'Nothing playing');
-        $('song-skip').disabled=!d.songRequests.current;
-        buttons($('song-queue'),d.songRequests.queue,s=>{const row=document.createElement('div');row.className='row card';const name=document.createElement('span');name.textContent=`${s.userName}: ${s.url}`;row.append(name,btn(lang==='ru'?'Играть':'Play','songPlay',s.id),btn('×','songRemove',s.id));return row});
-        buttons($('music-sources'),d.music.sources,s=>{const row=document.createElement('div');row.className='row card';const name=document.createElement('span');name.textContent=s;row.append(name,btn('▶','musicPlay',s),btn('Ⅱ','musicPause',s));return row});
-        buttons($('goals'),d.goals,g=>{const row=document.createElement('div');row.className='row card';const name=document.createElement('span');name.textContent=`${g.title}: ${g.current} / ${g.target} ${g.currency}`;const reset=document.createElement('button');reset.textContent=lang==='ru'?'Сброс':'Reset';reset.onclick=()=>{if(confirm(lang==='ru'?'Обнулить цель?':'Reset this goal?'))action('goalReset',g.id)};row.append(name,reset);return row});
-        buttons($('banners'),d.banners,b=>btn(b.name,'bannerToggle',b.id,b.visible));
-        buttons($('ads'),d.ads.filter(a=>a.media),a=>btn(a.name,'adShow',a.id,a.id===d.ad.activeId));
-        $('subs-status').textContent=d.subForStream.status==='connected'?(lang==='ru'?'Субтитры подключены':'Captions connected'):(lang==='ru'?'SubForStream не подключён':'SubForStream disconnected');
-        $('kawaki').textContent=d.kawaki.nowWatching?`${d.kawaki.nowWatching.title} · ${d.kawaki.nowWatching.episode??'—'}`:(lang==='ru'?'Сейчас ничего не смотрим':'Nothing playing');
-        buttons($('actions'),d.actions,a=>btn(a.label,'quickAction',a.id,false,a.color));if(d.obs.status!=='connected')$('error').textContent=l.noObs;else if($('error').textContent===l.noObs)$('error').textContent=''}catch(e){$('error').textContent=e.message}}
-      refresh();setInterval(refresh,1500);
-    </script>
-  </body>
+    <h2 data-ru="Подключённые оверлеи" data-en="Connected overlays">Подключённые оверлеи</h2><div id="overlay-status" class="muted small"></div>
+  </section>
+  <script>
+    const token=new URLSearchParams(location.search).get('token');
+    const $=id=>document.getElementById(id);
+    const labels={ru:{streamOn:'Остановить эфир',streamOff:'Начать эфир',recOn:'Стоп запись',recOff:'Запись',pause:'Продолжить алерты',resume:'Пауза алертов',noObs:'OBS не подключён',show:'Показать',hide:'Скрыть',mute:'Выключить звук',unmute:'Включить звук',play:'Играть',reset:'Сброс',start:'Старт',pauseTimer:'Пауза',addMinute:'+1 мин',empty:'Пока пусто',test:'Тест'},en:{streamOn:'Stop stream',streamOff:'Start stream',recOn:'Stop recording',recOff:'Record',pause:'Resume alerts',resume:'Pause alerts',noObs:'OBS disconnected',show:'Show',hide:'Hide',mute:'Mute',unmute:'Unmute',play:'Play',reset:'Reset',start:'Start',pauseTimer:'Pause',addMinute:'+1 min',empty:'Nothing yet',test:'Test'}};
+    let lang='ru';let refreshing=false;
+    function setTab(name){document.querySelectorAll('[data-tab]').forEach(b=>b.classList.toggle('active',b.dataset.tab===name));document.querySelectorAll('[data-panel]').forEach(p=>p.hidden=p.dataset.panel!==name);localStorage.setItem('dockTab',name)}
+    document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>setTab(b.dataset.tab));
+    setTab(['live','events','fun','tools'].includes(localStorage.getItem('dockTab'))?localStorage.getItem('dockTab'):'live');
+    async function action(name,id){try{const r=await fetch('/dock/action',{method:'POST',headers:{'Content-Type':'application/json','X-StreamHelper-Dock-Token':token},body:JSON.stringify({name,id})});if(!r.ok)throw new Error(await r.text());$('error').textContent='';await refresh();return true}catch(e){$('error').textContent=e.message;return false}}
+    document.querySelectorAll('[data-action]').forEach(b=>b.onclick=()=>action(b.dataset.action));
+    $('profile').onchange=e=>action('profileActivate',e.target.value);
+    $('song-add').onclick=async()=>{const value=$('song-url').value.trim();if(value&&await action('songAdd',value))$('song-url').value=''};
+    $('song-url').onkeydown=e=>{if(e.key==='Enter')$('song-add').click()};
+    $('song-layout').onchange=e=>action('songVideoLayout',e.target.value);
+    $('song-volume').onchange=e=>action('songVolume',e.target.value);
+    function buttons(root,items,make){root.replaceChildren(...items.map(make))}
+    function btn(label,name,id,active,color){const b=document.createElement('button');b.textContent=label;b.className=active?'active':'';b.setAttribute('aria-pressed',String(!!active));if(color)b.style.borderLeftColor=color;b.onclick=()=>action(name,id);return b}
+    function item(label,actions,off){const row=document.createElement('div');row.className='item'+(off?' off':'');const text=document.createElement('span');text.className='label';text.textContent=label;const controls=document.createElement('div');controls.className='buttons';controls.append(...actions);row.append(text,controls);return row}
+    async function refresh(){if(refreshing)return;refreshing=true;try{
+      const r=await fetch('/dock/state?token='+encodeURIComponent(token),{cache:'no-store'});if(!r.ok)throw new Error('Dock access denied');const d=await r.json();
+      lang=d.language==='en'?'en':'ru';const l=labels[lang];document.documentElement.lang=lang;document.querySelectorAll('[data-ru]').forEach(e=>e.textContent=e.dataset[lang]);
+      $('live').textContent=d.stream.live?'LIVE':'OFFLINE';$('live').classList.toggle('live',d.stream.live);$('title').textContent=d.stream.title||'—';$('category').textContent=d.stream.categoryName||'—';$('viewers').textContent=String(d.stream.viewers);
+      const profile=$('profile');if(profile.options.length!==d.profiles.length||[...profile.options].some((o,i)=>o.value!==d.profiles[i].id||o.textContent!==d.profiles[i].name)){profile.replaceChildren(...d.profiles.map(p=>new Option(p.name,p.id)))}profile.value=d.activeProfileId;
+      $('stream').textContent=d.obs.streaming?l.streamOn:l.streamOff;$('record').textContent=d.obs.recording?l.recOn:l.recOff;$('pause').textContent=d.alerts.paused?l.pause:l.resume;$('stream').disabled=$('record').disabled=d.obs.status!=='connected';
+      buttons($('scenes'),d.obs.scenes,s=>btn(s,'scene',s,s===d.obs.currentScene));
+      buttons($('sources'),d.obs.sceneItems,s=>item(s.name,[btn(s.enabled?l.hide:l.show,'sourceToggle',String(s.id),s.enabled)],!s.enabled));
+      buttons($('audio'),d.obs.inputs,s=>item(s.name,[btn(s.muted?l.unmute:l.mute,'muteToggle',s.name,s.muted)],s.muted));
+      buttons($('actions'),d.actions,a=>btn(a.label,'quickAction',a.id,false,a.color));
+      $('alert-current').textContent=d.alerts.current?`${d.alerts.current} · ${d.alerts.queueLength}`:`${l.empty} · ${d.alerts.queueLength}`;
+      buttons($('alert-tests'),['follow','sub','donation','raid'],type=>btn(`${l.test}: ${type}`,'alertsTest',type));
+      $('spotlight-current').textContent=d.spotlight?`${d.spotlight.userName}: ${d.spotlight.text}`:l.empty;
+      buttons($('chat'),d.chat,m=>item(`${m.userName}: ${m.text}`,[btn(l.show,'spotlightShow',m.id)]));
+      buttons($('goals'),d.goals,g=>item(`${g.title}: ${g.current} / ${g.target} ${g.currency}`,[btn('+1','goalAdd',g.id),btn(l.reset,'goalReset',g.id)]));
+      buttons($('timers'),d.timers,t=>item(t.title,[btn(t.running?l.pauseTimer:l.start,t.running?'timerPause':'timerStart',t.id,t.running),btn(l.addMinute,'timerAdd',t.id),btn(l.reset,'timerReset',t.id)]));
+      buttons($('banners'),d.banners,b=>btn(b.name,'bannerToggle',b.id,b.visible));buttons($('ads'),d.ads.filter(a=>a.media),a=>btn(a.name,'adShow',a.id,a.id===d.ad.activeId));
+      buttons($('wheels'),d.wheels,w=>item(`${w.name} (${w.segments})`,[btn(d.wheel.spinning&&d.wheel.wheelId===w.id?'…':l.start,'wheelSpin',w.id)]));
+      $('poll-status').textContent=d.poll?`${d.poll.question} · ${d.poll.total}`:l.empty;$('giveaway-status').textContent=`${d.giveaway.status} · ${d.giveaway.count}${d.giveaway.winner?' · '+d.giveaway.winner:''}`;$('boss-status').textContent=`${d.boss.hp}/${d.boss.maxHp} · ${d.boss.status}`;$('quiz-status').textContent=`${d.quiz.status} · ${d.quiz.round}/${d.quiz.rounds}`;
+      $('song-status').textContent=d.songRequests.playerConnected?(lang==='ru'?'Плеер OBS подключён':'OBS player connected'):(lang==='ru'?'Добавьте источник заказа музыки в OBS':'Add the song player to OBS');
+      $('song-layout').value=d.songDisplay.videoLayout;$('song-volume').value=d.songDisplay.volume;$('song-volume-value').textContent=d.songDisplay.volume+'%';$('song-volume').disabled=d.songDisplay.videoLayout==='queue';
+      $('song-current').textContent=d.songRequests.current?`${d.songRequests.current.userName}: ${d.songRequests.current.url}`:(lang==='ru'?'Сейчас ничего не играет':'Nothing playing');$('song-skip').disabled=!d.songRequests.current;
+      buttons($('song-queue'),d.songRequests.queue,s=>{const play=btn(l.play,'songPlay',s.id);play.disabled=d.songDisplay.videoLayout==='queue';return item(`${s.userName}: ${s.url}`,[play,btn('×','songRemove',s.id)])});
+      $('music-current').textContent=d.music.track?`${d.music.track.artist} — ${d.music.track.title}`:l.empty;
+      $('music-artwork').textContent=d.musicDisplay.showArtwork?(lang==='ru'?'Скрыть обложку':'Hide artwork'):(lang==='ru'?'Показать обложку':'Show artwork');
+      buttons($('music-sources'),d.music.sources,s=>item(s,[btn('▶','musicPlay',s),btn('Ⅱ','musicPause',s),btn('⏭','musicNext',s)]));
+      $('subs-status').textContent=d.subForStream.status==='connected'?(lang==='ru'?'Субтитры подключены':'Captions connected'):(lang==='ru'?'SubForStream не подключён':'SubForStream disconnected');
+      $('kawaki').textContent=d.kawaki.nowWatching?`${d.kawaki.nowWatching.title} · ${d.kawaki.nowWatching.episode??'—'}`:(lang==='ru'?'Сейчас ничего не смотрим':'Nothing playing');
+      $('overlay-status').textContent=Object.entries(d.overlayKinds).filter(([,count])=>count>0).map(([kind,count])=>`${kind}: ${count}`).join(' · ')||l.empty;
+      if(d.obs.status!=='connected')$('error').textContent=l.noObs;else if($('error').textContent===l.noObs)$('error').textContent='';
+    }catch(e){$('error').textContent=e.message}finally{refreshing=false}}
+    refresh();setInterval(refresh,1500);
+  </script>
+</body>
 </html>

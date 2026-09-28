@@ -102,6 +102,20 @@
 
 /* ---------- overlay catalog ---------- */
 
+.profile-layout { display:grid; grid-template-columns:minmax(240px,300px) minmax(0,1fr); gap:16px; align-items:start; }
+.profile-list { display:flex; flex-direction:column; gap:6px; }
+.profile-item { display:flex; align-items:center; justify-content:space-between; gap:8px; width:100%; padding:12px; border:1px solid var(--border); border-radius:var(--radius-sm); background:var(--panel-2); color:var(--text); font:inherit; text-align:left; cursor:pointer; }
+.profile-item.active { border-color:var(--accent); background:var(--accent-soft); }
+.profile-create { margin-top:16px; flex-wrap:wrap; }
+.profile-create .input { flex:1; min-width:150px; }
+.profile-content { display:flex; flex-direction:column; gap:16px; min-width:0; }
+.profile-links { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; }
+.profile-overlays { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:7px; margin-top:12px; }
+.profile-overlay-item { display:flex; align-items:center; gap:8px; min-width:0; padding:9px; border:1px solid var(--border); border-radius:var(--radius-sm); background:var(--panel-2); }
+.profile-overlay-item span { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+@media (max-width:800px) { .profile-layout { grid-template-columns:1fr; } .profile-links { grid-template-columns:1fr; } }
+@media (max-width:650px) { .profile-overlays { grid-template-columns:1fr; } }
+
 .ov-layout {
   display: grid;
   grid-template-columns: 230px minmax(0, 1fr);

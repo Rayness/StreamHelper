@@ -119,12 +119,16 @@ describe('reward and collaboration overlay events', () => {
     const sources = { alerts: () => ({ recentEvents: history }) } as unknown as HubSources;
     const chat = { recent: () => [] } as unknown as ChatHistory;
     const hub = new OverlayHub(ctx, server, chat, sources);
-    expect(hub.initialMessages('rewards', null)[0]).toMatchObject({ type: 'rewards', events: [reward], config: settings.get('rewardsOverlay') });
-    expect(hub.initialMessages('collab', null)[0]).toMatchObject({ type: 'collab', raids: [raid], config: settings.get('collabOverlay') });
+    expect(hub.initialMessages('rewards', null)[0]).toEqual({ type: 'profileVisibility', visible: true });
+    expect(hub.initialMessages('rewards', null)[1]).toMatchObject({ type: 'rewards', events: [reward], config: settings.get('rewardsOverlay') });
+    expect(hub.initialMessages('collab', null)[1]).toMatchObject({ type: 'collab', raids: [raid], config: settings.get('collabOverlay') });
     bus.emit('event', reward);
     bus.emit('event', raid);
     expect(sent.filter((item) => item.kind === 'rewards')).toEqual([{ kind: 'rewards', message: { type: 'reward', event: reward } }]);
     expect(sent.filter((item) => item.kind === 'collab')).toEqual([{ kind: 'collab', message: { type: 'collabRaid', event: raid } }]);
+    settings.setProfileOverlay(settings.get('activeProfileId'), 'rewards', false);
+    expect(hub.initialMessages('rewards', null)[0]).toEqual({ type: 'profileVisibility', visible: false });
+    expect(sent).toContainEqual({ kind: 'rewards', message: { type: 'profileVisibility', visible: false } });
   });
 });
 

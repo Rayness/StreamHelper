@@ -82,18 +82,37 @@ export async function callOk<K extends keyof IpcInvoke>(channel: K, ...args: Par
  * keystroke and would make inputs jump. Main always pushes again ~50ms after the last save lands.
  */
 let pendingSaves = 0;
+let settingsWrite: Promise<unknown> = Promise.resolve();
 
 /** Optimistically update a settings section and persist it. */
 export function saveSettings<K extends SettingsKey>(key: K, value: Settings[K]): void {
   if (!data.settings) return;
+  const profileId = data.settings.activeProfileId;
   set({ settings: { ...data.settings, [key]: value } });
   pendingSaves++;
-  void call('settings:set', key, value).finally(() => pendingSaves--);
+  // Keep writes in edit order. Concurrent IPC calls could previously finish out of order,
+  // briefly restoring an older value in the form and persisting the wrong final setting.
+  settingsWrite = settingsWrite.then(() => call('settings:set', key, value, profileId)).finally(() => pendingSaves--);
+}
+
+export async function profileAction<K extends 'profiles:create' | 'profiles:rename' | 'profiles:activate' | 'profiles:delete' | 'profiles:overlay'>(
+  channel: K,
+  ...args: Parameters<IpcInvoke[K]>
+): Promise<boolean> {
+  pendingSaves++;
+  const operation = settingsWrite.then(async () => {
+    const settings = await call(channel, ...args);
+    if (!settings) return false;
+    set({ settings });
+    return true;
+  });
+  settingsWrite = operation.finally(() => pendingSaves--);
+  return operation;
 }
 
 // ---------- navigation ----------
 
-export type Page = 'dashboard' | 'interactive' | 'alerts' | 'overlays' | 'bot' | 'obs' | 'kawaki' | 'connections' | 'settings';
+export type Page = 'dashboard' | 'interactive' | 'alerts' | 'overlays' | 'profiles' | 'bot' | 'obs' | 'kawaki' | 'connections' | 'settings';
 
 interface NavState {
   page: Page;

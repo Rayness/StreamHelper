@@ -2,7 +2,7 @@ import { copyFileSync, existsSync, mkdirSync, readdirSync } from 'node:fs';
 import { basename, extname, join } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { app, BrowserWindow, clipboard, dialog, Menu, nativeImage, shell, Tray } from 'electron';
-import type { AlertType, IpcPush, Language, MediaFile } from '@shared/types';
+import { ALERT_TYPES, type AlertType, type IpcPush, type Language, type MediaFile } from '@shared/types';
 import { BotService } from './bot/bot';
 import type { AppContext } from './core/context';
 import { EventBus } from './core/eventBus';
@@ -221,34 +221,57 @@ async function bootstrap(): Promise<void> {
   dockRoute = createDockRoutes({
     token: dockToken,
     htmlPath: join(resourcesDir(), 'overlays', 'dock.html'),
-    snapshot: () => ({ state: state.current, settings: settings.all }),
+    snapshot: () => ({ state: state.current, settings: settings.all, chat: chatHistory.recent(20) }),
     action: async (name, id) => {
       switch (name) {
         case 'stream': return obs.stream('toggle');
         case 'record': return obs.record('toggle');
         case 'scene': if (id) return obs.setScene(id); break;
+        case 'sourceToggle': if (id && Number.isInteger(Number(id))) return obs.toggleSceneItem(state.current.obs.currentScene, Number(id)); break;
+        case 'muteToggle': if (id) return obs.toggleMute(id); break;
+        case 'profileActivate': if (id) return void settings.activateProfile(id); break;
         case 'alertsPause': return alerts.togglePause();
         case 'alertsSkip': return alerts.skip();
+        case 'alertsTest': if (id && ALERT_TYPES.includes(id as AlertType)) { bus.emit('event', sampleEvent(id as AlertType, settings.get('language'), settings.get('currency'))); return; } break;
         case 'pollStart': return poll.start();
         case 'pollEnd': return poll.end();
+        case 'pollClear': return poll.clear();
         case 'giveawayOpen': return giveaway.open();
+        case 'giveawayClose': return giveaway.close();
         case 'giveawayRoll': return giveaway.roll();
+        case 'giveawayReset': return giveaway.reset();
         case 'bossStart': return boss.start();
         case 'bossHit': return void boss.hit();
+        case 'bossReset': return boss.reset();
+        case 'quizStart': return void quiz.start();
+        case 'quizSkip': return quiz.skip();
+        case 'quizStop': return quiz.stop();
+        case 'wheelSpin': if (id) return wheel.spin(id); break;
+        case 'emoteBurst': return emotes.burst();
         case 'adShow': if (id) return ads.show(id); break;
         case 'adHide': return ads.hide();
         case 'songPlay': return songRequests.play(id);
         case 'songAdd': if (id) return songRequests.add(id); break;
         case 'songSkip': return songRequests.skip();
         case 'songRemove': if (id) return songRequests.remove(id); break;
+        case 'songVideoLayout': if (id === 'full' || id === 'compact' || id === 'queue') return void settings.set('songRequests', { ...settings.get('songRequests'), videoLayout: id }); break;
+        case 'songVolume': if (id !== undefined && /^\d{1,3}$/.test(id)) return void settings.set('songRequests', { ...settings.get('songRequests'), volume: Math.max(0, Math.min(100, Number(id))) }); break;
+        case 'musicArtwork': return void settings.set('musicOverlay', { ...settings.get('musicOverlay'), showArtwork: !settings.get('musicOverlay').showArtwork });
         case 'musicPlay': if (id === 'spotify' || id === 'yandex' || id === 'browser' || id === 'other') return music.control(id, 'play'); break;
         case 'musicPause': if (id === 'spotify' || id === 'yandex' || id === 'browser' || id === 'other') return music.control(id, 'pause'); break;
+        case 'musicNext': if (id === 'spotify' || id === 'yandex' || id === 'browser' || id === 'other') return music.control(id, 'next'); break;
         case 'bannerToggle': if (id) return text.toggle(id); break;
         case 'goalReset': if (id) { const goal = settings.get('goals').find((item) => item.id === id); if (goal) return progress.addToGoal(id, -goal.current); } break;
+        case 'goalAdd': if (id) return progress.addToGoal(id, 1); break;
+        case 'timerStart': if (id) return progress.controlTimer(id, 'start'); break;
+        case 'timerPause': if (id) return progress.controlTimer(id, 'pause'); break;
+        case 'timerReset': if (id) return progress.controlTimer(id, 'reset'); break;
+        case 'timerAdd': if (id) return progress.controlTimer(id, 'add', 60); break;
         case 'kawakiRefresh': return kawaki.refresh();
         case 'subsClear': return subForStream.clear();
         case 'quickAction': if (id) return actions.run(id); break;
         case 'spotlightClear': return spotlight.clear();
+        case 'spotlightShow': if (id) return spotlight.show(id); break;
       }
       throw new Error('Unknown dock action');
     },
@@ -308,11 +331,16 @@ async function bootstrap(): Promise<void> {
       events: alerts.recentEvents,
       version: app.getVersion(),
     }),
-    'settings:set': (key, value) => settings.set(key, value),
+    'settings:set': (key, value, profileId) => settings.setForProfile(key, value, profileId),
     'settings:reset': (key) => {
       settings.reset(key);
       return settings.all;
     },
+    'profiles:create': (name) => settings.createProfile(name),
+    'profiles:rename': (id, name) => settings.renameProfile(id, name),
+    'profiles:activate': (id) => settings.activateProfile(id),
+    'profiles:delete': (id) => settings.deleteProfile(id),
+    'profiles:overlay': (id, kind, enabled) => settings.setProfileOverlay(id, kind, enabled),
     'twitch:login': (acc) => void twitch.login(acc),
     'twitch:logout': (acc) => twitch.logout(acc),
     'twitch:cancelLogin': (acc) => twitch.cancelLogin(acc),
@@ -379,6 +407,7 @@ async function bootstrap(): Promise<void> {
     'ad:show': (id) => ads.show(id),
     'ad:hide': () => ads.hide(),
     'spotlight:show': (id) => spotlight.show(id),
+    'spotlight:test': () => spotlight.test(),
     'spotlight:clear': () => spotlight.clear(),
     'update:check': () => updater.check(),
     'update:install': () => updater.install(),

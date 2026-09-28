@@ -79,7 +79,7 @@ export function defaultAlerts(lang: Language): AlertSettings {
   for (const t of Object.keys(ALERT_TEXT[lang]) as AlertType[]) types[t] = defaultAlertVariant(t, lang);
   return {
     gapSec: 1,
-    style: { fontFamily: 'Montserrat', fontSize: 40, textColor: '#ffffff', accentColor: '#9b6bff', layout: 'stacked' },
+    style: { fontFamily: 'Montserrat', fontSize: 40, textColor: '#ffffff', accentColor: '#9b6bff', layout: 'stacked', x: 50, y: 50, width: 90, anchor: 'center' },
     types,
     donationTiers: [],
   };
@@ -468,10 +468,11 @@ export function defaultSettings(lang: Language): Settings {
     bot: defaultBot(lang),
     alerts: defaultAlerts(lang),
     chatOverlay: defaultChatOverlay(),
+    spotlightOverlay: { autoHighlighted: false, mode: 'single', cardStyle: 'solid', fontSize: 38, accentColor: '#bd96ff', textColor: '#ffffff', background: '#17131f', durationSec: 12, maxMessages: 6, gravity: 1, bounce: 0.55, x: 50, y: 75 },
     rewardsOverlay: { maxItems: 5, showInput: true, accentColor: '#9b6bff' },
     collabOverlay: { title: lang === 'ru' ? 'Коллаборация' : 'Collaboration', guests: [], showRaids: true, accentColor: '#9b6bff' },
-    musicOverlay: { source: 'auto', style: 'card', showArtwork: true, showAlbum: true, showProgress: true, hideWhenPaused: true, accentColor: '#1db954' },
-    songRequests: { enabled: false, rewardTitle: '', minDonation: 100, autoPlay: true, pauseWindowsMusic: true, resumeWindowsMusic: true, maxQueue: 30 },
+    musicOverlay: { source: 'auto', style: 'card', showArtwork: true, showAlbum: true, showProgress: true, hideWhenPaused: true, accentColor: '#1db954', layout: 'horizontal', coverSize: 130, fontSize: 25, backgroundOpacity: 90, showSource: true },
+    songRequests: { enabled: false, rewardTitle: '', minDonation: 100, autoPlay: true, pauseWindowsMusic: true, resumeWindowsMusic: true, maxQueue: 30, videoLayout: 'full', videoPosition: 'left', videoWidth: 45, showRequester: true, showTitle: true, showQueueCount: true, showControls: true, volume: 100, accentColor: '#9146ff', backgroundOpacity: 88 },
     songQueue: [],
     goals: [defaultGoal(lang)],
     timers: [defaultTimer(lang)],
@@ -492,6 +493,8 @@ export function defaultSettings(lang: Language): Settings {
     kawaki: defaultKawaki(lang),
     currency: lang === 'ru' ? 'RUB' : 'USD',
     minimizeToTray: true,
+    profiles: [],
+    activeProfileId: '',
   };
 }
 
@@ -509,6 +512,13 @@ export function migrateSettings(s: Settings): Settings {
   const missing = defaultBuiltins(s.language).filter((b) => !known.has(b.id));
   return {
     ...s,
+    alerts: {
+      ...s.alerts,
+      donationTiers: s.alerts.donationTiers.map((tier) => ({
+        ...tier,
+        style: tier.style ? { ...s.alerts.style, ...tier.style } : undefined,
+      })),
+    },
     bot: missing.length ? { ...s.bot, builtins: [...s.bot.builtins, ...missing] } : s.bot,
     ads: s.ads.map((ad) => ({ ...ad, entrance: ad.entrance ?? 'slideUp', entranceMs: ad.entranceMs ?? 550 })),
     goals: s.goals.map((goal) => ({ ...defaultGoal(s.language), ...goal })),

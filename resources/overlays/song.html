@@ -5,45 +5,110 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>StreamHelper — Song requests</title>
   <style>
-    html,body{margin:0;width:100%;height:100%;overflow:hidden;background:transparent;color:white;font:20px/1.4 system-ui,sans-serif}
-    #shell{display:none;position:absolute;inset:0;background:#080808}
-    #shell.active{display:block}
-    #player{position:absolute;inset:0;width:100%;height:100%}
-    #credit{position:absolute;left:18px;bottom:18px;max-width:70%;padding:8px 13px;border-radius:9px;background:#111c;font-weight:600;pointer-events:none}
-    #preview{display:none;padding:24px;background:#17151f;border-radius:12px}
-    body.preview #preview{display:block}
+    :root{--accent:#9146ff;--video-width:45%;--panel-bg:rgba(15,12,23,.88)}
+    *{box-sizing:border-box}
+    html,body{margin:0;width:100%;height:100%;overflow:hidden;background:transparent;color:#fff;font:20px/1.4 system-ui,sans-serif}
+    #shell{display:none;position:absolute;inset:0;overflow:hidden;background:var(--panel-bg)}
+    #shell.active{display:flex}
+    #video{position:relative;flex:1;min-width:0;min-height:0;background:#080808}
+    #playerHost,#playerHost iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+    #mockVideo{display:none;position:absolute;inset:0;place-items:center;background:linear-gradient(135deg,#161123,#3a2067 55%,#090710);font-size:clamp(50px,12vw,130px);color:#fff9}
+    body.preview #mockVideo{display:grid}
+    body.preview #playerHost{display:none}
+    #info{display:flex;flex-direction:column;justify-content:center;gap:14px;min-width:0;padding:30px;background:var(--panel-bg)}
+    #eyebrow{color:var(--accent);font-size:14px;font-weight:800;letter-spacing:.12em;text-transform:uppercase}
+    #title{font-size:clamp(23px,3vw,45px);font-weight:800;line-height:1.1;overflow-wrap:anywhere}
+    #requester{font-size:18px;color:#ded7eb}
+    #queueCount{font-size:15px;color:#c1b7d0}
+    #shell.full #info{position:absolute;left:20px;bottom:20px;max-width:min(70%,700px);border-left:4px solid var(--accent);border-radius:12px;padding:14px 18px;pointer-events:none}
+    #shell.compact #video{flex:none;width:var(--video-width);min-width:200px;min-height:200px}
+    #shell.compact #info{flex:1;border-left:4px solid var(--accent)}
+    #shell.compact.right{flex-direction:row-reverse}
+    #shell.compact.right #info{border-left:0;border-right:4px solid var(--accent)}
+    #shell.queue{background:var(--panel-bg)}
+    #shell.queue #video{display:none}
+    #shell.queue #info{width:100%;background:transparent;border-left:5px solid var(--accent)}
+    #queueList{display:none;list-style:none;margin:8px 0 0;padding:0;max-height:55%;overflow:hidden;font-size:17px}
+    #shell.queue #queueList{display:block}
+    #queueList li{padding:8px 0;border-top:1px solid #ffffff30;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    #shell.no-title #title,#shell.no-requester #requester,#shell.no-count #queueCount{display:none}
+    @media (max-width:430px){#shell.compact #info{padding:12px}#shell.compact #video{min-width:200px}#shell.compact #title{font-size:20px}}
   </style>
 </head>
 <body>
-  <div id="shell"><div id="player"></div><div id="credit"></div></div>
-  <div id="preview">🎵 Заказ музыки — добавьте этот источник в OBS</div>
+  <div id="shell">
+    <div id="video"><div id="playerHost"></div><div id="mockVideo">▶</div></div>
+    <div id="info"><div id="eyebrow"></div><div id="title"></div><div id="requester"></div><div id="queueCount"></div><ul id="queueList"></ul></div>
+  </div>
   <script src="/overlay/assets/common.js"></script>
   <script>
-    const shell=document.getElementById('shell');
-    const credit=document.getElementById('credit');
-    let player=null,active=null,pending=null,ready=false,reported=false;
-    if(SH.preview)document.body.classList.add('preview');
-    window.onYouTubeIframeAPIReady=()=>{ready=true;if(pending)load(pending)};
-    const script=document.createElement('script');script.src='https://www.youtube.com/iframe_api';document.head.appendChild(script);
+    const $=(id)=>document.getElementById(id);
+    const sample={id:'preview',videoId:'',url:'',userName:'Viewer'};
+    const defaults={videoLayout:'full',videoPosition:'left',videoWidth:45,showRequester:true,showTitle:true,showQueueCount:true,showControls:true,volume:100,accentColor:'#9146ff',backgroundOpacity:88};
+    let player=null,playerReady=false,apiReady=false,active=null,pending=null,reported=false,controls=true,config=defaults,lang='ru',videoTitle='';
+    const label=(ru,en)=>SH.tr(lang,ru,en);
+    window.onYouTubeIframeAPIReady=()=>{apiReady=true;if(pending)load(pending)};
+    if(!SH.preview){const script=document.createElement('script');script.src='https://www.youtube.com/iframe_api';document.head.appendChild(script)}
     async function finished(error=''){
       if(!active||reported||SH.preview)return;
       reported=true;
       const request=active;
       try{await fetch('/song/finished',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:request.request.id,nonce:request.nonce,error})})}catch(_){/* reconnect will resync */}
     }
-    function load(msg){
-      pending=msg;
-      if(SH.preview)return;
-      if(!ready)return;
-      if(!msg.request){active=null;shell.classList.remove('active');if(player)player.stopVideo();return}
-      if(active?.request.id===msg.request.id&&active.nonce===msg.nonce)return;
-      active=msg;reported=false;shell.classList.add('active');
-      credit.textContent='Заказал(а): '+msg.request.userName;
-      if(!player){
-        player=new YT.Player('player',{width:'100%',height:'100%',videoId:msg.request.videoId,playerVars:{autoplay:1,controls:1,playsinline:1,origin:location.origin},events:{onReady:()=>player.playVideo(),onStateChange:(e)=>{if(e.data===YT.PlayerState.ENDED&&player.getVideoData()?.video_id===active?.request.videoId)void finished()},onError:(e)=>void finished('YouTube error '+e.data)}});
-      }else player.loadVideoById(msg.request.videoId);
+    function stopPlayer(){
+      if(player){try{player.destroy()}catch(_){/* player may still be loading */}}
+      player=null;playerReady=false;$('playerHost').replaceChildren();
     }
-    SH.connect('song',(msg)=>{if(msg.type==='song')load(msg)});
+    function applyVolume(){if(player&&playerReady)player.setVolume(Math.max(0,Math.min(100,Number(config.volume)||0)))}
+    function createPlayer(startAt=0){
+      if(!apiReady||!active?.request||config.videoLayout==='queue')return;
+      stopPlayer();
+      const node=document.createElement('div');$('playerHost').appendChild(node);
+      controls=!!config.showControls;
+      const request=active.request;
+      player=new YT.Player(node,{width:'100%',height:'100%',videoId:request.videoId,playerVars:{autoplay:1,controls:controls?1:0,playsinline:1,origin:location.origin},events:{
+        onReady:(e)=>{if(player!==e.target||!active||config.videoLayout==='queue')return;playerReady=true;applyVolume();if(startAt>0)player.seekTo(startAt,true);player.playVideo()},
+        onStateChange:(e)=>{if(player!==e.target||!active)return;if(e.data===YT.PlayerState.PLAYING){videoTitle=player.getVideoData()?.title||videoTitle;render()}if(e.data===YT.PlayerState.ENDED&&player.getVideoData()?.video_id===active?.request.videoId)void finished()},
+        onError:(e)=>{if(player===e.target)void finished('YouTube error '+e.data)}
+      }});
+    }
+    function render(){
+      const request=SH.preview?sample:active?.request;
+      const queue=pending?.queue||[];
+      const mode=['full','compact','queue'].includes(config.videoLayout)?config.videoLayout:'full';
+      const shell=$('shell');
+      shell.className=(SH.preview||request||mode==='queue'?'active ':'')+mode+(config.videoPosition==='right'?' right':'')+(!config.showTitle?' no-title':'')+(!config.showRequester?' no-requester':'')+(!config.showQueueCount?' no-count':'');
+      document.documentElement.style.setProperty('--accent',/^#[0-9a-fA-F]{6}$/.test(config.accentColor)?config.accentColor:'#9146ff');
+      document.documentElement.style.setProperty('--video-width',Math.max(25,Math.min(70,Number(config.videoWidth)||45))+'%');
+      document.documentElement.style.setProperty('--panel-bg','rgba(15,12,23,'+(Math.max(0,Math.min(100,Number(config.backgroundOpacity)||0))/100)+')');
+      $('eyebrow').textContent=mode==='queue'?label('Очередь заказов','Song queue'):label('Заказ музыки','Song request');
+      $('title').textContent=mode==='queue'?label('Следующие треки','Up next'):(SH.preview?label('Пример видео','Sample video'):videoTitle||request?.videoId||'');
+      $('requester').textContent=request&&mode!=='queue'?label('Заказал(а): ','Requested by: ')+request.userName:'';
+      const count=queue.filter((item)=>item.id!==request?.id).length;
+      $('queueCount').textContent=mode==='queue'?label('В очереди: ','Queued: ')+queue.length:label('Далее в очереди: ','Up next: ')+count;
+      const list=$('queueList');list.replaceChildren();
+      for(const item of queue.slice(0,7)){
+        const li=document.createElement('li');li.textContent=item.userName+' · '+item.url;list.appendChild(li);
+      }
+      if(SH.preview&&mode==='queue'&&!queue.length){const li=document.createElement('li');li.textContent=label('Здесь появятся заказы зрителей','Viewer requests will appear here');list.appendChild(li)}
+    }
+    function load(msg){
+      pending=msg;config={...defaults,...msg.config};lang=msg.lang||'ru';
+      if(config.videoLayout==='queue'){
+        active=null;reported=false;videoTitle='';stopPlayer();render();return;
+      }
+      if(SH.preview){render();return}
+      if(!msg.request){active=null;videoTitle='';stopPlayer();render();return}
+      const same=active?.request.id===msg.request.id&&active.nonce===msg.nonce;
+      if(!same){active=msg;reported=false;videoTitle='';render();if(apiReady)createPlayer();return}
+      active=msg;
+      if(!player&&apiReady)createPlayer();
+      else if(player&&controls!==!!config.showControls){let time=0;try{if(playerReady)time=player.getCurrentTime()}catch(_){}createPlayer(time)}
+      else applyVolume();
+      render();
+    }
+    SH.connect('song',(msg)=>{if(msg.type==='song')load(msg);if(msg.type==='profileVisibility'&&!msg.visible&&player)player.pauseVideo()});
+    if(SH.preview)render();
   </script>
 </body>
 </html>

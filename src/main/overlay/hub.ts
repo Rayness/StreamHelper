@@ -1,4 +1,5 @@
 import type { ChatMessage, ChatOverlaySettings, OverlayKind, OverlayMessage, Settings } from '@shared/types';
+import { ALL_OVERLAY_KINDS } from '@shared/profiles';
 import type { AppContext } from '../core/context';
 import type { AlertQueue } from '../features/alerts';
 import type { TextOverlays } from '../features/banners';
@@ -49,10 +50,16 @@ export class OverlayHub {
     bus.on('kawaki:now', () => server.broadcast('kawaki', this.kawakiMessage()));
     bus.on('music:changed', () => server.broadcast('music', this.musicMessage()));
     bus.on('settings:changed', (key) => {
+      if (key === 'profiles' || key === 'activeProfileId') {
+        const enabled = this.settings.profiles.find((p) => p.id === this.settings.activeProfileId)?.overlays;
+        for (const kind of ALL_OVERLAY_KINDS) server.broadcast(kind, { type: 'profileVisibility', visible: enabled ? enabled.includes(kind) : true });
+      }
       if (key === 'chatOverlay') server.broadcast('chat', { type: 'chatConfig', config: this.settings.chatOverlay });
+      if (key === 'spotlightOverlay') server.broadcast('spotlight', { type: 'spotlightConfig', config: this.settings.spotlightOverlay });
       if (key === 'rewardsOverlay') server.broadcast('rewards', this.rewardsMessage());
       if (key === 'collabOverlay') server.broadcast('collab', this.collabMessage());
       if (key === 'musicOverlay') server.broadcast('music', this.musicMessage());
+      if (key === 'songRequests' || key === 'songQueue') server.broadcast('song', this.sources.song());
       if (key === 'goals') server.forEachClient('goal', (id) => this.goalMessage(id));
       if (key === 'timers') server.forEachClient('timer', (id) => this.timerMessage(id));
       if (key === 'wheels') server.forEachClient('wheel', (id) => this.wheelMessage(id));
@@ -63,6 +70,7 @@ export class OverlayHub {
         server.broadcast('live', { type: 'live', stream: this.ctx.state.current.stream, lang: this.settings.language });
         server.broadcast('collab', this.collabMessage());
         server.broadcast('music', this.musicMessage());
+        server.broadcast('song', this.sources.song());
       }
     });
   }
@@ -115,6 +123,11 @@ export class OverlayHub {
   }
 
   initialMessages(kind: OverlayKind, id: string | null): OverlayMessage[] {
+    const enabled = this.settings.profiles.find((p) => p.id === this.settings.activeProfileId)?.overlays;
+    return [{ type: 'profileVisibility', visible: enabled ? enabled.includes(kind) : true }, ...this.kindMessages(kind, id)];
+  }
+
+  private kindMessages(kind: OverlayKind, id: string | null): OverlayMessage[] {
     switch (kind) {
       case 'chat': {
         const cfg = this.settings.chatOverlay;
@@ -158,7 +171,7 @@ export class OverlayHub {
       case 'ad':
         return [this.sources.ad(id)];
       case 'spotlight':
-        return [this.sources.spotlight()];
+        return [{ type: 'spotlightConfig', config: this.settings.spotlightOverlay }, this.sources.spotlight()];
       case 'live':
         return [{ type: 'live', stream: this.ctx.state.current.stream, lang: this.settings.language }];
       case 'kawaki':

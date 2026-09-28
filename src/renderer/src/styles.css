@@ -123,7 +123,10 @@ p {
   flex-direction: column;
   padding: 16px 10px 12px;
   min-height: 0;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
 }
+.sidebar > * { flex-shrink: 0; }
 
 .brand-logo {
   display: flex;
@@ -200,6 +203,22 @@ p {
 .sidebar li button.active svg {
   color: var(--accent);
 }
+
+.profile-current {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  color: var(--text-2);
+  font: inherit;
+  cursor: pointer;
+}
+.profile-current span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+.profile-current:hover { border-color: var(--accent); color: var(--text); }
 
 .side-status {
   margin-top: auto;

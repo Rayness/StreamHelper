@@ -1,4 +1,4 @@
-import { useEffect, useState, type ButtonHTMLAttributes, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from 'react';
 import type { ConnectionStatus } from '@shared/types';
 import { useT } from '../i18n';
 import { call } from '../store';
@@ -82,25 +82,37 @@ export function TextInput({
 /** Keeps the raw text while typing so "", "-" and "1." don't get clobbered. */
 export function NumberInput({ value, onChange, min, max, step = 1 }: { value: number; onChange: (v: number) => void; min?: number; max?: number; step?: number }) {
   const [text, setText] = useState(String(value));
+  const input = useRef<HTMLInputElement>(null);
   useEffect(() => {
-    if (Number(text) !== value) setText(String(value));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // A partial number ("1" while entering "100") must not be replaced by a
+    // clamped setting push: that reset moved the caret and the whole form.
+    if (document.activeElement !== input.current) setText(String(value));
   }, [value]);
   return (
     <input
+      ref={input}
       className="input input-number"
       inputMode="decimal"
       value={text}
       onChange={(e) => {
         setText(e.target.value);
         const n = Number(e.target.value.replace(',', '.'));
-        if (e.target.value.trim() !== '' && Number.isFinite(n)) onChange(clamp(n, min, max));
+        if (e.target.value.trim() !== '' && Number.isFinite(n) && n === clamp(n, min, max)) onChange(n);
       }}
-      onBlur={() => setText(String(value))}
+      onBlur={() => {
+        const n = Number(text.replace(',', '.'));
+        if (text.trim() !== '' && Number.isFinite(n)) {
+          const next = clamp(n, min, max);
+          if (next !== value) onChange(next);
+          setText(String(next));
+        } else setText(String(value));
+      }}
       onKeyDown={(e) => {
         if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
           e.preventDefault();
-          onChange(clamp(value + (e.key === 'ArrowUp' ? step : -step), min, max));
+          const next = clamp(value + (e.key === 'ArrowUp' ? step : -step), min, max);
+          setText(String(next));
+          onChange(next);
         }
       }}
     />

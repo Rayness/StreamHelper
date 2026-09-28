@@ -156,6 +156,16 @@ export function Alerts() {
               </Field>
             </div>
           </Card>
+          <Card title={t('alerts.position')}>
+            <div className="form">
+              <Field label={t('alerts.anchor')}>
+                <Select value={style.anchor} onChange={(anchor) => setStyle({ anchor })} options={(['center', 'topLeft', 'topRight', 'bottomLeft', 'bottomRight'] as const).map((anchor) => ({ value: anchor, label: t(`alerts.anchor_${anchor}`) }))} />
+              </Field>
+              <Field label={t('alerts.width')}><NumberInput value={style.width} min={10} max={100} onChange={(width) => setStyle({ width })} /></Field>
+              <Field label={t('alerts.x')}><NumberInput value={style.x} min={0} max={100} onChange={(x) => setStyle({ x })} /></Field>
+              <Field label={t('alerts.y')}><NumberInput value={style.y} min={0} max={100} onChange={(y) => setStyle({ y })} /></Field>
+            </div>
+          </Card>
         </div>
 
         <div className="alert-preview-col">

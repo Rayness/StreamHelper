@@ -48,13 +48,13 @@ export class SongRequestService {
     ctx.bus.on('event', (event) => this.onEvent(event));
     ctx.bus.on('settings:changed', (key) => {
       if (key === 'songQueue') this.sync();
-      if (key === 'songRequests') void this.maybeStart();
+      if (key === 'songRequests') void this.onSettingsChanged();
     });
     this.sync();
   }
 
   get overlayMessage(): OverlayMessage {
-    return { type: 'song', request: this.current, nonce: this.nonce };
+    return { type: 'song', request: this.current, nonce: this.nonce, config: this.ctx.settings.get('songRequests'), queue: this.ctx.settings.get('songQueue'), lang: this.ctx.settings.get('language') };
   }
 
   setPlayerConnected(connected: boolean): void {
@@ -75,6 +75,7 @@ export class SongRequestService {
   }
 
   async play(id?: string): Promise<void> {
+    if (this.ctx.settings.get('songRequests').videoLayout === 'queue') throw new Error('Queue-only mode does not play YouTube videos');
     if (!this.ctx.state.current.songRequests.playerConnected) throw new Error('Add the Song Request browser source to OBS first');
     if (this.starting) return;
     this.starting = true;
@@ -89,6 +90,12 @@ export class SongRequestService {
       if (!queue.length) return;
       if (!this.resumeId && this.ctx.settings.get('songRequests').pauseWindowsMusic) {
         this.resumeId = await this.music.pauseCurrent();
+      }
+      if (this.ctx.settings.get('songRequests').videoLayout === 'queue') {
+        const id = this.resumeId;
+        this.resumeId = null;
+        if (id && this.ctx.settings.get('songRequests').resumeWindowsMusic) await this.music.resumeSource(id);
+        return;
       }
       this.current = queue[0];
       this.nonce = randomBytes(20).toString('hex');
@@ -108,7 +115,7 @@ export class SongRequestService {
     this.sync();
     this.broadcast(this.overlayMessage);
     const next = this.ctx.settings.get('songQueue')[0];
-    if (next && this.ctx.settings.get('songRequests').autoPlay && this.ctx.state.current.songRequests.playerConnected) {
+    if (next && this.ctx.settings.get('songRequests').autoPlay && this.ctx.settings.get('songRequests').videoLayout !== 'queue' && this.ctx.state.current.songRequests.playerConnected) {
       await this.play();
     } else if (this.resumeId) {
       const id = this.resumeId;
@@ -140,10 +147,24 @@ export class SongRequestService {
   }
 
   private async maybeStart(): Promise<void> {
-    if (this.current || this.starting || !this.ctx.settings.get('songRequests').autoPlay || !this.ctx.state.current.songRequests.playerConnected) return;
+    if (this.current || this.starting || !this.ctx.settings.get('songRequests').autoPlay || this.ctx.settings.get('songRequests').videoLayout === 'queue' || !this.ctx.state.current.songRequests.playerConnected) return;
     if (this.ctx.settings.get('songQueue').length) {
       try { await this.play(); } catch (error) { this.ctx.state.patch('songRequests', { lastError: String(error) }); }
     }
+  }
+
+  private async onSettingsChanged(): Promise<void> {
+    if (this.ctx.settings.get('songRequests').videoLayout === 'queue' && this.current) {
+      this.current = null;
+      this.nonce = null;
+      this.sync();
+      this.broadcast(this.overlayMessage);
+      if (this.resumeId) {
+        const id = this.resumeId;
+        this.resumeId = null;
+        if (this.ctx.settings.get('songRequests').resumeWindowsMusic) await this.music.resumeSource(id);
+      }
+    } else void this.maybeStart();
   }
 
   private onEvent(event: StreamEvent): void {

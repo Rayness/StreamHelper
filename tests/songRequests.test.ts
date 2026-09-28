@@ -64,4 +64,19 @@ describe('song requests', () => {
     ctx.bus.emit('event', { ...event, amount: 150 });
     expect(ctx.settings.get('songQueue')).toHaveLength(1);
   });
+
+  it('keeps requests queued when video is turned off and resumes playback when it is turned on', async () => {
+    const { ctx, service, music } = setup();
+    service.setPlayerConnected(true);
+    service.add(`https://youtu.be/${first}`);
+    await vi.waitFor(() => expect(ctx.state.current.songRequests.current?.videoId).toBe(first));
+    ctx.settings.set('songRequests', { ...ctx.settings.get('songRequests'), videoLayout: 'queue' });
+    await vi.waitFor(() => expect(ctx.state.current.songRequests.current).toBeNull());
+    expect(ctx.settings.get('songQueue')[0]?.videoId).toBe(first);
+    expect((music.resumeSource as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(1);
+    await expect(service.play()).rejects.toThrow('Queue-only mode');
+    expect(service.overlayMessage).toMatchObject({ type: 'song', request: null, config: { videoLayout: 'queue' }, queue: [{ videoId: first }] });
+    ctx.settings.set('songRequests', { ...ctx.settings.get('songRequests'), videoLayout: 'compact' });
+    await vi.waitFor(() => expect(ctx.state.current.songRequests.current?.videoId).toBe(first));
+  });
 });

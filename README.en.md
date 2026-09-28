@@ -2,7 +2,7 @@
 
 [Русский](README.md) · [English](README.en.md)
 
-StreamHelper is a Windows desktop app for managing a stream, chat, and OBS browser sources from one place. The latest published release is **0.6.0**. The interface supports Russian and English.
+StreamHelper is a Windows desktop app for managing a stream, chat, and OBS browser sources from one place. The latest published release is **0.7.0**. The interface supports Russian and English.
 
 Releases are available [in this repository](https://github.com/Rayness/StreamHelper/releases) and in the [public update repository](https://github.com/Rayness/StreamHelper-Releases/releases).
 
@@ -30,7 +30,7 @@ These screenshots use fictional demo data; they contain no real accounts or toke
 
 ## Download and first run
 
-1. Download `StreamHelper-Setup-0.6.0.exe` from the [latest release](https://github.com/Rayness/StreamHelper/releases/latest) or its [public mirror](https://github.com/Rayness/StreamHelper-Releases/releases/latest), then run the installer. The Windows installer is currently **not signed** with a publisher certificate.
+1. Download `StreamHelper-Setup-0.7.0.exe` from the [latest release](https://github.com/Rayness/StreamHelper/releases/latest) or its [public mirror](https://github.com/Rayness/StreamHelper-Releases/releases/latest), then run the installer. The Windows installer is currently **not signed** with a publisher certificate.
 2. Open **Connections** and sign in to Twitch as the broadcaster. Twitch uses a device code shown in the app. A separate bot account is optional.
 3. To control OBS, enable the **WebSocket Server** in OBS Studio and connect it in StreamHelper's **Connections** page. The usual OBS port is 4455.
 4. Open **Overlays**, choose and configure a source, and click **Add to OBS**. StreamHelper creates a Browser Source in the current scene. You can also copy the URL and add it manually.
@@ -42,6 +42,7 @@ Keep StreamHelper running during the stream. Its local server on `127.0.0.1` ser
 | Section | What it does |
 | --- | --- |
 | Dashboard | Stream status, combined chat, replies, moderation, and recent events. |
+| Profiles | Separate sets of overlay, alert, interactive, bot, and quick action settings. |
 | Overlays | Settings, live previews, URLs, and one-click OBS browser sources. |
 | Alerts | Text, sound, media, speech, separate donation styles by amount, and the event queue. |
 | Interactive | Wheel, poll, giveaway, chat boss, and anime quiz. |
@@ -76,13 +77,17 @@ Each overlay is a separate OBS Browser Source. The **Overlays** page shows its r
 
 **Collaborations:** enter one Twitch guest channel per line. The card updates without reloading OBS. Incoming raids are added when Twitch sends raid events. Shared chat and control of another broadcaster's channel are not connected automatically.
 
-**Music:** open **Overlays → Now Playing** and add the source to OBS. Auto mode selects an active session, preferring Spotify, then the Yandex Music app, then a browser. You can pin a source and adjust the style, accent color, artwork, album, and progress. The card hides on pause by default. StreamHelper reads local Windows media sessions, so no Spotify or Yandex sign-in is needed. Yandex Music in Chrome or Edge appears as “Browser” because Windows does not provide the tab URL. If several tabs in one browser play at once, a specific tab cannot be selected.
+**Music:** open **Overlays → Now Playing** and add the source to OBS. Auto mode selects an active session, preferring Spotify, then the Yandex Music app, then a browser. You can pin a source and adjust the horizontal or vertical layout, artwork and title size, background opacity, accent color, source label, album, and progress. The card hides on pause by default. StreamHelper reads local Windows media sessions, so no Spotify or Yandex sign-in is needed. Yandex Music in Chrome or Edge appears as “Browser” because Windows does not provide the tab URL. If several tabs in one browser play at once, a specific tab cannot be selected.
 
-**Song requests:** open **Overlays → Song requests**, add its separate OBS Browser Source, and enable viewer requests. Set the exact title of a custom Twitch reward; viewers enter a link to an individual YouTube video. For donations, set a minimum in the main currency; the donation message must contain the link. DonationAlerts, Streamlabs, and StreamElements are supported. The queue survives restarts and can advance automatically or be controlled from the app and OBS dock. StreamHelper can pause the active Windows media session and resume it after the queue. The YouTube video must allow embedding and be reachable from the OBS computer.
+**Song requests:** open **Overlays → Song requests**, add its separate OBS Browser Source, and enable viewer requests. Set the exact title of a custom Twitch reward; viewers enter a link to an individual YouTube video. For donations, set a minimum in the main currency; the donation message must contain the link. DonationAlerts, Streamlabs, and StreamElements are supported. The queue survives restarts and can advance automatically or be controlled from the app and OBS dock. Choose full-size video, compact visible video beside request details, or queue-only mode with no YouTube video or audio in OBS. Adjust volume, player controls, requester and title labels, queue count, compact video position and size, accent color, and background opacity. YouTube playback requires a visible video; queue-only mode keeps requests ready until you switch back or play them in another player. StreamHelper can pause the active Windows media session and resume it after the queue. The YouTube video must allow embedding and be reachable from the OBS computer.
 
 **Chat activities:** in **Overlays → Goals**, choose Chat messages or Unique chatters. Bot commands and messages sent by StreamHelper do not count. Each person counts once per goal; resetting the count clears that goal's participant list.
 
-**Donations:** add amount tiers under **Alerts → Donation**. Each tier has its own text, image, sound, and animation; the highest matching threshold applies. Donation goals can filter providers, require a minimum, and cap the contribution from one donation.
+**Profiles:** create a copy of your current setup under **Profiles** and choose which overlays belong to it. Switching in the app or OBS dock makes the other StreamHelper overlays transparent in OBS. Overlay, alert, bot, and interactive changes are saved to the active profile. Service connections are shared.
+
+**Messages on screen:** under **Overlays → Message on screen**, choose a single card, a stack, or falling messages. Gravity and bounce are adjustable. Highlighted Twitch messages can appear automatically, and sample messages work without a live stream. Use a 1920×1080 browser source for a full-screen fall.
+
+**Donations:** add amount tiers under **Alerts → Donation**. Each tier has its own text, image, sound, and animation; the highest matching threshold applies. You can position each alert with X/Y coordinates, width, and an anchor, including per-tier positions. Donation goals can filter providers, require a minimum, and cap the contribution from one donation.
 
 ## Connections and automation
 
@@ -102,7 +107,7 @@ Twitch is currently the implemented chat platform. The `ChatPlatform` interface 
 
 ### OBS dock
 
-In StreamHelper, open **OBS & actions → StreamHelper dock for OBS** and copy the URL. In OBS, choose **View → Docks → Custom Browser Docks**, give the dock a name, and paste the URL. It controls scenes, streaming, recording, alerts, song requests, the ticker, banners, SubForStream, Kawaki, and quick actions. The URL contains a random access key: treat it like a password and replace it in OBS if you change the overlay port.
+In StreamHelper, open **OBS & actions → StreamHelper dock for OBS** and copy the URL. In OBS, choose **View → Docks → Custom Browser Docks**, give the dock a name, and paste the URL. The dock has sections for live OBS controls, alerts and on-screen messages, interactive activities, and music/tools. You can switch profiles there as well. The URL contains a random access key: treat it like a password and replace it in OBS if you change the overlay port.
 
 ## Updates and local data
 
@@ -131,7 +136,7 @@ npm run dev
 npm run typecheck
 npm test
 npm run build
-npx electron-builder --win --publish never --config.directories.output=dist/0.6.0
+npx electron-builder --win --publish never --config.directories.output=dist/0.7.0
 ```
 
 Generated Windows Runtime bindings are included in the repository; a normal build does not need the Windows SDK. To regenerate them on a machine with the Windows SDK, run `npm run generate:winrt`. Building an installer does not publish it. To validate and publish an update release:
@@ -143,7 +148,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/publish-release.ps1
 
 Before publishing, ensure the versions in `package.json`, the installer, and `latest.yml` match. The script checks the installer and blockmap and requires the update repository to be public. To register your own Twitch client, use the [Twitch Developer Console](https://dev.twitch.tv/console/apps), choose **Public**, and set OAuth Redirect URL to `http://localhost`. Enter its Client ID in the app or `DEFAULT_TWITCH_CLIENT_ID` in `src/shared/defaults.ts`. A DonationAlerts client needs Redirect URI `http://127.0.0.1:4848/auth/donationalerts` and a Client ID. These authorization flows do not require client secrets in StreamHelper.
 
-For the next official release, provide a Windows code-signing certificate (`.pfx`/`.p12`) through the `WIN_CSC_LINK` and `WIN_CSC_KEY_PASSWORD` environment variables; never commit the certificate or password. Build the installer with `--config.forceCodeSigning=true`. The publish script checks for a trusted Authenticode signature and refuses an unsigned installer. See the [electron-builder signing guide](https://www.electron.build/v26/docs/features/code-signing/).
+For a signed release, provide a Windows code-signing certificate (`.pfx`/`.p12`) through the `WIN_CSC_LINK` and `WIN_CSC_KEY_PASSWORD` environment variables; never commit the certificate or password. Build the installer with `--config.forceCodeSigning=true`. The publish script requires a trusted Authenticode signature by default. The project owner can explicitly allow an unsigned release with `-AllowUnsigned`; version 0.7.0 was published this way. See the [electron-builder signing guide](https://www.electron.build/v26/docs/features/code-signing/).
 
 ### Project structure
 
