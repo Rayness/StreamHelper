@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { twitchClientId } from '@shared/defaults';
+import { DEFAULT_TWITCH_CLIENT_ID, twitchClientId } from '@shared/defaults';
 import type { ConnectionState, DeviceCodePrompt } from '@shared/types';
-import { Button, Card, CopyField, Field, NumberInput, PageHeader, StatusText, TextInput, Toggle } from '../components/ui';
+import { Button, Card, CopyField, Field, NumberInput, StatusText, TextInput, Toggle } from '../components/ui';
 import { useNow } from '../hooks';
 import { useT } from '../i18n';
 import { call, callOk, saveSettings, useApp } from '../store';
@@ -38,9 +38,10 @@ function DeviceCode({ prompt, onCancel }: { prompt: DeviceCodePrompt; onCancel: 
   );
 }
 
-function TwitchCard({ account }: { account: 'broadcaster' | 'bot' }) {
+export function TwitchCard({ account }: { account: 'broadcaster' | 'bot' }) {
   const t = useT();
   const state = useApp((d) => (account === 'broadcaster' ? d.state!.twitch : d.state!.twitchBot));
+  const subscriptionErrors = useApp((d) => account === 'broadcaster' ? d.state!.twitch.subscriptionErrors : undefined);
   const clientId = useApp((d) => d.settings!.twitch.clientId);
   const hasClientId = !!twitchClientId(clientId);
   const loggedIn = !!state.account;
@@ -57,6 +58,14 @@ function TwitchCard({ account }: { account: 'broadcaster' | 'bot' }) {
     >
       <p className="muted small">{account === 'broadcaster' ? t('conn.twitchHint') : t('conn.twitchBotHint')}</p>
       <Account state={state} />
+      {account === 'bot' && <p className="muted small">{t('bot.accountHelp')}</p>}
+      {subscriptionErrors && Object.keys(subscriptionErrors).length > 0 && (
+        <div className="connection-warning">
+          <p>{t('conn.partialTwitch')}</p>
+          <ul>{Object.keys(subscriptionErrors).map((type) => <li key={type}>{type}</li>)}</ul>
+          <Button size="sm" onClick={() => void call('twitch:login', account)}>{t('conn.renewPermissions')}</Button>
+        </div>
+      )}
       {state.deviceCode ? (
         <DeviceCode prompt={state.deviceCode} onCancel={() => void call('twitch:cancelLogin', account)} />
       ) : loggedIn ? (
@@ -293,21 +302,16 @@ function ObsCard() {
   );
 }
 
-export function Connections() {
+export function ConnectionDetail({ kind }: { kind: 'twitch' | 'obs' | 'donationalerts' | 'streamlabs' | 'streamelements' | 'streamerbot' | 'discord' }) {
   const t = useT();
-  return (
-    <div className="page">
-      <PageHeader title={t('nav.connections')} subtitle={t('conn.subtitle')} />
-      <div className="two-col">
-        <TwitchCard account="broadcaster" />
-        <TwitchCard account="bot" />
-        <DonationAlertsCard />
-        <StreamlabsCard />
-        <StreamElementsCard />
-        <StreamerBotCard />
-        <DiscordCard />
-        <ObsCard />
-      </div>
-    </div>
-  );
+  const cfg = useApp((d) => d.settings!.twitch);
+  switch (kind) {
+    case 'twitch': return <><TwitchCard account="broadcaster" /><details className="settings-disclosure"><summary>{t('settings.advanced')}</summary><Field label="Twitch Client ID" hint={t('settings.clientIdHint')}><TextInput value={cfg.clientId} placeholder={DEFAULT_TWITCH_CLIENT_ID} mono onChange={(clientId) => saveSettings('twitch', { ...cfg, clientId: clientId.trim() })} /></Field></details></>;
+    case 'obs': return <ObsCard />;
+    case 'donationalerts': return <DonationAlertsCard />;
+    case 'streamlabs': return <StreamlabsCard />;
+    case 'streamelements': return <StreamElementsCard />;
+    case 'streamerbot': return <StreamerBotCard />;
+    case 'discord': return <DiscordCard />;
+  }
 }

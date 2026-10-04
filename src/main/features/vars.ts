@@ -1,4 +1,4 @@
-import { formatAmount } from '@shared/events';
+import { donationAmount, formatAmount } from '@shared/events';
 import { formatDuration } from '@shared/template';
 import type { RuntimeState, Settings, StatEntry, StreamEvent, StreamStats } from '@shared/types';
 
@@ -95,7 +95,7 @@ export function applyEventToStats(stats: StreamStats, e: StreamEvent, mainCurren
     case 'raid':
       return { ...stats, lastRaid: { name: e.userName, amount: e.viewers } };
     case 'donation': {
-      const main = e.amountMain ?? (!e.currency || e.currency.toUpperCase() === mainCurrency.toUpperCase() ? e.amount : null);
+      const main = donationAmount(e, mainCurrency);
       const entry: StatEntry = { name: e.userName, amount: e.amount, currency: e.currency };
       // Top donation is compared in the main currency; foreign amounts without conversion can't compete.
       const topMain = stats.topDonation ? (stats.topDonation.currency?.toUpperCase() === mainCurrency.toUpperCase() ? stats.topDonation.amount : 0) : -1;

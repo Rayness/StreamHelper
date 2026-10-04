@@ -39,6 +39,7 @@ export class HelixClient {
           ...(opts.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
         },
         body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+        signal: AbortSignal.timeout(15_000),
       });
 
     let res = await send(await this.tokens.getAccessToken());

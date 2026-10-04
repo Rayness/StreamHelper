@@ -47,6 +47,7 @@ async function postForm(url: string, body: Record<string, string>): Promise<{ st
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams(body),
+    signal: AbortSignal.timeout(15_000),
   });
   let json: any = null;
   try {
@@ -129,7 +130,7 @@ export interface ValidateResult {
 
 /** Returns null when the token is invalid (401). Twitch requires validating tokens hourly. */
 export async function validateToken(accessToken: string): Promise<ValidateResult | null> {
-  const res = await fetch(`${ID_BASE}/validate`, { headers: { Authorization: `OAuth ${accessToken}` } });
+  const res = await fetch(`${ID_BASE}/validate`, { headers: { Authorization: `OAuth ${accessToken}` }, signal: AbortSignal.timeout(15_000) });
   if (res.status === 401) return null;
   if (!res.ok) throw new TwitchAuthError(`validate failed (${res.status})`, res.status);
   const json: any = await res.json();
@@ -186,10 +187,16 @@ export class TokenManager {
         if (!current) throw new TwitchAuthError('not logged in', 401);
         try {
           const next = await refreshToken(this.clientId(), current);
+          const latest = this.load();
+          if (!latest || latest.accessToken !== current.accessToken || latest.refreshToken !== current.refreshToken) {
+            throw new TwitchAuthError('account changed during token refresh', 401);
+          }
           this.save(next);
           return next;
         } catch (err) {
-          if (err instanceof TwitchAuthError && (err.status === 400 || err.status === 401)) this.save(undefined);
+          const latest = this.load();
+          if (latest?.accessToken === current.accessToken && latest?.refreshToken === current.refreshToken &&
+            err instanceof TwitchAuthError && (err.status === 400 || err.status === 401)) this.save(undefined);
           throw err;
         }
       })().finally(() => {

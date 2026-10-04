@@ -1,4 +1,5 @@
 import type { ChatMessage, KawakiNowWatching, MusicTrack, SettingsKey, StreamEvent, StreamInfo } from '@shared/types';
+import { isTrustedStreamEvent } from '@shared/events';
 
 export interface BusEvents {
   'chat:message': ChatMessage;
@@ -29,6 +30,7 @@ export class EventBus {
   }
 
   emit<K extends keyof BusEvents>(event: K, ...[payload]: BusEvents[K] extends void ? [] : [BusEvents[K]]): void {
+    if (event === 'event' && !isTrustedStreamEvent(payload as StreamEvent)) return;
     const set = this.handlers.get(event);
     if (!set) return;
     for (const h of [...set]) {

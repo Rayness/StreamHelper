@@ -21,6 +21,8 @@ export class EventSubSocket {
   private keepaliveMs = 10_000;
   private attempts = 0;
   private stopped = true;
+  private migration: WebSocket | null = null;
+  private migrationTimer: NodeJS.Timeout | null = null;
   private seen = new Set<string>();
   private seenOrder: string[] = [];
 
@@ -31,6 +33,7 @@ export class EventSubSocket {
   ) {}
 
   start(): void {
+    this.stop();
     this.stopped = false;
     this.attempts = 0;
     this.open(this.url, false);
@@ -41,6 +44,10 @@ export class EventSubSocket {
     this.clearTimers();
     const ws = this.ws;
     this.ws = null;
+    this.migration?.removeAllListeners();
+    this.migration?.on('error', () => undefined);
+    this.migration?.terminate();
+    this.migration = null;
     ws?.removeAllListeners();
     ws?.on('error', () => undefined);
     ws?.close();
@@ -50,6 +57,12 @@ export class EventSubSocket {
   private open(url: string, isMigration: boolean): void {
     if (!isMigration) this.handlers.onStatus('connecting');
     const ws = new WebSocket(url);
+    if (isMigration) {
+      this.migration?.terminate();
+      this.migration = ws;
+      if (this.migrationTimer) clearTimeout(this.migrationTimer);
+      this.migrationTimer = setTimeout(() => this.scheduleReconnect('migration welcome timeout'), 10_000);
+    }
     const previous = isMigration ? this.ws : null;
     if (!isMigration) this.ws = ws;
 
@@ -60,12 +73,13 @@ export class EventSubSocket {
       } catch {
         return;
       }
-      if (ws !== this.ws && !(isMigration && msg.metadata?.message_type === 'session_welcome')) return;
+      if (!msg || typeof msg !== 'object' || this.stopped) return;
+      if (ws !== this.ws && !(ws === this.migration && msg.metadata?.message_type === 'session_welcome')) return;
       this.onMessage(ws, msg, isMigration, previous);
     });
 
     ws.on('close', (code) => {
-      if (ws !== this.ws || this.stopped) return;
+      if ((ws !== this.ws && ws !== this.migration) || this.stopped) return;
       this.scheduleReconnect(`closed (${code})`);
     });
 
@@ -83,13 +97,17 @@ export class EventSubSocket {
 
     switch (type) {
       case 'session_welcome': {
-        const session = msg.payload.session;
+        const session = msg.payload?.session;
+        if (!session?.id) return;
         this.keepaliveMs = (session.keepalive_timeout_seconds ?? 10) * 1000;
         // Re-arm with the interval this session actually uses.
         this.resetWatchdog();
         if (isMigration) {
           // Twitch moved us to a new edge server; subscriptions carry over.
           this.ws = ws;
+          this.migration = null;
+          if (this.migrationTimer) clearTimeout(this.migrationTimer);
+          this.migrationTimer = null;
           previous?.removeAllListeners();
           previous?.on('error', () => undefined);
           previous?.close();
@@ -99,10 +117,12 @@ export class EventSubSocket {
         this.handlers
           .onSession(session.id)
           .then(() => {
+            if (this.stopped || ws !== this.ws) return;
             this.attempts = 0;
             this.handlers.onStatus('connected');
           })
           .catch((err) => {
+            if (this.stopped || ws !== this.ws) return;
             console.error('[eventsub] subscribing failed', err);
             this.handlers.onStatus('disconnected', String(err?.message ?? err));
             this.scheduleReconnect('subscribe failed');
@@ -112,13 +132,14 @@ export class EventSubSocket {
       case 'session_keepalive':
         return;
       case 'notification':
+        if (!msg.payload?.subscription?.type || !msg.payload.event) return;
         this.handlers.onNotification(msg.payload.subscription.type, msg.payload.event);
         return;
       case 'session_reconnect':
-        this.open(msg.payload.session.reconnect_url, true);
+        if (typeof msg.payload?.session?.reconnect_url === 'string') this.open(msg.payload.session.reconnect_url, true);
         return;
       case 'revocation':
-        this.handlers.onRevocation?.(msg.payload.subscription.type, msg.payload.subscription.status);
+        if (msg.payload?.subscription) this.handlers.onRevocation?.(msg.payload.subscription.type, msg.payload.subscription.status);
         return;
     }
   }
@@ -142,6 +163,10 @@ export class EventSubSocket {
     this.clearTimers();
     const old = this.ws;
     this.ws = null;
+    this.migration?.removeAllListeners();
+    this.migration?.on('error', () => undefined);
+    this.migration?.terminate();
+    this.migration = null;
     old?.removeAllListeners();
     old?.on('error', () => undefined);
     old?.terminate();
@@ -153,6 +178,8 @@ export class EventSubSocket {
   private clearTimers(): void {
     if (this.watchdog) clearTimeout(this.watchdog);
     if (this.retryTimer) clearTimeout(this.retryTimer);
+    if (this.migrationTimer) clearTimeout(this.migrationTimer);
+    this.migrationTimer = null;
     this.watchdog = this.retryTimer = null;
   }
 }

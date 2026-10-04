@@ -38,7 +38,9 @@ export class TwitchService implements ChatPlatform {
   private eventsubConnected = false;
   /** Texts we just sent, to recognize our own messages when the bot speaks as the broadcaster. */
   private pendingSent: { text: string; at: number }[] = [];
-  private sentIds = new Set<string>();
+  private sentIds = new Map<string, number>();
+  private retryTimers: Partial<Record<Account, NodeJS.Timeout>> = {};
+  private accountGeneration: Record<Account, number> = { broadcaster: 0, bot: 0 };
 
   constructor(private ctx: AppContext) {
     const clientId = () => twitchClientId(ctx.settings.get('twitch').clientId);
@@ -58,7 +60,7 @@ export class TwitchService implements ChatPlatform {
     this.eventsub = new EventSubSocket({
       onSession: (id) => this.subscribeAll(id),
       onNotification: (type, event) => this.onNotification(type, event),
-      onRevocation: (type, status) => console.warn('[twitch] subscription revoked', type, status),
+      onRevocation: (type, status) => this.ctx.state.patch('twitch', { subscriptionErrors: { ...this.ctx.state.current.twitch.subscriptionErrors, [type]: status } }),
       onStatus: (status, error) => {
         this.eventsubConnected = status === 'connected';
         if (!this.tokens.broadcaster.token) return;
@@ -74,6 +76,12 @@ export class TwitchService implements ChatPlatform {
   }
 
   stop(): void {
+    for (const acc of ['broadcaster', 'bot'] as const) {
+      this.accountGeneration[acc]++;
+      this.loginAborts[acc]?.abort();
+      if (this.retryTimers[acc]) clearTimeout(this.retryTimers[acc]);
+    }
+    this.retryTimers = {};
     this.eventsub.stop();
     if (this.pollTimer) clearInterval(this.pollTimer);
     if (this.validateTimer) clearInterval(this.validateTimer);
@@ -87,24 +95,28 @@ export class TwitchService implements ChatPlatform {
   private async startAccount(acc: Account): Promise<void> {
     const token = this.tokens[acc].token;
     if (!token) return;
+    const generation = ++this.accountGeneration[acc];
+    if (this.retryTimers[acc]) clearTimeout(this.retryTimers[acc]);
     this.ctx.state.patch(this.stateKey(acc), { status: 'connecting', error: undefined });
     try {
-      const account = await this.identify(acc);
+      const account = await this.identify(acc, generation);
+      if (generation !== this.accountGeneration[acc] || !this.tokens[acc].token) return;
       this.ctx.state.patch(this.stateKey(acc), { account, status: acc === 'bot' ? 'connected' : 'connecting' });
-      if (acc === 'broadcaster') await this.startBroadcaster(account);
+      if (acc === 'broadcaster') await this.startBroadcaster(account, generation);
     } catch (err) {
+      if (generation !== this.accountGeneration[acc]) return;
       if (err instanceof HelixError && err.status === 401) return this.onLoggedOut(acc, 'session_expired');
       console.error(`[twitch] ${acc} start failed`, err);
       this.ctx.state.patch(this.stateKey(acc), { status: 'error', error: errorMessage(err) });
       // Network hiccup on startup: try again shortly.
-      setTimeout(() => {
+      this.retryTimers[acc] = setTimeout(() => {
         if (this.tokens[acc].token && this.ctx.state.current[this.stateKey(acc)].status === 'error') void this.startAccount(acc);
       }, 15_000);
     }
   }
 
   /** Validate the token and fetch profile data. */
-  private async identify(acc: Account): Promise<AccountInfo> {
+  private async identify(acc: Account, generation = this.accountGeneration[acc]): Promise<AccountInfo> {
     let token = this.tokens[acc].token!;
     let v = await validateToken(token.accessToken);
     if (!v) {
@@ -112,7 +124,8 @@ export class TwitchService implements ChatPlatform {
       v = await validateToken(token.accessToken);
       if (!v) throw new HelixError('unauthorized', 401);
     }
-    if (token.userId !== v.userId || token.login !== v.login) {
+    if (generation !== this.accountGeneration[acc] || this.tokens[acc].token?.accessToken !== token.accessToken) throw new Error('Twitch account changed');
+    if (token.userId !== v.userId || token.login !== v.login || JSON.stringify(token.scopes) !== JSON.stringify(v.scopes)) {
       this.ctx.secrets.set(acc === 'broadcaster' ? 'twitch' : 'twitchBot', { ...token, userId: v.userId, login: v.login, scopes: v.scopes });
     }
     const users = await this.helix[acc].get('/users', { id: v.userId });
@@ -120,15 +133,17 @@ export class TwitchService implements ChatPlatform {
     return { userId: v.userId, login: v.login, displayName: u?.display_name ?? v.login, avatarUrl: u?.profile_image_url };
   }
 
-  private async startBroadcaster(account: AccountInfo): Promise<void> {
+  private async startBroadcaster(account: AccountInfo, generation: number): Promise<void> {
     const [badges, emotes] = await Promise.all([
       loadBadges(this.helix.broadcaster, account.userId).catch(() => new Map()),
       loadThirdPartyEmotes(account.userId).catch(() => new Map<string, string>()),
     ]);
+    if (generation !== this.accountGeneration.broadcaster || !this.tokens.broadcaster.token) return;
     this.badges = badges;
     this.emotes = emotes;
     this.eventsub.start();
     await this.refreshStreamInfo().catch((err) => console.warn('[twitch] stream info failed', errorMessage(err)));
+    if (generation !== this.accountGeneration.broadcaster || !this.tokens.broadcaster.token) return;
     if (this.pollTimer) clearInterval(this.pollTimer);
     this.pollTimer = setInterval(() => void this.refreshStreamInfo().catch(() => undefined), STREAM_POLL_MS);
     if (this.validateTimer) clearInterval(this.validateTimer);
@@ -162,6 +177,7 @@ export class TwitchService implements ChatPlatform {
     const key = this.stateKey(acc);
     try {
       const start = await startDeviceCode(clientId, scopes);
+      if (abort.signal.aborted || this.loginAborts[acc] !== abort) return;
       this.ctx.state.patch(key, {
         status: 'connecting',
         error: undefined,
@@ -169,11 +185,13 @@ export class TwitchService implements ChatPlatform {
       });
       this.ctx.openExternal(start.verificationUri);
       const token: OAuthToken = await pollDeviceCode(clientId, scopes, start, abort.signal);
+      if (abort.signal.aborted || this.loginAborts[acc] !== abort) return;
       this.ctx.secrets.set(acc === 'broadcaster' ? 'twitch' : 'twitchBot', token);
       this.ctx.state.patch(key, { deviceCode: undefined });
       await this.startAccount(acc);
       this.ctx.toast('success', 'toast.twitchConnected', { name: this.ctx.state.current[key].account?.displayName ?? '' });
     } catch (err) {
+      if (this.loginAborts[acc] !== abort) return;
       const aborted = err instanceof TwitchAuthError && err.message === 'aborted';
       this.ctx.state.patch(key, { status: 'disconnected', deviceCode: undefined, error: aborted ? undefined : errorMessage(err) });
       if (!aborted) this.ctx.toast('error', 'toast.twitchLoginFailed', { error: errorMessage(err) });
@@ -188,12 +206,16 @@ export class TwitchService implements ChatPlatform {
 
   async logout(acc: Account): Promise<void> {
     const t = this.tokens[acc].token;
-    if (t) await revokeToken(twitchClientId(this.ctx.settings.get('twitch').clientId), t.accessToken);
     this.ctx.secrets.set(acc === 'broadcaster' ? 'twitch' : 'twitchBot', undefined);
     this.onLoggedOut(acc);
+    if (t) await revokeToken(twitchClientId(this.ctx.settings.get('twitch').clientId), t.accessToken);
   }
 
   private onLoggedOut(acc: Account, reason?: string): void {
+    this.accountGeneration[acc]++;
+    this.loginAborts[acc]?.abort();
+    delete this.loginAborts[acc];
+    if (this.retryTimers[acc]) clearTimeout(this.retryTimers[acc]);
     if (acc === 'broadcaster') this.stop();
     this.ctx.state.replace(this.stateKey(acc), { status: 'disconnected', error: reason });
     if (reason) this.ctx.toast('error', 'toast.twitchSessionExpired');
@@ -212,6 +234,7 @@ export class TwitchService implements ChatPlatform {
   private async subscribeAll(sessionId: string): Promise<void> {
     const id = this.broadcasterId;
     if (!id) throw new Error('no broadcaster');
+    const generation = this.accountGeneration.broadcaster;
     const chat = { broadcaster_user_id: id, user_id: id };
     const b = { broadcaster_user_id: id };
     const subs: [string, string, Record<string, string>][] = [
@@ -235,8 +258,12 @@ export class TwitchService implements ChatPlatform {
         this.helix.broadcaster.post('/eventsub/subscriptions', { type, version, condition, transport: { method: 'websocket', session_id: sessionId } }),
       ),
     );
+    if (generation !== this.accountGeneration.broadcaster || id !== this.broadcasterId) return;
     const failed = results.map((r, i) => (r.status === 'rejected' ? `${subs[i][0]}: ${errorMessage(r.reason)}` : null)).filter(Boolean);
     if (failed.length) console.warn('[twitch] some EventSub subscriptions failed:\n' + failed.join('\n'));
+    const subscriptionErrors: Record<string, string> = {};
+    results.forEach((result, i) => { if (result.status === 'rejected') subscriptionErrors[subs[i][0]] = errorMessage(result.reason); });
+    this.ctx.state.patch('twitch', { subscriptionErrors });
     // Chat is the core feature; without it the connection is useless.
     if (results[0].status === 'rejected') throw (results[0] as PromiseRejectedResult).reason;
     this.ctx.state.patch('twitch', { status: 'connected', error: undefined });
@@ -281,7 +308,12 @@ export class TwitchService implements ChatPlatform {
   }
 
   private isOwnEcho(msg: ChatMessage): boolean {
-    if (this.sentIds.delete(msg.id)) return true;
+    for (const [id, at] of this.sentIds) if (Date.now() - at > 30_000) this.sentIds.delete(id);
+    if (this.sentIds.delete(msg.id)) {
+      const pending = this.pendingSent.findIndex((p) => p.text === msg.text);
+      if (pending !== -1) this.pendingSent.splice(pending, 1);
+      return true;
+    }
     if (msg.userId !== this.broadcasterId) return false;
     const now = Date.now();
     this.pendingSent = this.pendingSent.filter((p) => now - p.at < 10_000);
@@ -301,10 +333,12 @@ export class TwitchService implements ChatPlatform {
   async refreshStreamInfo(): Promise<void> {
     const id = this.broadcasterId;
     if (!id) return;
+    const generation = this.accountGeneration.broadcaster;
     const [channels, streams] = await Promise.all([
       this.helix.broadcaster.get('/channels', { broadcaster_id: id }),
       this.helix.broadcaster.get('/streams', { user_id: id }),
     ]);
+    if (generation !== this.accountGeneration.broadcaster || id !== this.broadcasterId) return;
     const c = channels.data?.[0];
     const s = streams.data?.[0];
     this.patchStream({
@@ -334,6 +368,12 @@ export class TwitchService implements ChatPlatform {
     return (res.data ?? []).map((c: any) => ({ id: c.id, name: c.name, boxArtUrl: c.box_art_url }));
   }
 
+  async listRewards(): Promise<{ id: string; title: string; inputRequired: boolean; enabled: boolean }[]> {
+    const id = this.requireBroadcaster();
+    const res = await this.helix.broadcaster.get('/channel_points/custom_rewards', { broadcaster_id: id });
+    return (res.data ?? []).map((r: any) => ({ id: r.id, title: r.title, inputRequired: !!r.is_user_input_required, enabled: !!r.is_enabled }));
+  }
+
   /** Exact-name lookup used by the !game command. Falls back to the first search hit. */
   async findCategory(name: string): Promise<Category | null> {
     const exact = await this.helix.broadcaster.get('/games', { name }).catch(() => null);
@@ -357,22 +397,32 @@ export class TwitchService implements ChatPlatform {
 
   async sendMessage(text: string, replyTo?: string, opts: { asBroadcaster?: boolean } = {}): Promise<void> {
     const broadcasterId = this.requireBroadcaster();
+    if (!opts.asBroadcaster && this.tokens.bot.token && (!this.botId || this.ctx.state.current.twitchBot.status !== 'connected')) {
+      throw new Error('The bot account is disconnected. Reconnect it in Connections.');
+    }
     const useBot = !opts.asBroadcaster && !!this.botId && !!this.tokens.bot.token;
     const markSelf = !opts.asBroadcaster;
     const message = text.slice(0, 500);
-    if (markSelf && !useBot) this.pendingSent.push({ text: message, at: Date.now() });
-    const res = await (useBot ? this.helix.bot : this.helix.broadcaster).post('/chat/messages', {
-      broadcaster_id: broadcasterId,
-      sender_id: useBot ? this.botId : broadcasterId,
-      message,
-      ...(replyTo ? { reply_parent_message_id: replyTo } : {}),
-    });
-    const r = res?.data?.[0];
-    if (r?.message_id && markSelf) {
-      this.sentIds.add(r.message_id);
-      setTimeout(() => this.sentIds.delete(r.message_id), 30_000);
+    const pending = { text: message, at: Date.now() };
+    this.pendingSent = this.pendingSent.filter((p) => Date.now() - p.at < 10_000).slice(-499);
+    if (markSelf && !useBot) this.pendingSent.push(pending);
+    try {
+      const res = await (useBot ? this.helix.bot : this.helix.broadcaster).post('/chat/messages', {
+        broadcaster_id: broadcasterId,
+        sender_id: useBot ? this.botId : broadcasterId,
+        message,
+        ...(replyTo ? { reply_parent_message_id: replyTo } : {}),
+      });
+      const r = res?.data?.[0];
+      if (r && !r.is_sent) throw new Error(r.drop_reason?.message ?? 'Twitch rejected the chat message');
+      if (r?.message_id && markSelf) {
+        this.sentIds.set(r.message_id, Date.now());
+        if (this.sentIds.size > 500) this.sentIds.delete(this.sentIds.keys().next().value!);
+      }
+    } catch (error) {
+      this.pendingSent = this.pendingSent.filter((p) => p !== pending);
+      throw error;
     }
-    if (r && !r.is_sent) console.warn('[twitch] message dropped:', r.drop_reason?.message ?? r.drop_reason);
   }
 
   async deleteMessage(messageId: string): Promise<void> {

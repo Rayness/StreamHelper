@@ -1,6 +1,7 @@
 import type { ChatLeader, ChatMessage, HypeSettings, OverlayMessage, StreamEvent } from '@shared/types';
 import type { AppContext } from '../core/context';
 import type { StageDeps } from './stage';
+import { donationAmount } from '@shared/events';
 
 const TICK_MS = 1000;
 const LEADERS_KEPT = 20;
@@ -21,7 +22,7 @@ export function hypePoints(e: StreamEvent, cfg: HypeSettings, mainCurrency: stri
     case 'raid':
       return p.raidPerViewer * e.viewers;
     case 'donation': {
-      const amount = e.amountMain ?? (!e.currency || e.currency.toUpperCase() === mainCurrency.toUpperCase() ? e.amount : 0);
+      const amount = donationAmount(e, mainCurrency) ?? 0;
       return p.donationPerUnit * amount;
     }
     case 'redemption':

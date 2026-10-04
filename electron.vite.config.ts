@@ -27,6 +27,7 @@ export default defineConfig({
     resolve: { alias: shared },
   },
   renderer: {
+    build: { minify: true, cssMinify: true, target: 'es2022' },
     resolve: { alias: { ...shared, '@renderer': resolve(__dirname, 'src/renderer/src') } },
     // Explicit IPv4: "localhost" may resolve to ::1 while Electron connects over IPv4.
     server: { host: '127.0.0.1', port: 5173 },

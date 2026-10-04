@@ -1,6 +1,7 @@
 import { timerAdd, timerPause, timerReset, timerStart } from '@shared/timer';
 import type { ChatMessage, Goal, OverlayTimer, StreamEvent } from '@shared/types';
 import { emptyStats } from '@shared/defaults';
+import { donationAmount } from '@shared/events';
 import type { AppContext } from '../core/context';
 import { applyEventToStats } from './vars';
 
@@ -19,7 +20,7 @@ export function goalIncrement(goal: Goal, e: StreamEvent): number {
         && !goal.donationSources.includes(e.source as import('@shared/types').DonationSource)) return 0;
       // Prefer the provider's conversion into the streamer's currency; otherwise only count matching currency.
       {
-        const amount = e.amountMain ?? (!e.currency || e.currency.toUpperCase() === goal.currency.toUpperCase() ? e.amount : 0);
+        const amount = donationAmount(e, goal.currency) ?? 0;
         if (amount < (goal.donationMinAmount ?? 0)) return 0;
         return goal.donationMaxAmount ? Math.min(amount, goal.donationMaxAmount) : amount;
       }
@@ -42,7 +43,7 @@ export function subathonSeconds(t: OverlayTimer, e: StreamEvent, mainCurrency: s
     case 'cheer':
       return (a.bitsPer100 * e.bits) / 100;
     case 'donation': {
-      const amount = e.amountMain ?? (!e.currency || e.currency.toUpperCase() === mainCurrency.toUpperCase() ? e.amount : 0);
+      const amount = donationAmount(e, mainCurrency) ?? 0;
       return a.donationPerUnit * amount;
     }
     default:

@@ -1,20 +1,34 @@
 import { EventSubscription, OBSWebSocket } from 'obs-websocket-js/json';
 import { errorMessage, type AppContext } from '../core/context';
+import { ALL_OVERLAY_KINDS } from '@shared/profiles';
 
 const RETRY_MS = 10_000;
+
+/** Only local StreamHelper overlay URLs may be repaired automatically. */
+export function overlayIdentity(raw: string): string | null {
+  try {
+    const url = new URL(raw);
+    if (!['http:', 'https:'].includes(url.protocol) || !['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname)) return null;
+    const match = /^\/overlay\/([a-z]+)\/?$/.exec(url.pathname);
+    if (!match || !ALL_OVERLAY_KINDS.includes(match[1] as import('@shared/types').OverlayKind)) return null;
+    return `${url.pathname.replace(/\/$/, '')}?id=${url.searchParams.get('id') ?? ''}`;
+  } catch { return null; }
+}
 
 export class ObsService {
   private obs = new OBSWebSocket();
   private retryTimer: NodeJS.Timeout | null = null;
   private manualDisconnect = false;
   private connecting = false;
+  private generation = 0;
+  private sourceWrites: Promise<unknown> = Promise.resolve();
 
   constructor(private ctx: AppContext) {
     this.obs.on('ConnectionClosed', (err) => {
       // Our own disconnect before a reconnect: connect() reports the outcome itself.
       if (this.connecting && this.ctx.state.current.obs.status === 'connecting') return;
       const wasConnected = this.ctx.state.current.obs.status === 'connected';
-      this.ctx.state.patch('obs', { status: 'disconnected', error: wasConnected ? undefined : err?.message });
+      this.ctx.state.patch('obs', { status: 'disconnected', error: wasConnected ? undefined : err?.message, sceneItems: [], inputs: [] });
       if (wasConnected && !this.manualDisconnect) this.ctx.toast('info', 'toast.obsDisconnected');
       this.scheduleRetry();
     });
@@ -22,7 +36,8 @@ export class ObsService {
       this.ctx.state.patch('obs', { currentScene: sceneName });
       void this.refreshSceneItems();
     });
-    this.obs.on('SceneListChanged', () => void this.refreshScenes());
+    this.obs.on('SceneListChanged', () => void this.refreshScenes().catch((err) => console.warn('[obs] scenes', errorMessage(err))));
+    this.obs.on('CurrentSceneCollectionChanged', () => void this.refreshScenes().then(() => this.repairBrowserSources()).catch((err) => console.warn('[obs] collection', errorMessage(err))));
     this.obs.on('SceneItemEnableStateChanged', ({ sceneName, sceneItemId, sceneItemEnabled }) => {
       if (sceneName !== this.ctx.state.current.obs.currentScene) return;
       const sceneItems = this.ctx.state.current.obs.sceneItems.map((i) => (i.id === sceneItemId ? { ...i, enabled: sceneItemEnabled } : i));
@@ -34,9 +49,10 @@ export class ObsService {
       const inputs = this.ctx.state.current.obs.inputs.map((i) => (i.name === inputName ? { ...i, muted: inputMuted } : i));
       this.ctx.state.patch('obs', { inputs });
     });
-    this.obs.on('InputCreated', () => void this.refreshInputs());
-    this.obs.on('InputRemoved', () => void this.refreshInputs());
-    this.obs.on('InputNameChanged', () => void this.refreshInputs());
+    const refreshInputs = () => void this.refreshInputs().catch((err) => console.warn('[obs] inputs', errorMessage(err)));
+    this.obs.on('InputCreated', refreshInputs);
+    this.obs.on('InputRemoved', refreshInputs);
+    this.obs.on('InputNameChanged', refreshInputs);
     this.obs.on('StreamStateChanged', ({ outputActive }) => this.ctx.state.patch('obs', { streaming: outputActive }));
     this.obs.on('RecordStateChanged', ({ outputActive }) => this.ctx.state.patch('obs', { recording: outputActive }));
   }
@@ -54,22 +70,29 @@ export class ObsService {
     if (this.connecting) return;
     this.connecting = true;
     this.manualDisconnect = false;
+    const generation = ++this.generation;
+    const wasConnected = this.connected;
     if (this.retryTimer) clearTimeout(this.retryTimer);
     this.retryTimer = null;
     const { host, port } = this.ctx.settings.get('obs');
     this.ctx.state.patch('obs', { status: 'connecting', error: undefined });
     try {
-      if (this.connected) await this.obs.disconnect();
+      if (wasConnected) await this.obs.disconnect();
       await this.obs.connect(`ws://${host}:${port}`, this.ctx.secrets.get('obsPassword'), {
         eventSubscriptions: EventSubscription.General | EventSubscription.Scenes | EventSubscription.SceneItems | EventSubscription.Inputs | EventSubscription.Outputs,
       });
+      if (generation !== this.generation || this.manualDisconnect) { await this.obs.disconnect(); return; }
       this.ctx.state.patch('obs', { status: 'connected', error: undefined });
       // A retry scheduled by a close during this attempt would reconnect a healthy session.
       if (this.retryTimer) clearTimeout(this.retryTimer);
       this.retryTimer = null;
       await Promise.all([this.refreshScenes(), this.refreshInputs(), this.refreshOutputs()]);
+      if (generation !== this.generation || !this.connected) return;
+      await this.repairBrowserSources().catch((err) => console.warn('[obs] repair sources', errorMessage(err)));
+      if (generation !== this.generation || !this.connected) return;
       if (!silent) this.ctx.toast('success', 'toast.obsConnected');
     } catch (err) {
+      if (generation !== this.generation || this.manualDisconnect) return;
       const msg = errorMessage(err);
       const authFailed = /auth/i.test(msg);
       this.ctx.state.patch('obs', { status: authFailed ? 'error' : 'disconnected', error: msg });
@@ -83,10 +106,11 @@ export class ObsService {
 
   async disconnect(): Promise<void> {
     this.manualDisconnect = true;
+    this.generation++;
     if (this.retryTimer) clearTimeout(this.retryTimer);
     this.retryTimer = null;
     await this.obs.disconnect().catch(() => undefined);
-    this.ctx.state.patch('obs', { status: 'disconnected', error: undefined });
+    this.ctx.state.patch('obs', { status: 'disconnected', error: undefined, sceneItems: [], inputs: [] });
   }
 
   private scheduleRetry(): void {
@@ -101,7 +125,9 @@ export class ObsService {
 
   private async refreshScenes(): Promise<void> {
     if (!this.connected) return;
+    const generation = this.generation;
     const list = await this.obs.call('GetSceneList');
+    if (generation !== this.generation || !this.connected) return;
     // OBS returns scenes bottom-to-top; reverse to match the OBS UI.
     const scenes = (list.scenes as { sceneName: string }[]).map((s) => s.sceneName).reverse();
     this.ctx.state.patch('obs', { scenes, currentScene: list.currentProgramSceneName });
@@ -109,6 +135,7 @@ export class ObsService {
   }
 
   private async refreshSceneItems(): Promise<void> {
+    const generation = this.generation;
     const scene = this.ctx.state.current.obs.currentScene;
     if (!this.connected || !scene) return;
     try {
@@ -116,7 +143,7 @@ export class ObsService {
       const sceneItems = (res.sceneItems as any[])
         .map((i) => ({ id: i.sceneItemId as number, name: i.sourceName as string, enabled: i.sceneItemEnabled as boolean }))
         .reverse();
-      this.ctx.state.patch('obs', { sceneItems });
+      if (generation === this.generation && this.connected && this.ctx.state.current.obs.currentScene === scene) this.ctx.state.patch('obs', { sceneItems });
     } catch (err) {
       console.warn('[obs] scene items', errorMessage(err));
     }
@@ -124,6 +151,7 @@ export class ObsService {
 
   private async refreshInputs(): Promise<void> {
     if (!this.connected) return;
+    const generation = this.generation;
     const { inputs } = await this.obs.call('GetInputList');
     const names = (inputs as { inputName: string }[]).map((i) => i.inputName);
     // Only inputs with audio answer GetInputMute; that's how we find mixer channels.
@@ -131,19 +159,46 @@ export class ObsService {
     const audio = names
       .map((name, i) => (checks[i].status === 'fulfilled' ? { name, muted: (checks[i] as PromiseFulfilledResult<any>).value.inputMuted } : null))
       .filter(Boolean) as { name: string; muted: boolean }[];
-    this.ctx.state.patch('obs', { inputs: audio });
+    if (generation === this.generation && this.connected) this.ctx.state.patch('obs', { inputs: audio });
   }
 
   private async refreshOutputs(): Promise<void> {
     if (!this.connected) return;
+    const generation = this.generation;
     const [stream, record] = await Promise.all([this.obs.call('GetStreamStatus'), this.obs.call('GetRecordStatus')]);
-    this.ctx.state.patch('obs', { streaming: stream.outputActive, recording: record.outputActive });
+    if (generation === this.generation && this.connected) this.ctx.state.patch('obs', { streaming: stream.outputActive, recording: record.outputActive });
   }
 
   // ---------- commands ----------
 
   private ensure(): void {
     if (!this.connected) throw new Error('OBS is not connected');
+  }
+
+  private async repairInput(inputName: string, url: string): Promise<void> {
+    await this.obs.call('SetInputSettings', { inputName, inputSettings: {
+      url, reroute_audio: true, shutdown: false, restart_when_active: false, fps_custom: true, fps: 30,
+    }, overlay: true });
+    // A browser source that loaded while the server was unavailable needs an explicit reload.
+    await this.obs.call('PressInputPropertiesButton', { inputName, propertyName: 'refreshnocache' });
+  }
+
+  async repairBrowserSources(): Promise<void> {
+    const base = this.ctx.state.current.overlayUrl;
+    if (!this.connected || !base) return;
+    const generation = this.generation;
+    const { inputs } = await this.obs.call('GetInputList', { inputKind: 'browser_source' });
+    for (const input of inputs as { inputName: string }[]) {
+      if (generation !== this.generation || !this.connected) return;
+      try {
+        const { inputSettings } = await this.obs.call('GetInputSettings', { inputName: input.inputName });
+        const raw = (inputSettings as { url?: string }).url;
+        if (generation !== this.generation || !this.connected) return;
+        if (!raw || !overlayIdentity(raw)) continue;
+        const old = new URL(raw);
+        await this.repairInput(input.inputName, `${base}${old.pathname}${old.search}`);
+      } catch (err) { console.warn('[obs] repair source', input.inputName, errorMessage(err)); }
+    }
   }
 
   async setScene(sceneName: string): Promise<void> {
@@ -170,16 +225,30 @@ export class ObsService {
    * it's reused so the overlay isn't duplicated across scenes.
    */
   async addBrowserSource(name: string, url: string, width: number, height: number): Promise<'created' | 'added' | 'exists'> {
+    const operation = this.sourceWrites.then(() => this.addBrowserSourceNow(name, url, width, height));
+    this.sourceWrites = operation.catch(() => undefined);
+    return operation;
+  }
+
+  private async addBrowserSourceNow(name: string, url: string, width: number, height: number): Promise<'created' | 'added' | 'exists'> {
     this.ensure();
     const sceneName = this.ctx.state.current.obs.currentScene;
     if (!sceneName) throw new Error('no current scene');
     const { inputs } = await this.obs.call('GetInputList', { inputKind: 'browser_source' });
     for (const input of inputs as { inputName: string }[]) {
       const { inputSettings } = await this.obs.call('GetInputSettings', { inputName: input.inputName });
-      if ((inputSettings as { url?: string }).url !== url) continue;
-      const inScene = this.ctx.state.current.obs.sceneItems.some((i) => i.name === input.inputName);
-      if (inScene) return 'exists';
+      const existingUrl = (inputSettings as { url?: string }).url ?? '';
+      if (existingUrl !== url && (!overlayIdentity(url) || overlayIdentity(existingUrl) !== overlayIdentity(url))) continue;
+      await this.repairInput(input.inputName, url);
+      const { sceneItems } = await this.obs.call('GetSceneItemList', { sceneName });
+      const existing = (sceneItems as { sourceName: string; sceneItemId: number }[]).find((i) => i.sourceName === input.inputName);
+      if (existing) {
+        await this.obs.call('SetSceneItemEnabled', { sceneName, sceneItemId: existing.sceneItemId, sceneItemEnabled: true });
+        await this.refreshSceneItems();
+        return 'exists';
+      }
       await this.obs.call('CreateSceneItem', { sceneName, sourceName: input.inputName, sceneItemEnabled: true });
+      await this.refreshSceneItems();
       return 'added';
     }
     const { inputs: all } = await this.obs.call('GetInputList');
@@ -190,9 +259,10 @@ export class ObsService {
       sceneName,
       inputName,
       inputKind: 'browser_source',
-      inputSettings: { url, width, height, reroute_audio: true, fps_custom: false },
+      inputSettings: { url, width, height, reroute_audio: true, shutdown: false, restart_when_active: false, fps_custom: true, fps: 30 },
       sceneItemEnabled: true,
     });
+    await this.refreshSceneItems();
     return 'created';
   }
 

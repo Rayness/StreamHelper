@@ -30,6 +30,7 @@ export class BotService {
     private ctx: AppContext,
     private platforms: PlatformRegistry,
     private stream: StreamControl,
+    private songRequests?: { handleChat: (message: ChatMessage) => Promise<boolean> },
   ) {}
 
   private get s() {
@@ -62,6 +63,9 @@ export class BotService {
     if (!this.s.enabled) return;
     const platform = this.platforms.get(msg.platform);
     if (!platform) return;
+
+    // A valid song request contains a link by design. Handle it before the generic link filter.
+    if (await this.songRequests?.handleChat(msg)) return;
 
     const violation = this.moderator.check(msg, this.s.moderation);
     if (violation) {

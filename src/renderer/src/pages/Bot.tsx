@@ -4,6 +4,7 @@ import { ALERT_TYPES, type BotCommand, type BotSettings, type BotTimer, type Mod
 import { Button, Card, Empty, Field, IconButton, LinesInput, NumberInput, PageHeader, Select, Tabs, TextArea, TextInput, Toggle } from '../components/ui';
 import { useT, type TFn } from '../i18n';
 import { saveSettings, useApp, useSub } from '../store';
+import { TwitchCard } from './Connections';
 
 type Tab = 'commands' | 'builtins' | 'timers' | 'counters' | 'moderation' | 'events';
 const TABS: Tab[] = ['commands', 'builtins', 'timers', 'counters', 'moderation', 'events'];
@@ -30,6 +31,7 @@ export function Bot() {
           </>
         }
       />
+      <details className="settings-disclosure"><summary>{t('conn.twitchBot')}</summary><TwitchCard account="bot" /></details>
       <Tabs<Tab>
         value={tab}
         onChange={setTab}

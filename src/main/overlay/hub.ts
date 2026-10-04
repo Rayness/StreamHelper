@@ -162,8 +162,10 @@ export class OverlayHub {
         return [this.musicMessage()];
       case 'song':
         return [this.sources.song()];
-      case 'alerts':
-        return [];
+      case 'alerts': {
+        const alert = this.sources.alerts().activeAlert;
+        return alert ? [{ type: 'alert', alert }] : [];
+      }
       case 'banner':
       case 'label':
         return [this.sources.text().initial(kind, id)];

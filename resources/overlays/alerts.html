@@ -26,6 +26,7 @@
       }
       .alert-position { position: absolute; }
       .alert {
+        box-sizing: border-box;
         display: flex;
         flex-direction: column;
         align-items: center;
@@ -44,6 +45,10 @@
         max-height: 50vh;
         object-fit: contain;
       }
+      .alert.side .media { max-width: 45%; flex-shrink: 1; }
+      .alert-texts { min-width: 0; max-width: 100%; }
+      .alert.side .alert-texts { flex: 1; }
+      .title { overflow-wrap: anywhere; }
       .title {
         font-size: var(--size);
         font-weight: 800;
@@ -143,6 +148,24 @@
       let current = null;
       let audio = null;
       let exitTimer = null;
+      let speechTimer = null;
+      let layoutFrame = 0;
+      let currentStyle = null;
+
+      function fit() {
+        layoutFrame = 0;
+        if (!current || !currentStyle) return;
+        const width = Math.max(10, Math.min(100, Number(currentStyle.width) || 90)) / 100 * stage.clientWidth;
+        current.style.width = width + 'px';
+        const bounds = SH.alertBounds(stage.clientWidth, stage.clientHeight, width, current.offsetHeight, currentStyle);
+        current.style.left = bounds.left + 'px';
+        current.style.top = bounds.top + 'px';
+        current.style.transform = `scale(${bounds.scale})`;
+        current.style.transformOrigin = 'top left';
+      }
+      function scheduleFit() { if (!layoutFrame) layoutFrame = requestAnimationFrame(fit); }
+      new ResizeObserver(scheduleFit).observe(stage);
+      document.fonts?.addEventListener('loadingdone', scheduleFit);
 
       /** A pleasant two-note chime for alerts without a custom sound. */
       function chime(volume) {
@@ -191,24 +214,29 @@
         const position = SH.el('div', 'alert-position');
         const style = a.style || {};
         const clamp = (value, fallback, min, max) => Math.min(max, Math.max(min, Number.isFinite(Number(value)) ? Number(value) : fallback));
-        position.style.left = clamp(style.x, 50, 0, 100) + '%';
-        position.style.top = clamp(style.y, 50, 0, 100) + '%';
         position.style.width = clamp(style.width, 90, 10, 100) + '%';
-        const anchors = { center: 'translate(-50%,-50%)', topLeft: 'none', topRight: 'translateX(-100%)', bottomLeft: 'translateY(-100%)', bottomRight: 'translate(-100%,-100%)' };
-        position.style.transform = anchors[style.anchor] || anchors.center;
         const box = SH.el('div', `alert ${a.animation} enter ${a.style.layout === 'side' ? 'side' : ''}`);
+        box.style.padding = clamp(style.padding, 16, 0, 100) + 'px';
+        box.style.borderRadius = clamp(style.borderRadius, 16, 0, 100) + 'px';
+        box.style.textAlign = ['left', 'center', 'right'].includes(style.textAlign) ? style.textAlign : 'center';
+        const bg = /^#[0-9a-f]{6}$/i.test(style.backgroundColor) ? style.backgroundColor : '#15121f';
+        box.style.background = bg + Math.round(clamp(style.backgroundOpacity, 0, 0, 100) * 2.55).toString(16).padStart(2, '0');
         if (a.image) {
           const media = isVideo(a.image) ? SH.el('video', 'media') : SH.el('img', 'media');
           media.src = a.image;
+          media.style.maxWidth = `min(${clamp(style.imageWidth, 420, 40, 1920)}px, ${style.layout === 'side' ? '45%' : '100%'})`;
+          media.style.maxHeight = `min(${clamp(style.imageHeight, 480, 40, 1080)}px, 50vh)`;
+          media.addEventListener('load', scheduleFit);
+          media.addEventListener('loadedmetadata', scheduleFit);
           if (media.tagName === 'VIDEO') {
             media.autoplay = true;
             media.loop = true;
-            media.muted = !!a.sound;
-            media.volume = a.volume;
+            media.muted = SH.preview || !!a.sound;
+            media.volume = clamp(a.volume, 1, 0, 1);
           }
           box.appendChild(media);
         }
-        const texts = SH.el('div');
+        const texts = SH.el('div', 'alert-texts');
         const title = SH.el('div', 'title');
         // Paint the user's name with the accent color.
         const at = a.userName ? a.title.indexOf(a.userName) : -1;
@@ -219,35 +247,46 @@
           title.appendChild(document.createTextNode(a.title.slice(at + a.userName.length)));
         }
         texts.appendChild(title);
-        texts.appendChild(SH.el('div', 'message', a.message));
+        const message = SH.el('div', 'message', a.message);
+        message.style.fontSize = clamp(style.messageFontSize, style.fontSize * .55, 10, 120) + 'px';
+        texts.appendChild(message);
         box.appendChild(texts);
         position.appendChild(box);
         stage.appendChild(position);
         current = position;
+        currentStyle = style;
+        fit();
+
+        if (SH.preview) return;
 
         if (a.sound) {
           audio = new Audio(a.sound);
-          audio.volume = a.volume;
+          audio.volume = clamp(a.volume, 1, 0, 1);
           if (a.tts) audio.onended = () => speak(a.message, document.documentElement.lang);
           audio.play().catch(() => {});
         } else {
           chime(a.volume);
-          if (a.tts) setTimeout(() => speak(a.message, document.documentElement.lang), 900);
+          if (a.tts) speechTimer = setTimeout(() => speak(a.message, document.documentElement.lang), 900);
         }
         exitTimer = setTimeout(() => clear(false), Math.max(1, a.durationSec) * 1000);
       }
 
       function clear(immediate) {
+        if (speechTimer) clearTimeout(speechTimer);
+        speechTimer = null;
         if (exitTimer) clearTimeout(exitTimer);
         exitTimer = null;
         if (audio) {
+          audio.onended = null;
           audio.pause();
           audio = null;
         }
         if ('speechSynthesis' in window) speechSynthesis.cancel();
         const position = current;
         current = null;
+        currentStyle = null;
         if (!position) return;
+        position.querySelectorAll('video,audio').forEach((media) => media.pause());
         const box = position.firstElementChild;
         if (immediate || !box) return position.remove();
         box.classList.remove('enter');
@@ -256,10 +295,14 @@
       }
 
       SH.connect('alerts', (msg) => {
+        if (SH.preview) return;
         if (msg.type === 'alert') {
           document.documentElement.lang = /[а-яё]/i.test(msg.alert.title) ? 'ru-RU' : 'en-US';
           show(msg.alert);
         } else if (msg.type === 'alertSkip') clear(false);
+      });
+      if (SH.preview) window.addEventListener('message', (event) => {
+        if (event.source === window.parent && event.data?.type === 'alert') show(event.data.alert);
       });
     </script>
   </body>

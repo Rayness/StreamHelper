@@ -1,9 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Icon } from '../components/icons';
-import { Button, Card, PageHeader, TextInput, Toggle } from '../components/ui';
+import { Button, Card, PageHeader, TextInput } from '../components/ui';
 import { useT } from '../i18n';
-import { OVERLAYS } from '../overlayCatalog';
-import { navigate, profileAction, useApp } from '../store';
+import { profileAction, useApp } from '../store';
 
 export function Profiles() {
   const t = useT();
@@ -41,26 +39,6 @@ export function Profiles() {
               <Button variant="danger" icon="trash" disabled={profiles.length < 2} onClick={() => { if (window.confirm(t('profiles.deleteConfirm'))) void profileAction('profiles:delete', active.id); }}>{t('profiles.delete')}</Button>
             </div>
           </Card>
-          <Card title={t('profiles.overlays')}>
-            <p className="muted small">{t('profiles.overlayHint')}</p>
-            <div className="profile-overlays">
-              {OVERLAYS.map((overlay) => <div key={overlay.kind} className="profile-overlay-item">
-                <Icon name={overlay.icon} size={16} />
-                <span>{t(`ov.${overlay.kind}`)}</span>
-                <Toggle checked={active.overlays.includes(overlay.kind)} onChange={(enabled) => void profileAction('profiles:overlay', active.id, overlay.kind, enabled)} />
-              </div>)}
-            </div>
-          </Card>
-          <div className="profile-links">
-            {([
-              ['overlays', 'profiles.overlays', 'layers'],
-              ['alerts', 'profiles.alerts', 'alert'],
-              ['interactive', 'profiles.interactive', 'sparkle'],
-              ['obs', 'profiles.actions', 'video'],
-              ['bot', 'profiles.bot', 'bot'],
-            ] as const).map(([page, label, icon]) =>
-              <Card key={page} title={t(label)}><Button icon={icon} onClick={() => navigate(page)}>{t(label)} →</Button></Card>)}
-          </div>
         </div>
       </div>
     </div>

@@ -1,184 +1,54 @@
-import { useEffect, useState } from 'react';
-import type { ConnectionStatus } from '@shared/types';
+import { lazy, Suspense, useEffect, useState } from 'react';
+import { normalizeWorkspaceCards } from '@shared/workspace';
+import type { ConnectionStatus, WorkspaceCard } from '@shared/types';
 import { CommandPalette } from './components/CommandPalette';
-import { Icon, type IconName } from './components/icons';
-import { StatusDot } from './components/ui';
-import { useT, useTDynamic, type TKey } from './i18n';
-import { Alerts } from './pages/Alerts';
-import { Bot } from './pages/Bot';
-import { Connections } from './pages/Connections';
-import { Dashboard } from './pages/Dashboard';
-import { Interactive } from './pages/Interactive';
-import { Kawaki } from './pages/Kawaki';
-import { Obs } from './pages/Obs';
-import { Overlays } from './pages/Overlays';
-import { Profiles } from './pages/Profiles';
-import { Settings } from './pages/Settings';
-import { dismissToast, navigate, useApp, useNav, type Page } from './store';
-
-interface NavItem {
-  id: Page;
-  icon: IconName;
-  label: TKey;
-}
-
-/** Grouped by when you need it: on air, looks, automation, accounts. */
-const NAV: { title: TKey | null; items: NavItem[] }[] = [
-  {
-    title: null,
-    items: [
-      { id: 'dashboard', icon: 'dashboard', label: 'nav.dashboard' },
-      { id: 'interactive', icon: 'sparkle', label: 'nav.interactive' },
-    ],
-  },
-  {
-    title: 'navGroup.look',
-    items: [
-      { id: 'profiles', icon: 'users', label: 'nav.profiles' },
-      { id: 'alerts', icon: 'alert', label: 'nav.alerts' },
-      { id: 'overlays', icon: 'layers', label: 'nav.overlays' },
-    ],
-  },
-  {
-    title: 'navGroup.auto',
-    items: [
-      { id: 'bot', icon: 'bot', label: 'nav.bot' },
-      { id: 'obs', icon: 'video', label: 'nav.obs' },
-    ],
-  },
-  {
-    title: 'navGroup.accounts',
-    items: [
-      { id: 'kawaki', icon: 'tv', label: 'nav.kawaki' },
-      { id: 'connections', icon: 'plug', label: 'nav.connections' },
-      { id: 'settings', icon: 'settings', label: 'nav.settings' },
-    ],
-  },
-];
-
-const ALL_PAGES = NAV.flatMap((g) => g.items.map((i) => i.id));
+import { Icon } from './components/icons';
+import { IconButton, StatusDot } from './components/ui';
+import { useT, useTDynamic } from './i18n';
+import { Workspace } from './pages/Workspace';
+import { closeDialog, dismissToast, navigate, openModule, useApp, useNav } from './store';
+const Monitor = lazy(() => import('./pages/Monitor').then((m) => ({ default:m.Monitor })));
+const Profiles = lazy(() => import('./pages/Profiles').then((m) => ({ default:m.Profiles })));
+const Preferences = lazy(() => import('./pages/Settings').then((m) => ({ default:m.Settings })));
 
 function SideStatus() {
   const t = useT();
   const s = useApp((d) => d.state!);
-  const items: { label: string; status: ConnectionStatus; show: boolean; page: Page }[] = [
-    { label: 'Twitch', status: s.twitch.status, show: true, page: 'connections' },
-    { label: 'OBS', status: s.obs.status, show: true, page: 'connections' },
-    { label: 'Kawaki', status: s.kawaki.status, show: s.kawaki.status !== 'disconnected' || !!s.kawaki.account, page: 'kawaki' },
-    { label: 'DonationAlerts', status: s.donationalerts.status, show: s.donationalerts.status !== 'disconnected' || !!s.donationalerts.account, page: 'connections' },
-    { label: 'Streamlabs', status: s.streamlabs.status, show: s.streamlabs.status !== 'disconnected', page: 'connections' },
-    { label: 'StreamElements', status: s.streamelements.status, show: s.streamelements.status !== 'disconnected', page: 'connections' },
-    { label: 'Streamer.bot', status: s.streamerbot.status, show: s.streamerbot.status !== 'disconnected', page: 'connections' },
-    { label: 'Discord', status: s.discord.status, show: s.discord.status !== 'disconnected', page: 'connections' },
+  const workspace = useApp((d) => d.settings!.workspace);
+  const cards = normalizeWorkspaceCards(workspace.cards);
+  const items: { id:WorkspaceCard; label:string; status:ConnectionStatus }[] = [
+    {id:'twitch',label:'Twitch',status:s.twitch.status},{id:'obs',label:'OBS',status:s.obs.status},{id:'kawaki',label:'Kawaki',status:s.kawaki.status},{id:'donationalerts',label:'DonationAlerts',status:s.donationalerts.status},{id:'streamlabs',label:'Streamlabs',status:s.streamlabs.status},{id:'streamelements',label:'StreamElements',status:s.streamelements.status},{id:'streamerbot',label:'Streamer.bot',status:s.streamerbot.status},{id:'discord',label:'Discord',status:s.discord.status},
   ];
-  return (
-    <div className="side-status">
-      {items
-        .filter((i) => i.show)
-        .map((i) => (
-          <button key={i.label} type="button" onClick={() => navigate(i.page)} title={t(`status.${i.status}`)}>
-            <StatusDot status={i.status} />
-            {i.label}
-          </button>
-        ))}
-      <span className="side-overlays">
-        <Icon name="layers" size={13} />
-        {t('side.overlays', { n: s.overlayClients })}
-      </span>
-    </div>
-  );
+  const visible = items.filter((i) => cards.includes(i.id));
+  if (!visible.length) return null;
+  return <div className="side-status">{visible.map((i) => <button key={i.id} type="button" onClick={() => openModule(i.id)} title={t(`status.${i.status}`)}><StatusDot status={i.status} />{i.label}</button>)}</div>;
 }
-
 function Toasts() {
   const toasts = useApp((d) => d.toasts);
   const td = useTDynamic();
-  return (
-    <div className="toasts" aria-live="polite">
-      {toasts.map((t) => (
-        <div key={t.id} className={`toast toast-${t.kind}`} onClick={() => dismissToast(t.id)}>
-          <Icon name={t.kind === 'error' ? 'x' : t.kind === 'success' ? 'check' : 'alert'} size={16} />
-          <span>{td(t.key, t.params)}</span>
-        </div>
-      ))}
-    </div>
-  );
+  return <div className="toasts" aria-live="polite">{toasts.map((t) => <div key={t.id} className={`toast toast-${t.kind}`} onClick={() => dismissToast(t.id)}><Icon name={t.kind === 'error' ? 'x' : t.kind === 'success' ? 'check' : 'alert'} size={16} /><span>{td(t.key,t.params)}</span></div>)}</div>;
 }
-
 export function App() {
   const t = useT();
   const nav = useNav();
-  const page = ALL_PAGES.includes(nav.page) ? nav.page : 'dashboard';
-  const live = useApp((d) => d.state!.stream.live);
   const lang = useApp((d) => d.settings!.language);
+  const live = useApp((d) => d.state!.stream.live);
   const profileName = useApp((d) => d.settings!.profiles.find((p) => p.id === d.settings!.activeProfileId)?.name ?? '—');
-  const funLive = useApp((d) => d.state!.poll?.status === 'running' || d.state!.giveaway.status === 'open' || d.state!.boss.status === 'running' || d.state!.viewerQueue.open || d.state!.guess.status === 'running' || ['question', 'reveal'].includes(d.state!.quiz.status));
-  const [palette, setPalette] = useState(false);
-
+  const [palette,setPalette] = useState(false);
+  useEffect(() => { document.documentElement.lang = lang; },[lang]);
   useEffect(() => {
-    document.documentElement.lang = lang;
-  }, [lang]);
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K' || e.code === 'KeyK')) {
-        e.preventDefault();
-        setPalette((p) => !p);
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, []);
-
-  return (
-    <div className="app">
-      <nav className="sidebar">
-        <div className="brand-logo">
-          <span className="logo-mark">
-            <Icon name="broadcast" size={18} />
-          </span>
-          <span className="logo-text">StreamHelper</span>
-          {live && <span className="live-pill">LIVE</span>}
-        </div>
-        <button type="button" className="profile-current" onClick={() => navigate('profiles')} title={t('nav.profiles')}>
-          <Icon name="users" size={15} /><span>{profileName}</span><Icon name="chevron" size={14} />
-        </button>
-        <button type="button" className="search-btn" onClick={() => setPalette(true)}>
-          <Icon name="search" size={15} />
-          <span>{t('palette.button')}</span>
-          <kbd>Ctrl K</kbd>
-        </button>
-        {NAV.map((g, gi) => (
-          <div key={gi} className="nav-group">
-            {g.title && <span className="nav-group-title">{t(g.title)}</span>}
-            <ul>
-              {g.items.map((n) => (
-                <li key={n.id}>
-                  <button type="button" className={page === n.id ? 'active' : ''} aria-current={page === n.id ? 'page' : undefined} onClick={() => navigate(n.id)}>
-                    <Icon name={n.icon} size={18} />
-                    <span>{t(n.label)}</span>
-                    {n.id === 'interactive' && funLive && <span className="nav-live" title={t('fun.running')} />}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ))}
-        <SideStatus />
-      </nav>
-      <main className="content">
-        {page === 'dashboard' && <Dashboard />}
-        {page === 'interactive' && <Interactive />}
-        {page === 'alerts' && <Alerts />}
-        {page === 'overlays' && <Overlays />}
-        {page === 'profiles' && <Profiles />}
-        {page === 'bot' && <Bot />}
-        {page === 'obs' && <Obs />}
-        {page === 'kawaki' && <Kawaki />}
-        {page === 'connections' && <Connections />}
-        {page === 'settings' && <Settings />}
-      </main>
-      <CommandPalette open={palette} onClose={() => setPalette(false)} />
-      <Toasts />
-    </div>
-  );
+    const onKey = (e:KeyboardEvent) => { if ((e.ctrlKey || e.metaKey) && e.code === 'KeyK') { e.preventDefault(); setPalette((p) => !p); } if (e.key === 'Escape') closeDialog(); };
+    window.addEventListener('keydown',onKey); return () => window.removeEventListener('keydown',onKey);
+  },[]);
+  return <div className="app">
+    <nav className="sidebar" aria-label="StreamHelper"><div className="brand-logo"><span className="logo-mark"><Icon name="broadcast" size={18} /></span><span className="logo-text">StreamHelper</span>{live && <span className="live-pill">LIVE</span>}</div>
+      <button className="profile-current" onClick={() => navigate('profiles')} title={t('nav.profiles')}><Icon name="users" size={15} /><span>{profileName}</span><Icon name="chevron" size={14} /></button>
+      <button className="search-btn" onClick={() => setPalette(true)}><Icon name="search" size={15} /><span>{t('palette.button')}</span><kbd>Ctrl K</kbd></button>
+      <div className="nav-group"><ul><li><button className={nav.page === 'workspace' ? 'active' : ''} aria-current={nav.page === 'workspace' ? 'page' : undefined} onClick={() => navigate('workspace')}><Icon name="layers" size={18} /><span>{t('workspace.title')}</span></button></li><li><button className={nav.page === 'dashboard' ? 'active' : ''} aria-current={nav.page === 'dashboard' ? 'page' : undefined} onClick={() => navigate('dashboard')}><Icon name="dashboard" size={18} /><span>{t('workspace.monitor')}</span></button></li></ul></div>
+      <div className="workspace-side-footer"><SideStatus /><button className="workspace-preferences" onClick={() => navigate('settings')}><Icon name="settings" size={16} />{t('workspace.preferences')}</button></div>
+    </nav>
+    <main className="content"><Suspense fallback={<div className="page" role="status">…</div>}>{nav.page === 'dashboard' ? <Monitor /> : <Workspace />}</Suspense></main>
+    {nav.dialog && <div className="workspace-dialog-backdrop" onMouseDown={closeDialog}><section className="workspace-dialog" role="dialog" aria-modal="true" aria-label={t(nav.dialog === 'profiles' ? 'nav.profiles' : 'workspace.preferences')} onMouseDown={(e) => e.stopPropagation()}><div className="workspace-dialog-close"><IconButton icon="x" label={t('common.cancel')} onClick={closeDialog} /></div><Suspense fallback={<span role="status">…</span>}>{nav.dialog === 'profiles' ? <Profiles /> : <Preferences />}</Suspense></section></div>}
+    <CommandPalette open={palette} onClose={() => setPalette(false)} /><Toasts />
+  </div>;
 }

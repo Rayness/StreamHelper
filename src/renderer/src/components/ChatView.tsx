@@ -79,10 +79,11 @@ const Message = memo(function Message({ m, canModerate, onReply }: { m: ChatMess
   );
 });
 
-export function ChatView() {
+export function ChatView({ readOnly = false }: { readOnly?: boolean }) {
   const t = useT();
   const chat = useApp((d) => d.chat);
   const connected = useApp((d) => d.state?.twitch.status === 'connected');
+  const botName = useApp((d) => d.state?.twitchBot.account?.displayName);
   const spotlight = useApp((d) => d.state?.spotlight);
   const listRef = useRef<HTMLDivElement>(null);
   const [stick, setStick] = useState(true);
@@ -124,7 +125,7 @@ export function ChatView() {
             {connected ? t('chat.emptyConnectedHint') : t('chat.emptyDisconnectedHint')}
           </Empty>
         ) : (
-          chat.map((m) => <Message key={m.id} m={m} canModerate={connected} onReply={setReplyTo} />)
+          chat.map((m) => <Message key={m.id} m={m} canModerate={connected && !readOnly} onReply={setReplyTo} />)
         )}
       </div>
       {!stick && chat.length > 0 && (
@@ -132,7 +133,7 @@ export function ChatView() {
           {t('chat.jump')}
         </button>
       )}
-      {spotlight && <div className="chat-replying"><span>{t('spotlight.active')}: <b>{spotlight.userName}</b> — {spotlight.text}</span><IconButton icon="x" label={t('spotlight.clear')} onClick={() => void call('spotlight:clear')} /></div>}
+      {!readOnly && spotlight && <div className="chat-replying"><span>{t('spotlight.active')}: <b>{spotlight.userName}</b> — {spotlight.text}</span><IconButton icon="x" label={t('spotlight.clear')} onClick={() => void call('spotlight:clear')} /></div>}
       {replyTo && (
         <div className="chat-replying">
           <span>
@@ -141,13 +142,14 @@ export function ChatView() {
           <IconButton icon="x" label={t('common.cancel')} onClick={() => setReplyTo(null)} />
         </div>
       )}
-      <form
+      {!readOnly && <form
         className="chat-input"
         onSubmit={(e) => {
           e.preventDefault();
           void send();
         }}
       >
+        {botName && <span className="chat-sender" title={t('workspace.botSender', { name: botName })}>{botName}</span>}
         <input
           className="input"
           value={text}
@@ -158,7 +160,7 @@ export function ChatView() {
           onKeyDown={(e) => e.key === 'Escape' && setReplyTo(null)}
         />
         <IconButton icon="send" label={t('chat.send')} variant="primary" disabled={!connected || !text.trim() || sending} type="submit" />
-      </form>
+      </form>}
     </div>
   );
 }

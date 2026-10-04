@@ -7,6 +7,7 @@ export const ALL_OVERLAY_KINDS: readonly OverlayKind[] = [
 ];
 
 export const PROFILE_KEYS: readonly ProfileSettingsKey[] = [
+  'workspace',
   'bot', 'alerts', 'chatOverlay', 'spotlightOverlay', 'rewardsOverlay', 'collabOverlay', 'musicOverlay',
   'songRequests', 'goals', 'timers', 'actions', 'banners', 'ads', 'labels',
   'emoteRain', 'wheels', 'poll', 'giveaway', 'quiz', 'boss', 'kawaki',

@@ -1,7 +1,10 @@
 import { randomBytes } from 'node:crypto';
-import type { OverlayMessage, SongRequest, StreamEvent } from '@shared/types';
+import type { ChatMessage, OverlayMessage, SongRequest, StreamEvent } from '@shared/types';
 import type { AppContext } from '../core/context';
 import type { MusicService } from './music';
+import { hasPermission } from '../bot/permissions';
+import { parseCommand } from '../bot/variables';
+import { donationAmount } from '@shared/events';
 
 const VIDEO_ID = /^[A-Za-z0-9_-]{11}$/;
 
@@ -39,11 +42,15 @@ export class SongRequestService {
   private seen = new Set<string>();
   private seenOrder: string[] = [];
   private starting = false;
+  private autoBlocked = false;
+  private generation = 0;
+  private chatCooldowns = new Map<string, number>();
 
   constructor(
     private ctx: AppContext,
     private music: MusicService,
     private broadcast: (message: OverlayMessage) => void,
+    private reply?: (text: string, replyTo?: string) => Promise<void>,
   ) {
     ctx.bus.on('event', (event) => this.onEvent(event));
     ctx.bus.on('settings:changed', (key) => {
@@ -60,6 +67,13 @@ export class SongRequestService {
   setPlayerConnected(connected: boolean): void {
     if (this.ctx.state.current.songRequests.playerConnected === connected) return;
     this.ctx.state.patch('songRequests', { playerConnected: connected });
+    if (!connected) {
+      this.generation++;
+      this.current = null;
+      this.nonce = null;
+      this.sync();
+      void this.resumeMusic();
+    }
     if (connected) void this.maybeStart();
   }
 
@@ -79,6 +93,8 @@ export class SongRequestService {
     if (!this.ctx.state.current.songRequests.playerConnected) throw new Error('Add the Song Request browser source to OBS first');
     if (this.starting) return;
     this.starting = true;
+    this.autoBlocked = false;
+    const generation = this.generation;
     try {
       let queue = this.ctx.settings.get('songQueue');
       if (id) {
@@ -91,12 +107,17 @@ export class SongRequestService {
       if (!this.resumeId && this.ctx.settings.get('songRequests').pauseWindowsMusic) {
         this.resumeId = await this.music.pauseCurrent();
       }
-      if (this.ctx.settings.get('songRequests').videoLayout === 'queue') {
-        const id = this.resumeId;
-        this.resumeId = null;
-        if (id && this.ctx.settings.get('songRequests').resumeWindowsMusic) await this.music.resumeSource(id);
+      if (generation !== this.generation || !this.ctx.state.current.songRequests.playerConnected) {
+        await this.resumeMusic();
         return;
       }
+      if (this.ctx.settings.get('songRequests').videoLayout === 'queue') {
+        await this.resumeMusic();
+        return;
+      }
+      // The streamer can remove/reorder requests while the Windows player is pausing.
+      queue = this.ctx.settings.get('songQueue');
+      if (!queue.length) { await this.resumeMusic(); return; }
       this.current = queue[0];
       this.nonce = randomBytes(20).toString('hex');
       this.ctx.state.patch('songRequests', { lastError: null });
@@ -104,6 +125,7 @@ export class SongRequestService {
       this.broadcast(this.overlayMessage);
     } finally {
       this.starting = false;
+      if (generation !== this.generation) void this.maybeStart();
     }
   }
 
@@ -134,7 +156,17 @@ export class SongRequestService {
 
   async playerFinished(id: string, nonce: string, error = ''): Promise<boolean> {
     if (!this.current || id !== this.current.id || nonce !== this.nonce) return false;
-    if (error) this.ctx.state.patch('songRequests', { lastError: error.slice(0, 200) });
+    if (error) {
+      // A blocked embed/network failure must never consume a paid request or drain the queue.
+      this.autoBlocked = true;
+      this.ctx.state.patch('songRequests', { lastError: error.slice(0, 200) });
+      this.current = null;
+      this.nonce = null;
+      this.sync();
+      this.broadcast(this.overlayMessage);
+      await this.resumeMusic();
+      return true;
+    }
     await this.skip();
     return true;
   }
@@ -146,8 +178,42 @@ export class SongRequestService {
     });
   }
 
+  private async resumeMusic(): Promise<void> {
+    const id = this.resumeId;
+    this.resumeId = null;
+    if (id && this.ctx.settings.get('songRequests').resumeWindowsMusic) {
+      try { await this.music.resumeSource(id); }
+      catch (error) { this.ctx.state.patch('songRequests', { lastError: String(error) }); }
+    }
+  }
+
+  async handleChat(message: ChatMessage): Promise<boolean> {
+    const cfg = this.ctx.settings.get('songRequests');
+    if (!cfg.enabled || !cfg.chatEnabled || message.fromSelf || message.platform !== 'twitch') return false;
+    const parsed = parseCommand(message.text, this.ctx.settings.get('bot').prefix);
+    const command = cfg.chatCommand.trim().replace(/^[!\/]+/, '').toLowerCase();
+    if (!parsed || !command || ![command, ...(command === 'sr' ? ['songrequest'] : [])].includes(parsed.name)) return false;
+    const ru = this.ctx.settings.get('language') === 'ru';
+    let response: string;
+    if (!hasPermission(message.roles, cfg.chatPermission)) response = ru ? 'У вас нет доступа к заказу музыки.' : 'You cannot request songs.';
+    else if ((this.chatCooldowns.get(message.userId) ?? 0) > Date.now()) return true;
+    else {
+      try {
+        const url = youtubeUrlInText(parsed.args.join(' '));
+        if (!url) throw new Error(ru ? 'Укажите ссылку на одно видео YouTube.' : 'Provide a single YouTube video link.');
+        this.add(url, message.userName, 'chat', `chat_${message.id}`);
+        this.chatCooldowns.delete(message.userId);
+        this.chatCooldowns.set(message.userId, Date.now() + Math.max(0, cfg.chatCooldownSec) * 1000);
+        if (this.chatCooldowns.size > 1000) this.chatCooldowns.delete(this.chatCooldowns.keys().next().value!);
+        response = ru ? `${message.userName}, трек добавлен в очередь.` : `${message.userName}, your song is queued.`;
+      } catch (error) { response = String((error as Error).message ?? error); }
+    }
+    await this.reply?.(response, message.id);
+    return true;
+  }
+
   private async maybeStart(): Promise<void> {
-    if (this.current || this.starting || !this.ctx.settings.get('songRequests').autoPlay || this.ctx.settings.get('songRequests').videoLayout === 'queue' || !this.ctx.state.current.songRequests.playerConnected) return;
+    if (this.current || this.starting || this.autoBlocked || !this.ctx.settings.get('songRequests').autoPlay || this.ctx.settings.get('songRequests').videoLayout === 'queue' || !this.ctx.state.current.songRequests.playerConnected) return;
     if (this.ctx.settings.get('songQueue').length) {
       try { await this.play(); } catch (error) { this.ctx.state.patch('songRequests', { lastError: String(error) }); }
     }
@@ -172,12 +238,13 @@ export class SongRequestService {
     if (!settings.enabled || event.source === 'test' || this.seen.has(event.id)) return;
     let text = '';
     let source: SongRequest['source'];
-    if (event.type === 'redemption' && settings.rewardTitle.trim() && event.rewardTitle.trim().toLowerCase() === settings.rewardTitle.trim().toLowerCase()) {
+    if (event.type === 'redemption' && (settings.rewardId ? event.rewardId === settings.rewardId :
+      settings.rewardTitle.trim() && event.rewardTitle.trim().toLowerCase() === settings.rewardTitle.trim().toLowerCase())) {
       text = event.input;
       source = 'redemption';
     } else if (event.type === 'donation') {
-      const amount = event.amountMain ?? (event.currency.toUpperCase() === this.ctx.settings.get('currency').toUpperCase() ? event.amount : 0);
-      if (!Number.isFinite(amount) || amount < settings.minDonation) return;
+      const amount = donationAmount(event, this.ctx.settings.get('currency'));
+      if (amount === null || !Number.isFinite(amount) || amount < settings.minDonation) return;
       text = event.message;
       source = 'donation';
     } else return;
@@ -185,7 +252,10 @@ export class SongRequestService {
     this.seenOrder.push(event.id);
     if (this.seenOrder.length > 500) this.seen.delete(this.seenOrder.shift()!);
     const url = youtubeUrlInText(text);
-    if (!url) return;
+    if (!url) {
+      if (source === 'redemption') this.ctx.state.patch('songRequests', { lastError: this.ctx.settings.get('language') === 'ru' ? 'Заказ не содержит ссылки YouTube. Включите обязательный ввод текста в награде Twitch.' : 'Request has no YouTube link. Require text input on the Twitch reward.' });
+      return;
+    }
     try { this.add(url, event.userName, source, event.id); }
     catch (error) { this.ctx.state.patch('songRequests', { lastError: String((error as Error).message ?? error) }); }
   }

@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ALERT_TYPES } from '@shared/types';
 import { useT, type TFn } from '../i18n';
-import { OVERLAYS } from '../overlayCatalog';
-import { call, getData, navigate, saveSettings, type Page } from '../store';
+import { normalizeWorkspaceCards } from '@shared/workspace';
+import { MODULES } from '../workspaceModules';
+import { call, getData, navigate, saveSettings, openModule, openCatalog, useApp } from '../store';
 import { Icon, type IconName } from './icons';
 
 interface Command {
@@ -15,27 +16,27 @@ interface Command {
   run: () => void;
 }
 
-const PAGES: { page: Page; icon: IconName; key: Parameters<TFn>[0]; kw: string }[] = [
-  { page: 'dashboard', icon: 'dashboard', key: 'nav.dashboard', kw: 'dashboard главная' },
-  { page: 'interactive', icon: 'sparkle', key: 'nav.interactive', kw: 'interactive игры' },
-  { page: 'profiles', icon: 'users', key: 'nav.profiles', kw: 'profiles профили сцены' },
-  { page: 'alerts', icon: 'alert', key: 'nav.alerts', kw: 'alerts' },
-  { page: 'overlays', icon: 'layers', key: 'nav.overlays', kw: 'overlays obs' },
-  { page: 'bot', icon: 'bot', key: 'nav.bot', kw: 'bot commands команды' },
-  { page: 'obs', icon: 'video', key: 'nav.obs', kw: 'obs actions hotkeys хоткеи' },
-  { page: 'kawaki', icon: 'tv', key: 'nav.kawaki', kw: 'kawaki аниме anime' },
-  { page: 'connections', icon: 'plug', key: 'nav.connections', kw: 'connections twitch donationalerts' },
-  { page: 'settings', icon: 'settings', key: 'nav.settings', kw: 'settings' },
-];
+/** Owners of operational shortcuts. Hidden modules cannot be invoked from search. */
+const OWNERS = { wheel:'wheel', poll:'poll', give:'giveaway', quiz:'quiz', queue:'queue', guess:'guess', boss:'boss', 'counter+':'counter', 'counter-':'counter', emotes:'emotes', banner:'banner', act:'actions', alerts:'alerts', test:'alerts', scene:'obs' } as const;
+function available(c: Command): boolean {
+  const cards = normalizeWorkspaceCards(getData().settings?.workspace.cards);
+  if (c.id.startsWith('module:')) return cards.some((id) => c.id === `module:${id}`);
+  const owner = OWNERS[c.id.split(':')[0] as keyof typeof OWNERS];
+  return owner ? cards.includes(owner) : c.id.startsWith('page:') || c.id === 'catalog';
+}
 
 function buildCommands(t: TFn): Command[] {
   const { settings, state } = getData();
   if (!settings || !state) return [];
   const go = t('palette.go');
-  const out: Command[] = PAGES.map((p) => ({ id: `page:${p.page}`, label: t(p.key), group: go, icon: p.icon, keywords: p.kw, run: () => navigate(p.page) }));
-  for (const o of OVERLAYS) {
-    out.push({ id: `ov:${o.kind}`, label: `${t('palette.overlay')}: ${t(`ov.${o.kind}`)}`, group: go, icon: o.icon, keywords: o.kind, run: () => navigate('overlays', o.kind) });
-  }
+  const out: Command[] = [
+    {id:'page:workspace',label:t('workspace.title'),group:go,icon:'layers',run:() => navigate('workspace')},
+    {id:'page:dashboard',label:t('workspace.monitor'),group:go,icon:'dashboard',run:() => navigate('dashboard')},
+    {id:'page:profiles',label:t('nav.profiles'),group:go,icon:'users',run:() => navigate('profiles')},
+    {id:'page:settings',label:t('workspace.preferences'),group:go,icon:'settings',run:() => navigate('settings')},
+    {id:'catalog',label:t('workspace.add'),group:go,icon:'plus',run:openCatalog},
+    ...MODULES.filter((m) => normalizeWorkspaceCards(settings.workspace.cards).includes(m.id)).map((m): Command => ({id:`module:${m.id}`,label:m.title ? t(m.title) : m.name!,group:t('workspace.modules'),icon:m.icon,keywords:m.id,run:() => openModule(m.id)})),
+  ];
   const fun = t('nav.interactive');
   for (const w of settings.wheels) out.push({ id: `wheel:${w.id}`, label: `${t('wheel.spin')}: ${w.name}`, group: fun, icon: 'wheel', keywords: 'wheel spin колесо', run: () => void call('wheel:spin', w.id) });
   if (state.poll?.status === 'running') out.push({ id: 'poll:end', label: t('poll.end'), group: fun, icon: 'poll', keywords: 'poll', run: () => void call('poll:end') });
@@ -89,7 +90,7 @@ function buildCommands(t: TFn): Command[] {
   if (state.obs.status === 'connected') {
     for (const sc of state.obs.scenes) out.push({ id: `scene:${sc}`, label: `${t('palette.scene')}: ${sc}`, group: 'OBS', icon: 'video', keywords: 'obs scene', run: () => void call('obs:setScene', sc) });
   }
-  return out;
+  return out.filter(available);
 }
 
 function matches(c: Command, q: string): boolean {
@@ -102,14 +103,16 @@ function matches(c: Command, q: string): boolean {
     .every((w) => hay.includes(w));
 }
 
-/** Ctrl+K: jump anywhere or run anything without leaving the keyboard. */
+/** Ctrl+K only exposes modules installed in this profile. */
 export function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void }) {
   const t = useT();
   const [q, setQ] = useState('');
   const [index, setIndex] = useState(0);
   const input = useRef<HTMLInputElement>(null);
   const list = useRef<HTMLUListElement>(null);
-  const all = useMemo(() => (open ? buildCommands(t) : []), [open, t]);
+  const settings = useApp((d) => open ? d.settings : null);
+  const state = useApp((d) => open ? d.state : null);
+  const all = useMemo(() => (open ? buildCommands(t) : []), [open, t, settings, state]);
   const shown = useMemo(() => (q.trim() ? all.filter((c) => matches(c, q)) : all).slice(0, 60), [all, q]);
 
   useEffect(() => {
@@ -125,7 +128,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
 
   if (!open) return null;
   const run = (c: Command | undefined) => {
-    if (!c) return;
+    if (!c || !available(c)) return;
     onClose();
     c.run();
   };

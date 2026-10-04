@@ -132,16 +132,20 @@ export function TextArea({ value, onChange, rows = 3, placeholder }: { value: st
 /** Edits a string[] as one item per line. */
 export function LinesInput({ value, onChange, rows = 4, placeholder }: { value: string[]; onChange: (v: string[]) => void; rows?: number; placeholder?: string }) {
   const [text, setText] = useState(value.join('\n'));
+  const input = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
+    if (document.activeElement === input.current) return;
     if (text.split('\n').filter((l) => l.trim()).join('\n') !== value.join('\n')) setText(value.join('\n'));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value]);
   return (
     <textarea
+      ref={input}
       className="input textarea"
       rows={rows}
       value={text}
       placeholder={placeholder}
+      onBlur={() => setText(value.join('\n'))}
       onChange={(e) => {
         setText(e.target.value);
         onChange(e.target.value.split('\n').map((l) => l.trim()).filter(Boolean));

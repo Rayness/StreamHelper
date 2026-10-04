@@ -1,0 +1,12 @@
+const { resolve, join } = require('node:path');
+const { mkdirSync } = require('node:fs');
+const { spawnSync } = require('node:child_process');
+const { buildSync } = require('esbuild');
+const root = resolve(__dirname, '..');
+const output = join(root, 'dist/qa');
+mkdirSync(output, { recursive: true });
+const tmp = join(root, 'node_modules/.cache/ui-tmp'); mkdirSync(tmp, { recursive: true });
+buildSync({ entryPoints: [join(__dirname, 'ui-fixture.ts')], outfile: join(output, 'fixture.cjs'), bundle: true, platform: 'node', format: 'cjs', external: ['ws'], alias: { '@shared': join(root, 'src/shared') } });
+const env = { ...process.env, TEMP: tmp, TMP: tmp, TMPDIR: tmp }; delete env.ELECTRON_RUN_AS_NODE;
+const result = spawnSync(require('electron'), [join(__dirname, 'ui-test-main.cjs')], { cwd: root, env, stdio: 'inherit', timeout: 120000 });
+process.exit(result.status ?? 1);

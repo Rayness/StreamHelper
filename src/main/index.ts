@@ -98,6 +98,7 @@ async function bootstrap(): Promise<void> {
   }
 
   const ctx: AppContext = {
+    isUiVisible: () => !!mainWindow?.isVisible(),
     bus,
     settings,
     secrets,
@@ -163,7 +164,7 @@ async function bootstrap(): Promise<void> {
     },
   });
 
-  songRequests = new SongRequestService(ctx, music, (message) => overlay.broadcast('song', message));
+  songRequests = new SongRequestService(ctx, music, (message) => overlay.broadcast('song', message), (text, replyTo) => twitch.sendMessage(text, replyTo));
 
   const sendToAllChats = async (text: string) => {
     const ready = platforms.ready();
@@ -209,7 +210,7 @@ async function bootstrap(): Promise<void> {
     leaders: () => hype.leadersMessage(),
   });
 
-  const bot = new BotService(ctx, platforms, twitch);
+  const bot = new BotService(ctx, platforms, twitch, songRequests);
   const actions = new ActionRunner(ctx, {
     obsScene: (s) => obs.setScene(s),
     obsToggleSource: (scene, source) => obs.toggleSourceByName(scene, source),
@@ -301,7 +302,7 @@ async function bootstrap(): Promise<void> {
     stateTimer = setTimeout(() => {
       stateTimer = null;
       push('state', state.current);
-    }, 50);
+    }, mainWindow?.isVisible() ? 100 : 1000);
   });
   let settingsTimer: NodeJS.Timeout | null = null;
   bus.on('settings:changed', (key) => {
@@ -319,7 +320,14 @@ async function bootstrap(): Promise<void> {
   bus.on('chat:clear', () => push('chat:clear', {}));
   bus.on('event', (e) => push('event', e));
 
-  async function startOverlay(restart = false): Promise<void> {
+  let overlayChanges: Promise<void> = Promise.resolve();
+  function startOverlay(restart = false): Promise<void> {
+    const operation = overlayChanges.then(() => changeOverlay(restart));
+    overlayChanges = operation.catch(() => undefined);
+    return operation;
+  }
+
+  async function changeOverlay(restart: boolean): Promise<void> {
     const port = settings.get('overlayPort');
     try {
       if (restart) await overlay.restart(port);
@@ -332,6 +340,7 @@ async function bootstrap(): Promise<void> {
       state.patch('dockUrl', '');
       ctx.toast('error', 'toast.overlayPortBusy', { port });
     }
+    if (restart && state.current.overlayUrl) await obs.repairBrowserSources().catch((err) => console.warn('[obs] repair after port change', err));
   }
 
   // ---------- IPC ----------
@@ -348,7 +357,7 @@ async function bootstrap(): Promise<void> {
       events: alerts.recentEvents,
       version: app.getVersion(),
     }),
-    'settings:set': (key, value, profileId, base) => settings.setForProfile(key, value, profileId, base),
+    'settings:set': (key, value, profileId, base) => { settings.setForProfile(key, value, profileId, base); return settings.all; },
     'settings:reset': (key) => {
       settings.reset(key);
       return settings.all;
@@ -363,10 +372,11 @@ async function bootstrap(): Promise<void> {
     'twitch:cancelLogin': (acc) => twitch.cancelLogin(acc),
     'twitch:updateStream': (patch) => twitch.updateStream(patch),
     'twitch:searchCategories': (q) => twitch.searchCategories(q),
+    'twitch:rewards': () => twitch.listRewards(),
     'chat:send': async (text, replyTo) => {
       const p = platforms.get('twitch');
       if (!p?.isChatReady()) throw new Error('chat is not connected');
-      await p.sendMessage(text, replyTo, { asBroadcaster: true });
+      await p.sendMessage(text, replyTo, { asBroadcaster: !secrets.get('twitchBot') });
     },
     'chat:delete': (id) => twitch.deleteMessage(id),
     'chat:timeout': (userId, sec) => twitch.timeout(userId, sec),
@@ -493,6 +503,7 @@ async function bootstrap(): Promise<void> {
   app.on('before-quit', () => {
     quitting = true;
     settings.flush();
+    alerts.dispose();
     actions.dispose();
     twitch.stop();
     donationalerts.stop();

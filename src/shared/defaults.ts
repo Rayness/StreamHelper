@@ -1,3 +1,4 @@
+import { normalizeWorkspaceCards } from './workspace';
 import type {
   AlertSettings,
   AlertType,
@@ -84,7 +85,7 @@ export function defaultAlerts(lang: Language): AlertSettings {
   for (const t of Object.keys(ALERT_TEXT[lang]) as AlertType[]) types[t] = defaultAlertVariant(t, lang);
   return {
     gapSec: 1,
-    style: { fontFamily: 'Montserrat', fontSize: 40, textColor: '#ffffff', accentColor: '#9b6bff', layout: 'stacked', x: 50, y: 50, width: 90, anchor: 'center' },
+    style: { fontFamily: 'Montserrat', fontSize: 40, textColor: '#ffffff', accentColor: '#9b6bff', layout: 'stacked', x: 50, y: 50, width: 90, anchor: 'center', safeMargin: 24, imageWidth: 420, imageHeight: 480, messageFontSize: 22, textAlign: 'center', backgroundColor: '#15121f', backgroundOpacity: 0, padding: 16, borderRadius: 16 },
     types,
     donationTiers: [],
   };
@@ -534,7 +535,7 @@ export function defaultSettings(lang: Language): Settings {
     rewardsOverlay: { maxItems: 5, showInput: true, accentColor: '#9b6bff' },
     collabOverlay: { title: lang === 'ru' ? 'Коллаборация' : 'Collaboration', guests: [], showRaids: true, accentColor: '#9b6bff' },
     musicOverlay: { source: 'auto', style: 'card', showArtwork: true, showAlbum: true, showProgress: true, hideWhenPaused: true, accentColor: '#1db954', layout: 'horizontal', coverSize: 130, fontSize: 25, backgroundOpacity: 90, showSource: true },
-    songRequests: { enabled: false, rewardTitle: '', minDonation: 100, autoPlay: true, pauseWindowsMusic: true, resumeWindowsMusic: true, maxQueue: 30, videoLayout: 'full', videoPosition: 'left', videoWidth: 45, showRequester: true, showTitle: true, showQueueCount: true, showControls: true, volume: 100, accentColor: '#9146ff', backgroundOpacity: 88 },
+    songRequests: { enabled: false, rewardTitle: '', rewardId: '', chatEnabled: true, chatCommand: 'sr', chatPermission: 'everyone', chatCooldownSec: 10, minDonation: 100, autoPlay: true, pauseWindowsMusic: true, resumeWindowsMusic: true, maxQueue: 30, videoLayout: 'full', videoPosition: 'left', videoWidth: 45, showRequester: true, showTitle: true, showQueueCount: true, showControls: true, volume: 100, accentColor: '#9146ff', backgroundOpacity: 88 },
     songQueue: [],
     goals: [defaultGoal(lang)],
     timers: [defaultTimer(lang)],
@@ -562,6 +563,7 @@ export function defaultSettings(lang: Language): Settings {
     minimizeToTray: true,
     profiles: [],
     activeProfileId: '',
+    workspace: { cards: [] },
   };
 }
 
@@ -579,6 +581,7 @@ export function migrateSettings(s: Settings): Settings {
   const missing = defaultBuiltins(s.language).filter((b) => !known.has(b.id));
   return {
     ...s,
+    workspace: { cards: normalizeWorkspaceCards(s.workspace.cards) },
     alerts: {
       ...s.alerts,
       donationTiers: s.alerts.donationTiers.map((tier) => ({

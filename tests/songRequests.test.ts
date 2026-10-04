@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import type { ChatMessage } from '@shared/types';
 import { defaultSettings } from '@shared/defaults';
 import { EventBus } from '../src/main/core/eventBus';
 import { StateHub } from '../src/main/core/state';
@@ -30,6 +31,93 @@ function setup() {
 }
 
 describe('song requests', () => {
+  it('does not play a request removed while Windows music is pausing', async () => {
+    const { ctx, service, music } = setup();
+    let resolve!: (id: string) => void;
+    vi.mocked(music.pauseCurrent).mockImplementationOnce(() => new Promise((done) => { resolve = done; }));
+    service.setPlayerConnected(true);
+    service.add(`https://youtu.be/${first}`, 'Ann', 'manual', 'removed');
+    service.remove('removed');
+    resolve('Spotify.exe');
+    await vi.waitFor(() => expect(music.resumeSource).toHaveBeenCalled());
+    expect(ctx.state.current.songRequests.current).toBeNull();
+    expect(ctx.settings.get('songQueue')).toEqual([]);
+  });
+  it('retains paid requests on player errors and pauses autoplay until a manual retry', async () => {
+    const { ctx, service, music } = setup();
+    service.setPlayerConnected(true); service.add(`https://youtu.be/${first}`);
+    await vi.waitFor(() => expect(ctx.state.current.songRequests.current).not.toBeNull());
+    const old = service.overlayMessage as Extract<typeof service.overlayMessage, { type: 'song' }>;
+    expect(await service.playerFinished(old.request!.id, old.nonce!, 'Embed blocked')).toBe(true);
+    expect(ctx.settings.get('songQueue')).toHaveLength(1);
+    expect(ctx.state.current.songRequests.current).toBeNull();
+    expect(music.resumeSource).toHaveBeenCalled();
+    service.add(`https://youtu.be/${second}`);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(ctx.state.current.songRequests.current).toBeNull();
+    await service.play();
+    expect(ctx.state.current.songRequests.current?.videoId).toBe(first);
+  });
+  it('accepts chat commands and applies permissions, aliases and per-viewer cooldowns', async () => {
+    const { ctx, service } = setup();
+    const message = { id: 'm1', platform: 'twitch', userId: 'u1', userName: 'Ann', text: `!sr https://youtu.be/${first}`, roles: { broadcaster: false, moderator: false, vip: false, subscriber: false } } as ChatMessage;
+    expect(await service.handleChat(message)).toBe(true);
+    expect(ctx.settings.get('songQueue')).toMatchObject([{ source: 'chat', userName: 'Ann', videoId: first }]);
+    await service.handleChat({ ...message, id: 'm2', text: `!songrequest https://youtu.be/${second}` });
+    expect(ctx.settings.get('songQueue')).toHaveLength(1);
+    await service.handleChat({ ...message, id: 'm3', userId: 'u2', text: `!songrequest https://youtu.be/${second}` });
+    expect(ctx.settings.get('songQueue')).toHaveLength(2);
+    ctx.settings.set('songRequests', { ...ctx.settings.get('songRequests'), chatPermission: 'subscriber' });
+    await service.handleChat({ ...message, id: 'm4', userId: 'u3' });
+    expect(ctx.settings.get('songQueue')).toHaveLength(2);
+    expect(await service.handleChat({ ...message, fromSelf: true })).toBe(false);
+    ctx.settings.set('songRequests', { ...ctx.settings.get('songRequests'), chatEnabled: false });
+    expect(await service.handleChat(message)).toBe(false);
+  });
+
+  it('matches a selected reward by ID even after its title changes', () => {
+    const { ctx } = setup();
+    ctx.settings.set('songRequests', { ...ctx.settings.get('songRequests'), rewardId: 'selected' });
+    ctx.bus.emit('event', { id: 'reward-id', source: 'twitch', timestamp: 1, userName: 'Ann', type: 'redemption', rewardId: 'selected', rewardTitle: 'Renamed', cost: 1, input: `https://youtu.be/${first}` });
+    expect(ctx.settings.get('songQueue')).toHaveLength(1);
+    ctx.bus.emit('event', { id: 'wrong-id', source: 'twitch', timestamp: 2, userName: 'Ann', type: 'redemption', rewardId: 'other', rewardTitle: 'Song', cost: 1, input: `https://youtu.be/${second}` });
+    expect(ctx.settings.get('songQueue')).toHaveLength(1);
+  });
+
+  it('reports missing reward input instead of silently losing a request', () => {
+    const { ctx } = setup();
+    ctx.bus.emit('event', { id: 'empty', source: 'twitch', timestamp: 1, userName: 'Ann', type: 'redemption', rewardTitle: 'Song', cost: 1, input: '' });
+    expect(ctx.state.current.songRequests.lastError).toContain('no YouTube link');
+  });
+
+  it('keeps a track in the queue on player loss, resumes Windows music and invalidates the old completion', async () => {
+    const { ctx, service, music } = setup();
+    service.setPlayerConnected(true);
+    service.add(`https://youtu.be/${first}`);
+    await vi.waitFor(() => expect(ctx.state.current.songRequests.current).not.toBeNull());
+    const old = service.overlayMessage as Extract<typeof service.overlayMessage, { type: 'song' }>;
+    service.setPlayerConnected(false);
+    expect(ctx.state.current.songRequests.current).toBeNull();
+    expect(ctx.settings.get('songQueue')).toHaveLength(1);
+    expect(music.resumeSource).toHaveBeenCalledWith('Spotify.exe');
+    service.setPlayerConnected(true);
+    await vi.waitFor(() => expect(ctx.state.current.songRequests.current).not.toBeNull());
+    expect(await service.playerFinished(old.request!.id, old.nonce!)).toBe(false);
+    expect(ctx.settings.get('songQueue')).toHaveLength(1);
+  });
+
+  it('handles player loss while an asynchronous pause is in progress', async () => {
+    const { ctx, service, music } = setup();
+    let resolve!: (id: string) => void;
+    vi.mocked(music.pauseCurrent).mockImplementationOnce(() => new Promise((done) => { resolve = done; }));
+    service.setPlayerConnected(true);
+    service.add(`https://youtu.be/${first}`);
+    service.setPlayerConnected(false);
+    resolve('Spotify.exe');
+    await vi.waitFor(() => expect(music.resumeSource).toHaveBeenCalled());
+    expect(ctx.state.current.songRequests.current).toBeNull();
+    expect(ctx.settings.get('songQueue')).toHaveLength(1);
+  });
   it('accepts individual YouTube videos and rejects lookalike hosts', () => {
     expect(youtubeVideoId(`https://youtu.be/${first}?t=5`)).toBe(first);
     expect(youtubeVideoId(`https://www.youtube.com/watch?v=${first}`)).toBe(first);

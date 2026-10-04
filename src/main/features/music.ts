@@ -21,6 +21,7 @@ interface Candidate {
 const SOURCE_PRIORITY: Record<MusicSourceKind, number> = { spotify: 4, yandex: 3, browser: 2, other: 1 };
 const POLL_MS = 3_000;
 const RESYNC_MS = 15_000;
+const IDLE_POLL_MS = 15_000;
 
 /** Classify the source ID published by Windows; browser tabs do not expose their URL. */
 export function musicSourceKind(appId: string): MusicSourceKind {
@@ -153,15 +154,22 @@ export class MusicService {
     if (this.timer) return;
     this.stopped = false;
     void this.refresh();
-    this.timer = setInterval(() => void this.refresh(), POLL_MS);
+    this.schedulePoll();
   }
 
   stop(): void {
     this.stopped = true;
-    if (this.timer) clearInterval(this.timer);
+    if (this.timer) clearTimeout(this.timer);
     this.timer = null;
     this.unsubscribe();
     this.releaseManager();
+  }
+
+  private schedulePoll(): void {
+    if (this.stopped) return;
+    const active = this.ctx.isUiVisible?.() || this.ctx.state.current.overlayKinds.music || this.ctx.state.current.songRequests.current;
+    const delay = this.ctx.state.current.music.status === 'unavailable' ? 60_000 : active ? POLL_MS : IDLE_POLL_MS;
+    this.timer = setTimeout(async () => { await this.refresh(); this.schedulePoll(); }, delay);
   }
 
   private releaseManager(): void {
@@ -181,7 +189,9 @@ export class MusicService {
       }
       this.bindings = require(join(this.bindingsRoot, 'src', 'main', 'winrt', 'generated')) as Bindings;
     }
-    this.manager = await this.bindings.GlobalSystemMediaTransportControlsSessionManager.requestAsync();
+    const manager = await this.bindings.GlobalSystemMediaTransportControlsSessionManager.requestAsync();
+    if (this.stopped) { this.bindings.releaseProjected(manager); return; }
+    this.manager = manager;
   }
 
   private async refresh(): Promise<void> {
@@ -215,7 +225,7 @@ export class MusicService {
         let track: MusicTrack | null = null;
         if (selected) {
           const artworkKey = `${selected.session.sourceAppUserModelId}\0${selected.title}\0${selected.artist}\0${selected.album}`;
-          if (artworkKey !== this.lastArtworkKey || (!this.lastArtwork && Date.now() - this.lastArtworkAttemptAt >= RESYNC_MS)) {
+          if (artworkKey !== this.lastArtworkKey || (!this.lastArtwork && Date.now() - this.lastArtworkAttemptAt >= 60_000)) {
             this.lastArtwork = await artworkDataUrl(this.bindings, selected.properties);
             this.lastArtworkKey = artworkKey;
             this.lastArtworkAttemptAt = Date.now();

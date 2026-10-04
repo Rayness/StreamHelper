@@ -1,38 +1,7 @@
-import { eventAmount, eventVars } from '@shared/events';
-import { renderTemplate } from '@shared/template';
-import type { AlertSettings, AlertType, RenderedAlert, StreamEvent } from '@shared/types';
+import { renderAlert } from '@shared/alerts';
+export { renderAlert, mediaUrl, sampleEvent } from '@shared/alerts';
+import type { RenderedAlert, StreamEvent } from '@shared/types';
 import type { AppContext } from '../core/context';
-
-export function mediaUrl(name: string | null): string | null {
-  return name ? `/media/${encodeURIComponent(name)}` : null;
-}
-
-/** Turn an event into what the alert overlay shows. Returns null if this alert is disabled or below threshold. */
-export function renderAlert(e: StreamEvent, settings: AlertSettings, mainCurrency = e.type === 'donation' ? e.currency : ''): RenderedAlert | null {
-  const tier = e.type === 'donation' && (e.amountMain !== undefined || e.currency.toUpperCase() === mainCurrency.toUpperCase())
-    ? [...(settings.donationTiers ?? [])]
-        .filter((item) => Number.isFinite(item.minAmount) && item.minAmount <= (e.amountMain ?? e.amount))
-        .sort((a, b) => b.minAmount - a.minAmount)[0]
-    : undefined;
-  const v = tier?.variant ?? settings.types[e.type];
-  if (!v?.enabled) return null;
-  if (v.minAmount > 0 && eventAmount(e) < v.minAmount) return null;
-  const vars = eventVars(e);
-  return {
-    id: e.id,
-    type: e.type,
-    title: renderTemplate(v.title, vars),
-    message: renderTemplate(v.message, vars),
-    userName: e.userName,
-    durationSec: v.durationSec,
-    sound: mediaUrl(v.sound),
-    volume: v.volume,
-    image: mediaUrl(v.image),
-    animation: v.animation,
-    tts: v.tts,
-    style: tier?.style ?? settings.style,
-  };
-}
 
 /**
  * One queue shared by every alert overlay, so two browser sources never show the same alert
@@ -43,6 +12,8 @@ export class AlertQueue {
   private current: RenderedAlert | null = null;
   private timer: NodeJS.Timeout | null = null;
   private history: StreamEvent[] = [];
+  private displayUntil = 0;
+  private gapTimer: NodeJS.Timeout | null = null;
 
   constructor(
     private ctx: AppContext,
@@ -58,6 +29,17 @@ export class AlertQueue {
 
   get recentEvents(): StreamEvent[] {
     return this.history;
+  }
+
+  get activeAlert(): RenderedAlert | null {
+    if (!this.current || this.displayUntil <= Date.now()) return null;
+    return { ...this.current, durationSec: Math.max(.1, (this.displayUntil - Date.now()) / 1000) };
+  }
+
+  dispose(): void {
+    if (this.timer) clearTimeout(this.timer);
+    if (this.gapTimer) clearTimeout(this.gapTimer);
+    this.timer = this.gapTimer = null;
   }
 
   enqueueEvent(e: StreamEvent): void {
@@ -90,14 +72,16 @@ export class AlertQueue {
     this.skipShown();
     this.sync();
     // Small gap so the overlay's exit animation can finish.
-    setTimeout(() => this.next(), 400);
+    if (this.gapTimer) clearTimeout(this.gapTimer);
+    this.gapTimer = setTimeout(() => { this.gapTimer = null; this.next(); }, 600);
   }
 
   private next(): void {
-    if (this.current || this.ctx.state.current.alerts.paused) return;
+    if (this.current || this.gapTimer || this.ctx.state.current.alerts.paused) return;
     const alert = this.queue.shift();
     if (!alert) return;
     this.current = alert;
+    this.displayUntil = Date.now() + alert.durationSec * 1000;
     this.show(alert);
     this.sync();
     const gap = this.ctx.settings.get('alerts').gapSec;
@@ -114,31 +98,5 @@ export class AlertQueue {
 
   private sync(): void {
     this.ctx.state.patch('alerts', { queueLength: this.queue.length, current: this.current?.title ?? null });
-  }
-}
-
-let testSeq = 0;
-
-/** A realistic sample event for the "Test" buttons. */
-export function sampleEvent(type: AlertType, lang: 'ru' | 'en', currency: string, donationAmount?: number): StreamEvent {
-  const base = { id: `test_${Date.now().toString(36)}_${testSeq++}`, source: 'test' as const, timestamp: Date.now(), userName: 'StreamHelper' };
-  const msg = lang === 'ru' ? 'Это тестовое сообщение. Отличный стрим!' : 'This is a test message. Great stream!';
-  switch (type) {
-    case 'follow':
-      return { ...base, type };
-    case 'sub':
-      return { ...base, type, tier: '1000', isPrime: false };
-    case 'resub':
-      return { ...base, type, tier: '1000', months: 12, streak: 6, message: msg };
-    case 'giftsub':
-      return { ...base, type, tier: '1000', count: 5, anonymous: false };
-    case 'cheer':
-      return { ...base, type, bits: 500, message: msg, anonymous: false };
-    case 'raid':
-      return { ...base, type, viewers: 42 };
-    case 'donation':
-      return { ...base, type, amount: donationAmount ?? (currency === 'RUB' ? 500 : 10), currency, message: msg };
-    case 'redemption':
-      return { ...base, type, rewardTitle: lang === 'ru' ? 'Выпить воды' : 'Hydrate', cost: 1000, input: '' };
   }
 }

@@ -161,6 +161,7 @@ export function normalizeStreamEvent(type: string, e: any, anonymousName = 'Anon
         userName: e.user_name,
         userLogin: e.user_login,
         rewardTitle: e.reward?.title ?? '',
+        rewardId: e.reward?.id,
         cost: e.reward?.cost ?? 0,
         input: e.user_input ?? '',
       };

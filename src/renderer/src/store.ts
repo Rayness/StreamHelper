@@ -1,5 +1,8 @@
 import { useSyncExternalStore } from 'react';
 import type { ChatMessage, IpcInvoke, IpcPush, RuntimeState, Settings, SettingsKey, StreamEvent } from '@shared/types';
+import { reconcile } from '@shared/reconcile';
+import { resolveModuleAccess, workspaceTarget, isWorkspaceModule } from '@shared/workspace';
+import type { WorkspaceCard } from '@shared/types';
 
 export interface Toast {
   id: number;
@@ -22,6 +25,7 @@ const CHAT_LIMIT = 500;
 
 let data: AppData = { ready: false, version: '', settings: null, state: null, chat: [], events: [], toasts: [] };
 const listeners = new Set<() => void>();
+const subscribe = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; };
 
 function set(patch: Partial<AppData>): void {
   data = { ...data, ...patch };
@@ -30,10 +34,7 @@ function set(patch: Partial<AppData>): void {
 
 export function useApp<T>(select: (d: AppData) => T): T {
   return useSyncExternalStore(
-    (l) => {
-      listeners.add(l);
-      return () => listeners.delete(l);
-    },
+    subscribe,
     () => select(data),
   );
 }
@@ -85,10 +86,21 @@ let pendingSaves = 0;
 let settingsWrite: Promise<unknown> = Promise.resolve();
 /** Last settings received from main: what the open forms are based on (see `settings:set`). */
 let confirmed: Settings | null = null;
+let deferredSettings: Settings | null = null;
+const queuedSaves = new Map<string, () => Promise<void>>();
+let saveTimer: ReturnType<typeof setTimeout> | null = null;
 
 function applySettings(settings: Settings): void {
   confirmed = settings;
-  set({ settings });
+  set({ settings: data.settings ? reconcile(data.settings, settings) : settings });
+}
+
+function flushSaves(): void {
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = null;
+  const jobs = [...queuedSaves.values()];
+  queuedSaves.clear();
+  for (const job of jobs) settingsWrite = settingsWrite.then(job);
 }
 
 /** Optimistically update a settings section and persist it. */
@@ -97,20 +109,32 @@ export function saveSettings<K extends SettingsKey>(key: K, value: Settings[K]):
   const profileId = data.settings.activeProfileId;
   const base = confirmed?.activeProfileId === profileId ? confirmed[key] : undefined;
   set({ settings: { ...data.settings, [key]: value } });
-  pendingSaves++;
-  // Keep writes in edit order. Concurrent IPC calls could previously finish out of order,
-  // briefly restoring an older value in the form and persisting the wrong final setting.
-  settingsWrite = settingsWrite.then(() => call('settings:set', key, value, profileId, base)).finally(() => pendingSaves--);
+  const id = `${profileId}:${key}`;
+  if (!queuedSaves.has(id)) pendingSaves++;
+  queuedSaves.set(id, async () => {
+    try {
+      const saved = await call('settings:set', key, value, profileId, base);
+      if (saved) { confirmed = saved; deferredSettings = saved; }
+    } finally {
+      pendingSaves--;
+      if (pendingSaves === 0 && deferredSettings) { applySettings(deferredSettings); deferredSettings = null; }
+    }
+  });
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = setTimeout(flushSaves, 120);
 }
 
-export async function profileAction<K extends 'profiles:create' | 'profiles:rename' | 'profiles:activate' | 'profiles:delete' | 'profiles:overlay'>(
+/** Serialize profile operations and section resets after pending form writes. */
+export async function profileAction<K extends 'profiles:create' | 'profiles:rename' | 'profiles:activate' | 'profiles:delete' | 'profiles:overlay' | 'settings:reset'>(
   channel: K,
   ...args: Parameters<IpcInvoke[K]>
 ): Promise<boolean> {
+  flushSaves();
   pendingSaves++;
   const operation = settingsWrite.then(async () => {
     const settings = await call(channel, ...args);
     if (!settings) return false;
+    deferredSettings = null;
     applySettings(settings);
     return true;
   });
@@ -120,10 +144,13 @@ export async function profileAction<K extends 'profiles:create' | 'profiles:rena
 
 // ---------- navigation ----------
 
-export type Page = 'dashboard' | 'interactive' | 'alerts' | 'overlays' | 'profiles' | 'bot' | 'obs' | 'kawaki' | 'connections' | 'settings';
+export type Page = 'workspace' | 'dashboard' | 'interactive' | 'alerts' | 'overlays' | 'profiles' | 'bot' | 'obs' | 'kawaki' | 'connections' | 'settings';
 
 interface NavState {
-  page: Page;
+  page: 'workspace' | 'dashboard';
+  module?: WorkspaceCard;
+  catalog?: true | WorkspaceCard;
+  dialog?: 'profiles' | 'settings';
   /** Last open tab / item per page, so coming back lands where you left. */
   sub: Partial<Record<Page, string>>;
 }
@@ -131,11 +158,15 @@ interface NavState {
 function readNav(): NavState {
   try {
     const raw = JSON.parse(localStorage.getItem('nav') ?? 'null');
-    if (raw && typeof raw.page === 'string') return { page: raw.page, sub: raw.sub ?? {} };
+    if (raw && typeof raw.page === 'string') {
+      const sub = raw.sub && typeof raw.sub === 'object' ? raw.sub : {};
+      return { page: raw.version === 2 && raw.page === 'dashboard' ? 'dashboard' : 'workspace', sub,
+        module: isWorkspaceModule(raw.module) ? raw.module : workspaceTarget(raw.page, sub[raw.page]) };
+    }
   } catch {
     /* private mode, corrupted value */
   }
-  return { page: 'dashboard', sub: {} };
+  return { page: 'workspace', sub: {} };
 }
 
 let nav: NavState = readNav();
@@ -144,7 +175,7 @@ const navListeners = new Set<() => void>();
 function setNav(next: NavState): void {
   nav = next;
   try {
-    localStorage.setItem('nav', JSON.stringify(nav));
+    localStorage.setItem('nav', JSON.stringify({ ...nav, version: 2 }));
   } catch {
     /* ignore */
   }
@@ -152,8 +183,21 @@ function setNav(next: NavState): void {
 }
 
 export function navigate(page: Page, sub?: string): void {
-  setNav({ page, sub: sub === undefined ? nav.sub : { ...nav.sub, [page]: sub } });
+  flushSaves();
+  const remembered = sub === undefined ? nav.sub : { ...nav.sub, [page]: sub };
+  if (page === 'profiles' || page === 'settings') { setNav({ ...nav, dialog: page, sub: remembered }); return; }
+  const target = workspaceTarget(page, sub ?? remembered[page]);
+  setNav({ page: page === 'dashboard' ? 'dashboard' : 'workspace', sub: remembered,
+    ...resolveModuleAccess(target, data.settings?.workspace.cards) });
 }
+
+export function openModule(module: WorkspaceCard): void {
+  flushSaves();
+  setNav({ page: 'workspace', sub: nav.sub, ...resolveModuleAccess(module, data.settings?.workspace.cards) });
+}
+
+export function openCatalog(): void { flushSaves(); setNav({ page: 'workspace', sub: nav.sub, catalog: true }); }
+export function closeDialog(): void { setNav({ ...nav, dialog: undefined }); }
 
 export function useNav(): NavState {
   return useSyncExternalStore(
@@ -174,20 +218,31 @@ export function useSub<T extends string>(page: Page, fallback: T, allowed?: read
 }
 
 export async function init(): Promise<void> {
-  window.api.on('state', (state) => set({ state }));
+  window.addEventListener('beforeunload', flushSaves);
+  window.api.on('state', (state) => set({ state: data.state ? reconcile(data.state, state) : state }));
   window.api.on('settings', (settings) => {
     if (pendingSaves === 0) applySettings(settings);
+    else deferredSettings = settings;
   });
+  let incoming: ChatMessage[] = [];
+  let chatTimer: ReturnType<typeof setTimeout> | null = null;
+  const flushChat = () => {
+    if (chatTimer) clearTimeout(chatTimer);
+    chatTimer = null;
+    if (!incoming.length) return;
+    set({ chat: [...data.chat, ...incoming].slice(-CHAT_LIMIT) });
+    incoming = [];
+  };
   window.api.on('chat:message', (m) => {
-    const chat = data.chat.length >= CHAT_LIMIT ? data.chat.slice(-CHAT_LIMIT + 1) : data.chat.slice();
-    chat.push(m);
-    set({ chat });
+    incoming.push(m);
+    if (incoming.length > CHAT_LIMIT) incoming = incoming.slice(-CHAT_LIMIT);
+    if (!chatTimer) chatTimer = setTimeout(flushChat, document.hidden ? 500 : 50);
   });
-  window.api.on('chat:delete', ({ id }) => set({ chat: data.chat.map((m) => (m.id === id ? { ...m, deleted: true } : m)) as ChatMessage[] }));
+  window.api.on('chat:delete', ({ id }) => { flushChat(); set({ chat: data.chat.map((m) => (m.id === id ? { ...m, deleted: true } : m)) as ChatMessage[] }); });
   window.api.on('chat:clearUser', ({ userId }) =>
-    set({ chat: data.chat.map((m) => (m.userId === userId ? { ...m, deleted: true } : m)) as ChatMessage[] }),
+    { flushChat(); set({ chat: data.chat.map((m) => (m.userId === userId ? { ...m, deleted: true } : m)) as ChatMessage[] }); },
   );
-  window.api.on('chat:clear', () => set({ chat: [] }));
+  window.api.on('chat:clear', () => { incoming = []; set({ chat: [] }); });
   window.api.on('event', (e) => set({ events: [e, ...data.events].slice(0, 200) }));
   window.api.on('toast', (t) => toast(t.kind, t.key, t.params));
 

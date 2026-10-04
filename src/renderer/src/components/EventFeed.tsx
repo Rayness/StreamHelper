@@ -44,10 +44,11 @@ function eventMessage(e: StreamEvent): string {
   return '';
 }
 
-export function EventFeed({ limit = 100 }: { limit?: number }) {
+export function EventFeed({ limit = 100, readOnly = false }: { limit?: number; readOnly?: boolean }) {
   const t = useT();
   const clock = useClock();
   const events = useApp((d) => d.events);
+  const alertsAdded = useApp((d) => d.settings?.workspace.cards.includes('alerts') ?? false);
   if (events.length === 0) {
     return (
       <Empty icon="zap" title={t('feed.empty')}>
@@ -74,7 +75,7 @@ export function EventFeed({ limit = 100 }: { limit?: number }) {
               {msg && <div className="feed-msg">{msg}</div>}
             </div>
             <span className="feed-time">{clock(e.timestamp)}</span>
-            <IconButton icon="replay" label={t('feed.replay')} onClick={() => void call('alerts:replay', e.id)} />
+            {!readOnly && alertsAdded && <IconButton icon="replay" label={t('feed.replay')} onClick={() => void call('alerts:replay', e.id)} />}
           </li>
         );
       })}

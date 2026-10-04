@@ -7,6 +7,45 @@ import { SettingsStore } from '../src/main/core/store';
 import { defaultSettings } from '../src/shared/defaults';
 
 describe('stream profiles', () => {
+  it('persists independent workspaces including an intentionally empty layout', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'streamhelper-workspace-'));
+    const path = join(dir, 'settings.json');
+    let store: SettingsStore | undefined;
+    try {
+      store = new SettingsStore(path, new EventBus(), 'ru');
+      const originalId = store.get('activeProfileId');
+      store.set('workspace', { cards: ['chat', 'song'] });
+      store.createProfile('Минимальный');
+      const secondId = store.get('activeProfileId');
+      store.set('workspace', { cards: [] });
+      store.activateProfile(originalId);
+      expect(store.get('workspace').cards).toEqual(['chat', 'song']);
+      store.activateProfile(secondId); store.flush();
+      const reopened = new SettingsStore(path, new EventBus(), 'ru');
+      expect(reopened.get('workspace').cards).toEqual([]);
+      reopened.activateProfile(originalId);
+      expect(reopened.get('workspace').cards).toEqual(['chat', 'song']);
+      reopened.flush();
+    } finally { store?.flush(); rmSync(dir, { recursive: true, force: true }); }
+  });
+  it('migrates aggregate workspace cards in both live and inactive profiles', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'streamhelper-module-migration-'));
+    const file = join(dir, 'settings.json');
+    try {
+      const original = new SettingsStore(file,new EventBus(),'ru');
+      const firstId = original.get('activeProfileId');
+      original.createProfile('Second'); original.flush();
+      const stored = JSON.parse(readFileSync(file,'utf8'));
+      stored.workspace.cards = ['counters','activities','counter','unknown'];
+      stored.profiles[0].config.workspace.cards = ['counters','chat'];
+      writeFileSync(file,JSON.stringify(stored));
+      const reopened = new SettingsStore(file,new EventBus(),'ru');
+      expect(reopened.get('workspace').cards).toEqual(['counter','wheel','poll','giveaway','queue','guess','quiz','boss']);
+      reopened.activateProfile(firstId);
+      expect(reopened.get('workspace').cards).toEqual(['counter','chat']);
+      reopened.flush();
+    } finally { rmSync(dir, {recursive:true,force:true}); }
+  });
   it('wraps an existing setup in a default profile without losing its values', () => {
     const dir = mkdtempSync(join(tmpdir(), 'streamhelper-old-settings-'));
     const path = join(dir, 'settings.json');

@@ -33,6 +33,7 @@ interface Client {
   id: string | null;
   /** The app's own preview iframe: gets every message but isn't counted as "in OBS". */
   preview: boolean;
+  alive: boolean;
 }
 
 export interface OverlayServerOptions {
@@ -65,6 +66,7 @@ export class OverlayServer {
   private server: Server | null = null;
   private wss: WebSocketServer | null = null;
   private clients = new Set<Client>();
+  private heartbeat: NodeJS.Timeout | null = null;
 
   constructor(private opts: OverlayServerOptions) {}
 
@@ -79,7 +81,7 @@ export class OverlayServer {
   start(): Promise<void> {
     return new Promise((resolve, reject) => {
       const server = createServer((req, res) => void this.handle(req, res));
-      const wss = new WebSocketServer({ noServer: true });
+      const wss = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024, perMessageDeflate: false });
       server.on('upgrade', (req, socket, head) => {
         const url = new URL(req.url ?? '/', 'http://localhost');
         if (url.pathname !== '/ws') return socket.destroy();
@@ -87,21 +89,38 @@ export class OverlayServer {
       });
       server.once('error', reject);
       server.listen(this.opts.port, '127.0.0.1', () => {
+        if (this.opts.port === 0) this.opts.port = (server.address() as import('node:net').AddressInfo).port;
         server.off('error', reject);
         server.on('error', (err) => console.error('[overlay] server error', err));
         this.server = server;
         this.wss = wss;
+        this.heartbeat = setInterval(() => {
+          for (const client of this.clients) {
+            if (!client.alive) { client.ws.terminate(); continue; }
+            client.alive = false;
+            if (client.ws.readyState === client.ws.OPEN) client.ws.ping();
+          }
+        }, 30_000);
         resolve();
       });
     });
   }
 
   async stop(): Promise<void> {
-    for (const c of this.clients) c.ws.close();
+    if (this.heartbeat) clearInterval(this.heartbeat);
+    this.heartbeat = null;
+    for (const c of this.clients) c.ws.terminate();
     this.clients.clear();
+    this.notifyClients();
     this.wss?.close();
-    await new Promise<void>((r) => (this.server ? this.server.close(() => r()) : r()));
+    const server = this.server;
     this.server = null;
+    this.wss = null;
+    await new Promise<void>((r) => {
+      if (!server) return r();
+      server.close(() => r());
+      server.closeAllConnections();
+    });
   }
 
   async restart(port: number): Promise<void> {
@@ -113,11 +132,12 @@ export class OverlayServer {
   /** Send to every overlay of a kind (optionally only the one bound to `id`, e.g. a specific goal). */
   broadcast(kind: OverlayKind | OverlayKind[], msg: OverlayMessage, id?: string): void {
     const kinds = Array.isArray(kind) ? kind : [kind];
-    const data = JSON.stringify(msg);
+    let data: string | undefined;
     for (const c of this.clients) {
       if (!kinds.includes(c.kind)) continue;
       if (id !== undefined && c.id !== id) continue;
-      if (c.ws.readyState === c.ws.OPEN) c.ws.send(data);
+      if (c.ws.bufferedAmount > 1024 * 1024) { c.ws.terminate(); continue; }
+      if (c.ws.readyState === c.ws.OPEN) c.ws.send(data ??= JSON.stringify(msg));
     }
   }
 
@@ -133,14 +153,13 @@ export class OverlayServer {
   private onConnection(ws: WebSocket, url: URL): void {
     const kind = url.searchParams.get('kind') as OverlayKind;
     if (!OVERLAY_KINDS.includes(kind)) return ws.close(1008, 'unknown overlay kind');
-    const client: Client = { ws, kind, id: url.searchParams.get('id'), preview: url.searchParams.has('preview') };
+    const client: Client = { ws, kind, id: url.searchParams.get('id'), preview: url.searchParams.has('preview'), alive: true };
     this.clients.add(client);
     this.notifyClients();
     for (const m of this.opts.initialMessages(kind, client.id)) ws.send(JSON.stringify(m));
     // Keep NAT-less localhost connections alive and detect dead browser sources.
-    const ping = setInterval(() => ws.readyState === ws.OPEN && ws.ping(), 30_000);
+    ws.on('pong', () => { client.alive = true; });
     ws.on('close', () => {
-      clearInterval(ping);
       this.clients.delete(client);
       this.notifyClients();
     });
@@ -169,11 +188,11 @@ export class OverlayServer {
       }
       const overlay = /^\/overlay\/([a-z]+)\/?$/.exec(url.pathname);
       if (overlay && OVERLAY_KINDS.includes(overlay[1] as OverlayKind)) {
-        return this.sendFile(res, join(this.opts.overlaysDir, `${overlay[1]}.html`));
+        return this.sendFile(res, join(this.opts.overlaysDir, `${overlay[1]}.html`), req);
       }
       if (url.pathname.startsWith('/overlay/assets/')) {
         const file = safeJoin(join(this.opts.overlaysDir, 'assets'), url.pathname.slice('/overlay/assets/'.length));
-        return file ? this.sendFile(res, file) : this.send(res, 400, 'Bad path');
+        return file ? this.sendFile(res, file, req) : this.send(res, 400, 'Bad path');
       }
       if (url.pathname.startsWith('/media/')) {
         const file = safeJoin(this.opts.mediaDir, url.pathname.slice('/media/'.length));
@@ -196,11 +215,14 @@ export class OverlayServer {
     if (!existsSync(file) || !statSync(file).isFile()) return this.send(res, 404, 'Not found');
     const size = statSync(file).size;
     const type = MIME[extname(file).toLowerCase()] ?? 'application/octet-stream';
-    const range = req?.headers.range ? /bytes=(\d*)-(\d*)/.exec(req.headers.range) : null;
+    const range = req?.headers.range ? /^bytes=(\d*)-(\d*)$/.exec(req.headers.range) : null;
+    if (req?.headers.range && (!range || (!range[1] && !range[2]))) {
+      res.writeHead(416, { 'Content-Range': `bytes */${size}` }); return void res.end();
+    }
     if (range) {
-      const start = range[1] ? Number(range[1]) : 0;
-      const end = range[2] ? Math.min(Number(range[2]), size - 1) : size - 1;
-      if (start >= size || start > end) {
+      const start = range[1] ? Number(range[1]) : Math.max(0, size - Number(range[2]));
+      const end = range[1] && range[2] ? Math.min(Number(range[2]), size - 1) : size - 1;
+      if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start >= size || start > end) {
         res.writeHead(416, { 'Content-Range': `bytes */${size}` });
         return void res.end();
       }
@@ -210,11 +232,19 @@ export class OverlayServer {
         'Content-Range': `bytes ${start}-${end}/${size}`,
         'Accept-Ranges': 'bytes',
       });
-      createReadStream(file, { start, end }).pipe(res);
+      this.streamFile(res, file, req, start, end);
       return;
     }
     res.writeHead(200, { 'Content-Type': type, 'Content-Length': size, 'Accept-Ranges': 'bytes', 'Cache-Control': 'no-cache' });
-    createReadStream(file).pipe(res);
+    this.streamFile(res, file, req);
+  }
+
+  private streamFile(res: ServerResponse, file: string, req?: IncomingMessage, start?: number, end?: number): void {
+    if (req?.method === 'HEAD') { res.end(); return; }
+    const stream = createReadStream(file, { start, end });
+    stream.on('error', () => res.destroy());
+    res.on('close', () => stream.destroy());
+    stream.pipe(res);
   }
 
   private indexPage(): string {

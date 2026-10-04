@@ -48,7 +48,7 @@ beforeEach(() => {
   bus.on('chat:message', (m) => chat.push(m));
 });
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => { twitch.stop(); vi.unstubAllGlobals(); });
 
 const chatEvent = (id: string, userId: string, text: string) => ({
   broadcaster_user_id: '1',
@@ -62,6 +62,47 @@ const chatEvent = (id: string, userId: string, text: string) => ({
 const notify = (type: string, e: unknown) => (twitch as any).onNotification(type, e);
 
 describe('TwitchService', () => {
+  it('sends automated messages with the separate bot token and sender ID', async () => {
+    secrets.twitchBot = { ...secrets.twitch!, accessToken: 'bot-token', userId: '2', login: 'helper' };
+    state.patch('twitchBot', { status: 'connected', account: { userId: '2', login: 'helper', displayName: 'Helper' } });
+    await twitch.sendMessage('hello', 'reply');
+    expect(calls[0]).toMatchObject({ auth: 'Bearer bot-token', body: { broadcaster_id: '1', sender_id: '2', message: 'hello', reply_parent_message_id: 'reply' } });
+    notify('channel.chat.message', chatEvent('bot-echo', '2', 'hello'));
+    expect(chat[0].fromSelf).toBe(true);
+  });
+
+  it('reports disconnected bot accounts instead of silently using the streamer', async () => {
+    secrets.twitchBot = { ...secrets.twitch!, accessToken: 'bot-token', userId: '2' };
+    await expect(twitch.sendMessage('hello')).rejects.toThrow('bot account is disconnected');
+    expect(calls).toEqual([]);
+  });
+
+  it('reports a Twitch chat rejection and does not mark a later manual message as a bot echo', async () => {
+    handler = () => ({ status: 200, json: { data: [{ is_sent: false, drop_reason: { message: 'Permission missing' } }] } });
+    await expect(twitch.sendMessage('rejected')).rejects.toThrow('Permission missing');
+    notify('channel.chat.message', chatEvent('manual', '1', 'rejected'));
+    expect(chat[0].fromSelf).toBeUndefined();
+  });
+
+  it('does not mark the next identical manual message after recognizing a sent message ID', async () => {
+    await twitch.sendMessage('same');
+    notify('channel.chat.message', chatEvent('sent1', '1', 'same'));
+    notify('channel.chat.message', chatEvent('manual', '1', 'same'));
+    expect(chat.map((m) => !!m.fromSelf)).toEqual([true, false]);
+  });
+
+  it('cannot restore stream state after logout during a refresh', async () => {
+    const pending: ((response: Response) => void)[] = [];
+    vi.stubGlobal('fetch', () => new Promise<Response>((resolve) => { pending.push(resolve); }));
+    const refresh = twitch.refreshStreamInfo();
+    await vi.waitFor(() => expect(pending).toHaveLength(2));
+    secrets.twitch = undefined;
+    (twitch as any).onLoggedOut('broadcaster');
+    pending.forEach((resolve) => resolve(new Response(JSON.stringify({ data: [{ title: 'Late title', game_id: '9', viewer_count: 100 }] }))));
+    await refresh;
+    expect(state.current.stream.title).not.toBe('Late title');
+    expect(state.current.twitch.status).toBe('disconnected');
+  });
   it('sends chat as the broadcaster and recognizes the echo as its own', async () => {
     await twitch.sendMessage('bot reply');
     const post = calls.find((c) => c.url.endsWith('/chat/messages'))!;

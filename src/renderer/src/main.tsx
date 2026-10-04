@@ -4,6 +4,7 @@ import { App } from './App';
 import { init, useApp } from './store';
 import './styles.css';
 import './features.css';
+import './workspace.css';
 
 function Root() {
   const ready = useApp((d) => d.ready);

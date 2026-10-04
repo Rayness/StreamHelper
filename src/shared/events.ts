@@ -1,6 +1,20 @@
 import { tierLabel } from './template';
 import type { StreamEvent } from './types';
 
+/** Twitch activity has exactly one authority; donation providers only supply donations. */
+export function isTrustedStreamEvent(e: StreamEvent): boolean {
+  if (e.source === 'test') return true;
+  return e.type === 'donation'
+    ? ['donationalerts', 'streamlabs', 'streamelements'].includes(e.source)
+    : e.source === 'twitch';
+}
+
+/** A provider conversion is usable only in the currency it actually describes. */
+export function donationAmount(e: Extract<StreamEvent, { type: 'donation' }>, currency: string): number | null {
+  if (e.amountMain !== undefined && (!e.amountMainCurrency || e.amountMainCurrency.toUpperCase() === currency.toUpperCase())) return e.amountMain;
+  return !e.currency || e.currency.toUpperCase() === currency.toUpperCase() ? e.amount : null;
+}
+
 /** Template variables available for an event in alerts and bot event messages. */
 export function eventVars(e: StreamEvent): Record<string, string | number> {
   const vars: Record<string, string | number> = { user: e.userName, name: e.userName, message: '', amount: '' };

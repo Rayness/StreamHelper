@@ -1,5 +1,6 @@
-import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
-import type { OverlayKind } from '@shared/types';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import type { OverlayKind, OverlayMessage } from '@shared/types';
+import { renderAlert, sampleEvent } from '@shared/alerts';
 import { useT } from '../i18n';
 import { overlayDef, overlayPath } from '../overlayCatalog';
 import { call, callOk, useApp } from '../store';
@@ -10,8 +11,11 @@ import { Button, IconButton } from './ui';
  * Live preview of an overlay: the real overlay page at its native size, scaled down to fit.
  * Tall overlays (chat, wheel) are capped by `maxHeight` and centred.
  */
-export function ScaledFrame({ src, width, height, maxHeight = 460 }: { src: string; width: number; height: number; maxHeight?: number }) {
+export function ScaledFrame({ src, width, height, maxHeight = 460, message }: { src: string; width: number; height: number; maxHeight?: number; message?: OverlayMessage }) {
   const ref = useRef<HTMLDivElement>(null);
+  const frame = useRef<HTMLIFrameElement>(null);
+  const sendPreview = () => { if (message) frame.current?.contentWindow?.postMessage(message, new URL(src).origin); };
+  useEffect(sendPreview, [message, src]);
   const [box, setBox] = useState(0);
   useLayoutEffect(() => {
     const el = ref.current;
@@ -26,7 +30,9 @@ export function ScaledFrame({ src, width, height, maxHeight = 460 }: { src: stri
     <div ref={ref} className="scaled-frame checker" style={{ height: scale ? height * scale : Math.min(maxHeight, 200) }}>
       {scale > 0 && (
         <iframe
+          ref={frame}
           src={src}
+          onLoad={sendPreview}
           title="preview"
           style={{ width, height, transform: `scale(${scale})`, left: Math.max(0, (box - width * scale) / 2) }}
           tabIndex={-1}
@@ -42,11 +48,17 @@ const previewUrl = (url: string) => url + (url.includes('?') ? '&' : '?') + 'pre
 export function OverlayPreview({ kind, id, maxHeight, children }: { kind: OverlayKind; id?: string; maxHeight?: number; children?: ReactNode }) {
   const t = useT();
   const base = useApp((d) => d.state!.overlayUrl);
+  const alerts = useApp((d) => d.settings!.alerts);
+  const lang = useApp((d) => d.settings!.language);
+  const currency = useApp((d) => d.settings!.currency);
   const def = overlayDef(kind);
+  const message: OverlayMessage | undefined = kind === 'alerts' ? { type: 'alert', alert: renderAlert(sampleEvent('follow', lang, currency), {
+    ...alerts, types: { ...alerts.types, follow: { ...alerts.types.follow, enabled: true, minAmount: 0 } },
+  }, currency)! } : undefined;
   if (!base) return <p className="muted small">{t('overlays.serverDown')}</p>;
   return (
     <div className="ov-preview">
-      <ScaledFrame key={`${kind}:${id ?? ''}`} src={previewUrl(base + overlayPath(kind, id))} width={def.size[0]} height={def.size[1]} maxHeight={maxHeight} />
+      <ScaledFrame key={`${kind}:${id ?? ''}`} src={previewUrl(base + overlayPath(kind, id))} width={def.size[0]} height={def.size[1]} maxHeight={maxHeight} message={message} />
       {children && <div className="ov-preview-actions">{children}</div>}
     </div>
   );

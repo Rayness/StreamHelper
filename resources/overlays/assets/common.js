@@ -11,9 +11,14 @@
     const id = params.get('id');
     const url = `ws://${location.host}/ws?kind=${kind}${id ? `&id=${encodeURIComponent(id)}` : ''}${preview ? '&preview=1' : ''}`;
     let ws;
+    let retry;
+    let stopped = false;
+    let attempts = 0;
     let profileVisible = true;
     const open = () => {
+      if (stopped) return;
       ws = new WebSocket(url);
+      ws.onopen = () => { attempts = 0; };
       ws.onmessage = (e) => {
         let msg;
         try {
@@ -38,10 +43,11 @@
         if (!profileVisible) return;
         onMessage(msg);
       };
-      ws.onclose = () => setTimeout(open, 2000);
+      ws.onclose = () => { if (!stopped) retry = setTimeout(open, Math.min(10000, 1000 * 2 ** Math.min(attempts++, 4))); };
       ws.onerror = () => ws.close();
     };
     open();
+    window.addEventListener('pagehide', () => { stopped = true; clearTimeout(retry); ws?.close(); }, { once: true });
   }
 
   /** Load a Google Font by family name (no-op for system fonts). */
@@ -103,5 +109,19 @@
 
   const reducedMotion = params.has('reducedMotion');
 
-  window.SH = { params, connect, loadFont, fontStack, el, formatClock, useFont, mediaUrl, tr, plural, reducedMotion, preview };
+  /** Fit the entire alert, including media and long text, into the browser-source viewport. */
+  function alertBounds(viewWidth, viewHeight, width, height, style) {
+    const number = (v, fallback) => Number.isFinite(Number(v)) ? Number(v) : fallback;
+    const margin = Math.max(0, Math.min(number(style.safeMargin, 24), viewWidth / 4, viewHeight / 4));
+    const scale = Math.min(1, (viewWidth - margin * 2) / Math.max(1, width), (viewHeight - margin * 2) / Math.max(1, height));
+    const w = width * scale, h = height * scale;
+    const anchor = style.anchor || 'center';
+    const ax = anchor.endsWith('Left') ? 0 : anchor.endsWith('Right') ? 1 : .5;
+    const ay = anchor.startsWith('top') ? 0 : anchor.startsWith('bottom') ? 1 : .5;
+    const x = Math.max(0, Math.min(100, number(style.x, 50))) / 100 * viewWidth - w * ax;
+    const y = Math.max(0, Math.min(100, number(style.y, 50))) / 100 * viewHeight - h * ay;
+    return { left: Math.max(margin, Math.min(viewWidth - margin - w, x)), top: Math.max(margin, Math.min(viewHeight - margin - h, y)), scale };
+  }
+
+  window.SH = { params, connect, loadFont, fontStack, el, formatClock, useFont, mediaUrl, tr, plural, reducedMotion, preview, alertBounds };
 })();

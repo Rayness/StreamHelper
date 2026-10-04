@@ -11,28 +11,8 @@ export function Obs() {
   const obs = useApp((d) => d.state!.obs);
   const connected = obs.status === 'connected';
   const dockUrl = useApp((d) => d.state!.dockUrl);
-  const subs = useApp((d) => d.settings!.subForStream);
-  const subsState = useApp((d) => d.state!.subForStream);
   return (
     <div className="page">
-      <PageHeader
-        title={t('nav.obs')}
-        subtitle={t('obs.subtitle')}
-        actions={
-          <>
-            <StatusText status={obs.status} error={obs.error} />
-            {connected ? (
-              <Button icon="logout" onClick={() => void call('obs:disconnect')}>
-                {t('common.disconnect')}
-              </Button>
-            ) : (
-              <Button variant="primary" icon="plug" onClick={() => void call('obs:connect')}>
-                {t('common.connect')}
-              </Button>
-            )}
-          </>
-        }
-      />
       {!connected ? (
         <Card>
           <Empty icon="video" title={t('obs.notConnected')}>
@@ -95,21 +75,6 @@ export function Obs() {
           <Button disabled={!dockUrl} onClick={() => void call('shell:openExternal', dockUrl)}>{t('overlays.open')}</Button>
         </div>
       </Card>
-      <Card title={t('subs.title')} actions={<StatusText status={subsState.status} error={subsState.error} />}>
-        <p className="muted small">{t('subs.hint')}</p>
-        <div className="form">
-          <Field label={t('subs.enabled')}><Toggle checked={subs.enabled} onChange={(enabled) => saveSettings('subForStream', { ...subs, enabled })} /></Field>
-          <Field label={t('subs.port')}><NumberInput value={subs.port} min={1024} max={65535} onChange={(port) => saveSettings('subForStream', { ...subs, port })} /></Field>
-        </div>
-        <div className="row-gap wrap">
-          <Button disabled={!subs.enabled} onClick={() => void call('subs:check')}>{t('common.reload')}</Button>
-          <Button disabled={!connected || !subsState.overlayUrl} onClick={() => void call('obs:addBrowserSource', 'SubForStream · Субтитры', subsState.overlayUrl, 1920, 1080)}>{t('subs.addToObs')}</Button>
-          <Button disabled={!subsState.overlayUrl} onClick={() => void call('shell:openExternal', subsState.overlayUrl + 'admin')}>{t('subs.admin')}</Button>
-          <Button disabled={!subsState.overlayUrl} onClick={() => void call('subs:clear')}>{t('subs.clear')}</Button>
-        </div>
-        {subsState.overlayUrl && <p className="muted small mono">{subsState.overlayUrl}</p>}
-      </Card>
-      <Actions />
     </div>
   );
 }
@@ -240,7 +205,7 @@ function StepEditor({ step, onChange, t }: { step: ActionStep; onChange: (s: Act
   }
 }
 
-function Actions() {
+export function Actions() {
   const t = useT();
   const actions = useApp((d) => d.settings!.actions);
   const update = (id: string, patch: Partial<QuickAction>) => saveSettings('actions', actions.map((a) => (a.id === id ? { ...a, ...patch } : a)));
@@ -289,9 +254,7 @@ function Actions() {
               <Field label={t('actions.hotkey')} hint={t('actions.hotkeyHint')}>
                 <HotkeyInput value={a.hotkey} onChange={(hotkey) => update(a.id, { hotkey })} />
               </Field>
-              <Field label={t('actions.onDashboard')}>
-                <Toggle checked={a.showOnDashboard} onChange={(showOnDashboard) => update(a.id, { showOnDashboard })} />
-              </Field>
+
               <Field label={t('actions.redemption')} hint={t('actions.redemptionHint')} wide>
                 <TextInput value={a.redemptionTitle ?? ''} onChange={(redemptionTitle) => update(a.id, { redemptionTitle })} placeholder={t('actions.redemptionPh')} />
               </Field>
@@ -321,5 +284,28 @@ function Actions() {
         <Icon name="keyboard" size={14} /> {t('actions.globalHint')}
       </p>
     </>
+  );
+}
+
+export function SubForStream() {
+  const t = useT();
+  const connected = useApp((d) => d.state!.obs.status === 'connected');
+  const subs = useApp((d) => d.settings!.subForStream);
+  const subsState = useApp((d) => d.state!.subForStream);
+  return (
+      <Card title={t('subs.title')} actions={<StatusText status={subsState.status} error={subsState.error} />}>
+        <p className="muted small">{t('subs.hint')}</p>
+        <div className="form">
+          <Field label={t('subs.enabled')}><Toggle checked={subs.enabled} onChange={(enabled) => saveSettings('subForStream', { ...subs, enabled })} /></Field>
+          <Field label={t('subs.port')}><NumberInput value={subs.port} min={1024} max={65535} onChange={(port) => saveSettings('subForStream', { ...subs, port })} /></Field>
+        </div>
+        <div className="row-gap wrap">
+          <Button disabled={!subs.enabled} onClick={() => void call('subs:check')}>{t('common.reload')}</Button>
+          <Button disabled={!connected || !subsState.overlayUrl} onClick={() => void call('obs:addBrowserSource', 'SubForStream · Субтитры', subsState.overlayUrl, 1920, 1080)}>{t('subs.addToObs')}</Button>
+          <Button disabled={!subsState.overlayUrl} onClick={() => void call('shell:openExternal', subsState.overlayUrl + 'admin')}>{t('subs.admin')}</Button>
+          <Button disabled={!subsState.overlayUrl} onClick={() => void call('subs:clear')}>{t('subs.clear')}</Button>
+        </div>
+        {subsState.overlayUrl && <p className="muted small mono">{subsState.overlayUrl}</p>}
+      </Card>
   );
 }

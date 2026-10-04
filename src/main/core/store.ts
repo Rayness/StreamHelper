@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { defaultSettings, mergeDefaults, migrateSettings } from '@shared/defaults';
 import { merge3 } from '@shared/merge';
 import { ALL_OVERLAY_KINDS, PROFILE_KEYS, profileSnapshot } from '@shared/profiles';
+import { normalizeWorkspaceCards } from '@shared/workspace';
 import type { Language, OverlayKind, ProfileConfig, ProfileSettingsKey, Settings, SettingsKey } from '@shared/types';
 import type { EventBus } from './eventBus';
 
@@ -38,6 +39,7 @@ export class SettingsStore {
     } else {
       this.data.profiles = this.data.profiles.map((profile) => {
         const config = mergeDefaults(base, profile.config);
+        config.workspace = { cards: normalizeWorkspaceCards(config.workspace.cards) };
         config.alerts.donationTiers = config.alerts.donationTiers.map((tier) => ({
           ...tier,
           style: tier.style ? { ...config.alerts.style, ...tier.style } : undefined,

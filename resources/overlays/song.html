@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
   <title>StreamHelper — Song requests</title>
   <style>
     :root{--accent:#9146ff;--video-width:45%;--panel-bg:rgba(15,12,23,.88)}
@@ -45,17 +46,19 @@
     const $=(id)=>document.getElementById(id);
     const sample={id:'preview',videoId:'',url:'',userName:'Viewer'};
     const defaults={videoLayout:'full',videoPosition:'left',videoWidth:45,showRequester:true,showTitle:true,showQueueCount:true,showControls:true,volume:100,accentColor:'#9146ff',backgroundOpacity:88};
-    let player=null,playerReady=false,apiReady=false,active=null,pending=null,reported=false,controls=true,config=defaults,lang='ru',videoTitle='';
+    let player=null,playerReady=false,apiReady=false,active=null,pending=null,reported=false,controls=true,config=defaults,lang='ru',videoTitle='',startTimer=null,apiFailed=false;
     const label=(ru,en)=>SH.tr(lang,ru,en);
     window.onYouTubeIframeAPIReady=()=>{apiReady=true;if(pending)load(pending)};
-    if(!SH.preview){const script=document.createElement('script');script.src='https://www.youtube.com/iframe_api';document.head.appendChild(script)}
+    if(!SH.preview){const script=document.createElement('script');script.src='https://www.youtube.com/iframe_api';script.onerror=()=>{apiFailed=true;if(active)void finished(label('Не удалось загрузить YouTube. Проверьте доступ к YouTube.','Could not load YouTube. Check YouTube access.'))};document.head.appendChild(script)}
     async function finished(error=''){
       if(!active||reported||SH.preview)return;
       reported=true;
+      clearTimeout(startTimer);startTimer=null;
       const request=active;
       try{await fetch('/song/finished',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:request.request.id,nonce:request.nonce,error})})}catch(_){/* reconnect will resync */}
     }
     function stopPlayer(){
+      clearTimeout(startTimer);startTimer=null;
       if(player){try{player.destroy()}catch(_){/* player may still be loading */}}
       player=null;playerReady=false;$('playerHost').replaceChildren();
     }
@@ -68,8 +71,8 @@
       const request=active.request;
       player=new YT.Player(node,{width:'100%',height:'100%',videoId:request.videoId,playerVars:{autoplay:1,controls:controls?1:0,playsinline:1,origin:location.origin},events:{
         onReady:(e)=>{if(player!==e.target||!active||config.videoLayout==='queue')return;playerReady=true;applyVolume();if(startAt>0)player.seekTo(startAt,true);player.playVideo()},
-        onStateChange:(e)=>{if(player!==e.target||!active)return;if(e.data===YT.PlayerState.PLAYING){videoTitle=player.getVideoData()?.title||videoTitle;render()}if(e.data===YT.PlayerState.ENDED&&player.getVideoData()?.video_id===active?.request.videoId)void finished()},
-        onError:(e)=>{if(player===e.target)void finished('YouTube error '+e.data)}
+        onStateChange:(e)=>{if(player!==e.target||!active)return;if(e.data===YT.PlayerState.PLAYING){clearTimeout(startTimer);startTimer=null;videoTitle=player.getVideoData()?.title||videoTitle;render()}if(e.data===YT.PlayerState.ENDED&&player.getVideoData()?.video_id===active?.request.videoId)void finished()},
+        onError:(e)=>{if(player===e.target)void finished([101,150].includes(e.data)?label('Автор запретил проигрывание этого видео в OBS. Выберите другой трек.','This video cannot be embedded in OBS. Choose another track.')+' ('+e.data+')':e.data===153?label('YouTube не подтвердил источник проигрывателя. Перезагрузите браузерный источник OBS.','YouTube could not identify the player. Refresh the OBS browser source.')+' (153)':'YouTube error '+e.data)}
       }});
     }
     function render(){
@@ -100,7 +103,7 @@
       if(SH.preview){render();return}
       if(!msg.request){active=null;videoTitle='';stopPlayer();render();return}
       const same=active?.request.id===msg.request.id&&active.nonce===msg.nonce;
-      if(!same){active=msg;reported=false;videoTitle='';render();if(apiReady)createPlayer();return}
+      if(!same){active=msg;reported=false;videoTitle='';render();if(apiReady)createPlayer();if(apiFailed)void finished(label('Не удалось загрузить YouTube.','Could not load YouTube.'));else startTimer=setTimeout(()=>void finished(label('YouTube не начал воспроизведение. Проверьте источник OBS и доступ к YouTube.','YouTube did not start playback. Check the OBS source and YouTube access.')),60000);return}
       active=msg;
       if(!player&&apiReady)createPlayer();
       else if(player&&controls!==!!config.showControls){let time=0;try{if(playerReady)time=player.getCurrentTime()}catch(_){}createPlayer(time)}

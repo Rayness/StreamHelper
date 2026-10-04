@@ -51,11 +51,14 @@ export class StateHub {
   patch<K extends keyof RuntimeState>(key: K, value: Partial<RuntimeState[K]> | RuntimeState[K]): void {
     const prev = this.state[key];
     const next = typeof prev === 'object' && prev !== null && !Array.isArray(prev) ? { ...prev, ...(value as object) } : value;
+    if (Object.is(prev, next) || (prev && next && typeof prev === 'object' && !Array.isArray(prev) &&
+      Object.keys(next).length === Object.keys(prev).length && Object.entries(next).every(([k, v]) => Object.is((prev as Record<string, unknown>)[k], v)))) return;
     this.state = { ...this.state, [key]: next };
     this.bus.emit('state:dirty');
   }
 
   replace<K extends keyof RuntimeState>(key: K, value: RuntimeState[K]): void {
+    if (Object.is(this.state[key], value)) return;
     this.state = { ...this.state, [key]: value };
     this.bus.emit('state:dirty');
   }

@@ -1,7 +1,7 @@
 {
   "name": "streamhelper",
   "productName": "StreamHelper",
-  "version": "0.8.0",
+  "version": "0.10.0",
   "description": "Всё для стрима в одном приложении: оверлеи для OBS, чат-бот, объединённый чат, алерты донатов и управление трансляцией",
   "main": "./out/main/index.js",
   "author": "StreamHelper",
@@ -16,6 +16,7 @@
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
     "generate:winrt": "dynwinrt-codegen generate --class-name Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager,Windows.Storage.Streams.DataReader --output src/main/winrt/generated",
     "test": "vitest run",
+    "test:ui": "npm run build && node scripts/test-ui.cjs",
     "test:watch": "vitest",
     "dist": "electron-vite build && electron-builder --win --publish never",
     "postinstall": "electron-builder install-app-deps"

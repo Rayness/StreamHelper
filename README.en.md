@@ -2,7 +2,9 @@
 
 [Русский](README.md) · [English](README.en.md)
 
-StreamHelper is a Windows desktop app for managing a stream, chat, and OBS browser sources from one place. The latest published release is **0.8.0**. The interface supports Russian and English.
+StreamHelper is a Windows desktop app for managing a stream, chat, and OBS browser sources from one place. Current version: **0.10.0**. The interface supports Russian and English.
+
+Release **0.10.0**: a module-based workspace is the only place to configure features. Add a module first; Monitor shows its status and progress. [Verification report (Russian)](docs/verification-0.10.0.md).
 
 Releases are available [in this repository](https://github.com/Rayness/StreamHelper/releases) and in the [public update repository](https://github.com/Rayness/StreamHelper-Releases/releases).
 
@@ -10,52 +12,38 @@ Releases are available [in this repository](https://github.com/Rayness/StreamHel
 
 These screenshots use fictional demo data; they contain no real accounts or tokens.
 
-**Dashboard:** live status bar, chat, viewer activities, counters, and OBS.
+**Workspace, module catalog and alert editor:**
 
-![StreamHelper dashboard](docs/screenshots/dashboard-en.png)
+![Workspace](docs/screenshots/workspace-empty-0.10.0.png)
 
-**Chat overlay settings and live preview:**
+![Module catalog](docs/screenshots/workspace-catalog-0.10.0.png)
 
-![Chat overlay settings](docs/screenshots/chat-settings-en.png)
-
-**Now Playing overlay:**
-
-![Now Playing overlay settings](docs/screenshots/music-settings-en.png)
-
-**Channel rewards and collaboration:**
-
-| Twitch channel rewards | Guests and incoming raids |
-| --- | --- |
-| ![Channel rewards](docs/screenshots/rewards-settings-en.png) | ![Collaboration overlay](docs/screenshots/collab-settings-en.png) |
+![Alert module](docs/screenshots/alerts-content-0.10.0.png)
 
 ## Download and first run
 
-1. Download `StreamHelper-Setup-0.8.0.exe` from the [latest release](https://github.com/Rayness/StreamHelper/releases/latest) or its [public mirror](https://github.com/Rayness/StreamHelper-Releases/releases/latest), then run the installer. The Windows installer is currently **not signed** with a publisher certificate.
-2. Open **Connections** and sign in to Twitch as the broadcaster. Twitch uses a device code shown in the app. A separate bot account is optional.
-3. To control OBS, enable the **WebSocket Server** in OBS Studio and connect it in StreamHelper's **Connections** page. The usual OBS port is 4455.
-4. Open **Overlays**, choose and configure a source, and click **Add to OBS**. StreamHelper creates a Browser Source in the current scene. You can also copy the URL and add it manually.
+1. Download `StreamHelper-Setup-0.10.0.exe` from [release 0.10.0](https://github.com/Rayness/StreamHelper/releases/tag/v0.10.0) or the [update repository](https://github.com/Rayness/StreamHelper-Releases/releases/tag/v0.10.0). The Windows installer is currently unsigned.
+2. Open **Workspace → Add module → Twitch** and sign in as the broadcaster. Authorization uses a device code on Twitch.
+3. If needed, add **OBS** and enter its WebSocket address, port and password. The usual port is 4455.
+4. Add the features you need: Alerts, Chat, Song Requests or individual activities. Select an added module to configure it and use **Add to OBS** for its browser source.
+5. Use **Monitor** to follow progress. The separate bot account is configured inside the **Chat bot** module.
 
-Keep StreamHelper running during the stream. Its local server on `127.0.0.1` serves the overlays and updates them over WebSocket. The default port is 4848; change it in **Settings** if needed. The app can stay in the system tray when its window is closed.
+Keep StreamHelper running during the stream. Its local server on `127.0.0.1` serves the overlays and updates them over WebSocket. The default port is 4848; change it in **App preferences** if needed. The app can stay in the system tray when its window is closed.
 
 ### App sections
 
-| Section | What it does |
+| Surface | What it does |
 | --- | --- |
-| Dashboard | Live status bar (viewers, uptime, this stream's totals, alerts, OBS output), combined chat with moderation, quick actions, every viewer activity in one card, counters, scenes, and recent events. |
-| Profiles | Separate sets of overlay, alert, interactive, bot, and quick action settings. |
-| Overlays | Settings, live previews, URLs, and one-click OBS browser sources. |
-| Alerts | Text, sound, media, speech, separate donation styles by amount, and the event queue. |
-| Interactive | Wheel, poll, giveaway, viewer queue, guess the number, chat boss, and anime quiz. |
-| Chat bot | Custom commands, scheduled messages, counters, and moderation. |
-| OBS & actions | Scenes, recording, stream controls, sources, audio, quick actions, SubForStream, and the OBS dock. |
-| Connections | Twitch, OBS, donations, Streamer.bot, Discord, and Kawaki. |
-| Settings | Language, local server port, section resets, and updates. |
+| Workspace | Add, configure and manage only selected modules. Each profile has its own module list. |
+| Monitor | Status, queues, goals, timers, counters, activity results and recent events. No configuration forms. |
+| Profile picker | Duplicate, rename, switch and delete profiles. |
+| App preferences | Language, currency, tray behavior, local server port and updates. |
 
-Press `Ctrl+K` to open the command palette.
+Press `Ctrl+K` to search added modules and their actions. Removed modules cannot be configured through search or old shortcuts; their settings and progress are preserved.
 
 ## OBS overlays
 
-Each overlay is a separate OBS Browser Source. The **Overlays** page shows its recommended size, live preview, URL, and connected-source count.
+Each overlay is a separate OBS Browser Source. Each added widget module shows its recommended size, preview, URL and connected-source count.
 
 | Source | Content |
 | --- | --- |
@@ -97,11 +85,11 @@ Each overlay is a separate OBS Browser Source. The **Overlays** page shows its r
 | Service | Setup |
 | --- | --- |
 | Twitch | Broadcaster Device Code sign-in; optional separate bot login. Provides chat, EventSub events, and stream information. |
-| OBS Studio | Local obs-websocket v5. Enable WebSocket Server in OBS and enter its address, port, and password under **Connections**. |
+| OBS Studio | Local obs-websocket v5. Enable WebSocket Server in OBS and enter its address, port, and password inside its workspace module. |
 | DonationAlerts | Authorize in the app. If the built-in Client ID is unavailable, enter your own under advanced settings. |
 | Streamlabs | Paste your Socket API Token. |
 | StreamElements | Paste the Channel ID and JWT from StreamElements → Account → Channels. The app accepts completed, approved Astro tips. |
-| Streamer.bot | Enable its HTTP Server and enter the port (usually 7474) under **Connections**. Assign actions to quick buttons, hotkeys, or channel rewards. |
+| Streamer.bot | Enable its HTTP Server and enter the port (usually 7474) inside its workspace module. Assign actions to quick buttons, hotkeys, or channel rewards. |
 | Discord | Create a text-channel webhook and paste its URL. You can enable live announcements and donation notifications and send a test message. |
 | Kawaki | Sign in through `kawaki.ru/link` for the now-watching overlay, `!аниме` command, and stream-title template. If player data is unavailable, the most recent title in Watching is used. |
 | SubForStream | Run SubForStream, then enable the integration under **OBS & actions** and set its local port (usually 5000). Add its caption overlay to OBS and clear captions from StreamHelper. |

@@ -61,6 +61,31 @@ function harness(fake: FakeTwitch) {
 }
 
 describe('EventSubSocket', () => {
+  it('recovers when a migration socket closes before welcome', async () => {
+    const fake = new FakeTwitch((ws, path, i) => {
+      if (path.includes('migrate')) ws.close(4000, 'migration failed');
+      else send(ws, welcome(`s${i}`));
+    });
+    const h = harness(fake); h.sock.start();
+    await until(() => h.sessions.length === 1);
+    send(fake.sockets[0], { metadata: meta('session_reconnect'), payload: { session: { reconnect_url: fake.url + '?migrate=1' } } });
+    await until(() => h.sessions.length === 2);
+    expect(fake.paths).toEqual(['/ws', '/ws?migrate=1', '/ws']);
+  });
+
+  it('ignores completion of a pending subscription after stop', async () => {
+    const fake = new FakeTwitch((ws) => send(ws, welcome('pending')));
+    let complete!: () => void;
+    const statuses: string[] = [];
+    const sock = new EventSubSocket({ onSession: () => new Promise<void>((resolve) => { complete = resolve; }), onNotification: () => undefined, onStatus: (s) => statuses.push(s) }, fake.url);
+    cleanup.push(() => sock.stop(), () => fake.close());
+    sock.start();
+    await until(() => !!complete);
+    sock.stop(); complete();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(statuses.at(-1)).toBe('disconnected');
+    expect(statuses).not.toContain('connected');
+  });
   it('subscribes on welcome and delivers notifications once', async () => {
     const fake = new FakeTwitch((ws) => send(ws, welcome('s1')));
     const h = harness(fake);

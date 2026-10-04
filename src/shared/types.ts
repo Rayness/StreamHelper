@@ -86,9 +86,10 @@ export type StreamEvent =
       currency: string;
       /** Amount converted to the streamer's main currency when the provider supplies it. */
       amountMain?: number;
+      amountMainCurrency?: string;
       message: string;
     })
-  | (EventBase & { type: 'redemption'; rewardTitle: string; cost: number; input: string });
+  | (EventBase & { type: 'redemption'; rewardTitle: string; rewardId?: string; cost: number; input: string });
 
 export type SubTier = '1000' | '2000' | '3000';
 
@@ -151,7 +152,7 @@ export interface ObsState extends ConnectionState {
 }
 
 export interface RuntimeState {
-  twitch: ConnectionState & { deviceCode?: DeviceCodePrompt };
+  twitch: ConnectionState & { deviceCode?: DeviceCodePrompt; subscriptionErrors?: Record<string, string> };
   kawaki: KawakiState;
   twitchBot: ConnectionState & { deviceCode?: DeviceCodePrompt };
   donationalerts: ConnectionState;
@@ -282,6 +283,15 @@ export interface AlertStyle {
   y: number;
   width: number;
   anchor: 'center' | 'topLeft' | 'topRight' | 'bottomLeft' | 'bottomRight';
+  safeMargin: number;
+  imageWidth: number;
+  imageHeight: number;
+  messageFontSize: number;
+  textAlign: 'left' | 'center' | 'right';
+  backgroundColor: string;
+  backgroundOpacity: number;
+  padding: number;
+  borderRadius: number;
 }
 
 export interface AlertSettings {
@@ -489,13 +499,18 @@ export interface SongRequest {
   videoId: string;
   url: string;
   userName: string;
-  source: 'redemption' | 'donation' | 'manual';
+  source: 'redemption' | 'donation' | 'chat' | 'manual';
   requestedAt: number;
 }
 
 export interface SongRequestSettings {
   enabled: boolean;
   rewardTitle: string;
+  rewardId: string;
+  chatEnabled: boolean;
+  chatCommand: string;
+  chatPermission: Permission;
+  chatCooldownSec: number;
   minDonation: number;
   autoPlay: boolean;
   pauseWindowsMusic: boolean;
@@ -949,9 +964,12 @@ export interface Settings {
   minimizeToTray: boolean;
   profiles: StreamProfile[];
   activeProfileId: string;
+  workspace: { cards: WorkspaceCard[] };
 }
 
-export type ProfileSettingsKey = 'bot' | 'alerts' | 'chatOverlay' | 'spotlightOverlay' | 'rewardsOverlay' | 'collabOverlay' | 'musicOverlay' | 'songRequests' | 'goals' | 'timers' | 'actions' | 'banners' | 'ads' | 'labels' | 'emoteRain' | 'wheels' | 'poll' | 'giveaway' | 'quiz' | 'boss' | 'kawaki' | 'viewerQueue' | 'guess' | 'counterOverlays' | 'hype' | 'leadersOverlay';
+export type WorkspaceCard = 'stream' | 'obs' | 'actions' | 'bot' | 'twitch' | 'donationalerts' | 'streamlabs' | 'streamelements' | 'streamerbot' | 'discord' | 'subforstream' | OverlayKind;
+
+export type ProfileSettingsKey = 'workspace' | 'bot' | 'alerts' | 'chatOverlay' | 'spotlightOverlay' | 'rewardsOverlay' | 'collabOverlay' | 'musicOverlay' | 'songRequests' | 'goals' | 'timers' | 'actions' | 'banners' | 'ads' | 'labels' | 'emoteRain' | 'wheels' | 'poll' | 'giveaway' | 'quiz' | 'boss' | 'kawaki' | 'viewerQueue' | 'guess' | 'counterOverlays' | 'hype' | 'leadersOverlay';
 export type ProfileConfig = Pick<Settings, ProfileSettingsKey>;
 export interface StreamProfile { id: string; name: string; config: ProfileConfig; overlays: OverlayKind[] }
 
@@ -1045,7 +1063,7 @@ export interface MediaFile {
 export interface IpcInvoke {
   'app:init': () => { settings: Settings; state: RuntimeState; chat: ChatMessage[]; events: StreamEvent[]; version: string };
   /** `base` is the value the editor started from, so changes made by the app meanwhile survive the save. */
-  'settings:set': <K extends SettingsKey>(key: K, value: Settings[K], profileId?: string, base?: Settings[K]) => void;
+  'settings:set': <K extends SettingsKey>(key: K, value: Settings[K], profileId?: string, base?: Settings[K]) => Settings;
   'settings:reset': (key: SettingsKey) => Settings;
   'profiles:create': (name: string) => Settings;
   'profiles:rename': (id: string, name: string) => Settings;
@@ -1057,6 +1075,7 @@ export interface IpcInvoke {
   'twitch:cancelLogin': (account: 'broadcaster' | 'bot') => void;
   'twitch:updateStream': (patch: { title?: string; categoryId?: string; tags?: string[] }) => void;
   'twitch:searchCategories': (query: string) => Category[];
+  'twitch:rewards': () => { id: string; title: string; inputRequired: boolean; enabled: boolean }[];
   'chat:send': (text: string, replyTo?: string) => void;
   'chat:delete': (messageId: string) => void;
   'chat:timeout': (userId: string, seconds: number) => void;

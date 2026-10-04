@@ -1,7 +1,7 @@
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ChatMessage, ChatRoles } from '@shared/types';
 import { BotService } from '../src/main/bot/bot';
 import type { AppContext } from '../src/main/core/context';
@@ -9,6 +9,7 @@ import { EventBus } from '../src/main/core/eventBus';
 import { StateHub } from '../src/main/core/state';
 import { SettingsStore } from '../src/main/core/store';
 import { PlatformRegistry, type ChatPlatform } from '../src/main/platforms/types';
+import { SongRequestService } from '../src/main/features/songRequests';
 
 class FakePlatform implements ChatPlatform {
   readonly platform = 'twitch' as const;
@@ -71,9 +72,26 @@ beforeEach(() => {
   stream.updateStream.mockClear();
 });
 
+afterEach(() => { bot.stop(); settings.flush(); });
+
 const flush = () => new Promise((r) => setTimeout(r, 5));
 
 describe('BotService', () => {
+  it('accepts a song command through the real bot even with link moderation enabled', async () => {
+    bot.stop();
+    const state = new StateHub(bus);
+    const ctx = { bus, settings, state } as AppContext;
+    const registry = new PlatformRegistry(); registry.register(platform);
+    const songs = new SongRequestService(ctx, { pauseCurrent: async () => null, resumeSource: async () => undefined } as any, () => undefined, (text, id) => platform.sendMessage(text, id));
+    settings.set('songRequests', { ...settings.get('songRequests'), enabled:true });
+    const config = settings.get('bot');
+    settings.set('bot', { ...config, moderation:{ ...config.moderation, links:{ ...config.moderation.links, enabled:true, allowed:[] } } });
+    bot = new BotService(ctx, registry, stream, songs);
+    await bot.onMessage(msg('!sr https://youtu.be/M7lc1UVf-VE'));
+    expect(settings.get('songQueue')).toMatchObject([{ source:'chat', videoId:'M7lc1UVf-VE' }]);
+    expect(platform.sent[0].text).toContain('your song is queued');
+    expect(platform.deleted).toEqual([]);
+  });
   it('answers custom commands and aliases with variables', async () => {
     const b = settings.get('bot');
     settings.set('bot', {

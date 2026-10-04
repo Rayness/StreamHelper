@@ -3,75 +3,13 @@ import { defaultAd, defaultBanner, defaultGoal, defaultLabel, defaultTimer, uid 
 import { timerValue } from '@shared/timer';
 import { formatClock } from '@shared/template';
 import type { AdCampaign, AdEntrance, AlertType, Banner, BannerLayout, ChatBackgroundStyle, ChatEnterAnimation, ChatExitAnimation, EmoteRainStyle, Goal, GoalKind, Label, MusicSourceKind, OverlayKind, OverlayTimer } from '@shared/types';
-import { Icon } from '../components/icons';
 import { MediaPicker } from '../components/MediaPicker';
 import { InstancePicker, OverlayBar, OverlayPreview, pickInstance } from '../components/overlay';
-import { Button, Card, ColorInput, Field, IconButton, LinesInput, NumberInput, PageHeader, Select, Tabs, TextInput, Toggle } from '../components/ui';
+import { Button, Card, ColorInput, Field, IconButton, LinesInput, NumberInput, Select, Tabs, TextInput, Toggle } from '../components/ui';
 import { useNow } from '../hooks';
-import { useT, type TKey } from '../i18n';
-import { OVERLAYS, type OverlayGroup } from '../overlayCatalog';
+import { useT } from '../i18n';
 import { CounterDetail, HypeDetail, LeadersDetail } from './OverlaysExtra';
-import { call, callOk, navigate, saveSettings, useApp, useSub } from '../store';
-
-const KINDS = OVERLAYS.map((o) => o.kind);
-const GROUPS: OverlayGroup[] = ['main', 'screen', 'fun'];
-
-export function Overlays() {
-  const t = useT();
-  const [kind, setKind] = useSub<OverlayKind>('overlays', 'alerts', KINDS);
-  const [query, setQuery] = useState('');
-  const url = useApp((d) => d.state!.overlayUrl);
-  const clients = useApp((d) => d.state!.overlayClients);
-  const perKind = useApp((d) => d.state!.overlayKinds);
-  const def = OVERLAYS.find((o) => o.kind === kind)!;
-  const visible = OVERLAYS.filter((o) => !query.trim() || `${t(`ov.${o.kind}`)} ${t(`ovDesc.${o.kind}`)}`.toLowerCase().includes(query.toLowerCase().trim()));
-  return (
-    <div className="page page-wide">
-      <PageHeader
-        title={t('nav.overlays')}
-        subtitle={t('overlays.subtitle')}
-        actions={<span className={`ov-state ${clients ? 'on' : ''}`}><span className="ov-state-dot" />{t('overlays.clients', { n: clients })}</span>}
-      />
-      {!url ? (
-        <Card>
-          <p className="error">{t('overlays.serverDown')}</p>
-          <p className="muted small">{t('overlays.serverDownHint')}</p>
-        </Card>
-      ) : (
-        <div className="ov-layout">
-          <nav className="ov-list" aria-label={t('nav.overlays')}>
-            <div style={{ padding: '8px' }}><TextInput value={query} onChange={setQuery} placeholder={t('common.search')} /></div>
-            {visible.length === 0 && <p className="muted small" style={{ padding: 12 }}>{t('palette.empty')}</p>}
-            {GROUPS.filter((g) => visible.some((o) => o.group === g)).map((g) => (
-              <div key={g} className="ov-group">
-                <span className="ov-group-title">{t(`ovGroup.${g}`)}</span>
-                {visible.filter((o) => o.group === g).map((o) => (
-                  <button key={o.kind} type="button" className={`ov-item ${o.kind === kind ? 'active' : ''}`} onClick={() => setKind(o.kind)}>
-                    <Icon name={o.icon} size={17} />
-                    <span>{t(`ov.${o.kind}`)}</span>
-                    {(perKind[o.kind] ?? 0) > 0 && <span className="ov-live" title={t('overlays.inObs', { n: perKind[o.kind] ?? 0 })} />}
-                  </button>
-                ))}
-              </div>
-            ))}
-          </nav>
-          <section className="ov-detail" key={kind}>
-            <header className="ov-head">
-              <span className="ov-head-icon">
-                <Icon name={def.icon} size={20} />
-              </span>
-              <div>
-                <h2>{t(`ov.${kind}`)}</h2>
-                <p className="muted">{t(`ovDesc.${kind}`)}</p>
-              </div>
-            </header>
-            <OverlayDetail kind={kind} />
-          </section>
-        </div>
-      )}
-    </div>
-  );
-}
+import { call, callOk, navigate, saveSettings, useApp } from '../store';
 
 /** Settings on the left, the live preview on the right. */
 export function Split({ settings, preview, stacked }: { settings: ReactNode; preview: ReactNode; stacked?: boolean }) {
@@ -83,11 +21,11 @@ export function Split({ settings, preview, stacked }: { settings: ReactNode; pre
   );
 }
 
-function OverlayDetail({ kind }: { kind: OverlayKind }) {
+export function OverlayDetail({ kind }: { kind: OverlayKind }) {
   const t = useT();
   switch (kind) {
     case 'alerts':
-      return <AlertsDetail />;
+      return null;
     case 'chat':
       return <ChatDetail />;
     case 'events':
@@ -137,7 +75,7 @@ function OverlayDetail({ kind }: { kind: OverlayKind }) {
     case 'boss':
     case 'queue':
     case 'guess':
-      return <InteractiveDetail kind={kind} />;
+      return null;
     case 'counter':
       return <CounterDetail />;
     case 'hype':
@@ -231,6 +169,11 @@ function SongDetail() {
   const cfg = useApp((d) => d.settings!.songRequests);
   const state = useApp((d) => d.state!.songRequests);
   const [link, setLink] = useState('');
+  const [rewards, setRewards] = useState<{ id: string; title: string; inputRequired: boolean; enabled: boolean }[]>([]);
+  const [loadingRewards, setLoadingRewards] = useState(false);
+  const twitch = useApp((d) => d.state!.twitch);
+  const bot = useApp((d) => d.settings!.bot);
+  const prefix = useApp((d) => d.settings!.bot.prefix);
   const set = (patch: Partial<typeof cfg>) => saveSettings('songRequests', { ...cfg, ...patch });
   return <>
     <OverlayBar kind="song" name={t('ov.song')} />
@@ -245,7 +188,22 @@ function SongDetail() {
       </Card>
       <Card title={t('song.settings')}><div className="form">
         <Field label={t('song.enabled')} wide><Toggle checked={cfg.enabled} onChange={(enabled) => set({ enabled })} /></Field>
-        <Field label={t('song.reward')} hint={t('song.rewardHint')} wide><TextInput value={cfg.rewardTitle} onChange={(rewardTitle) => set({ rewardTitle })} /></Field>
+        <Field label={t('song.reward')} hint={t('song.rewardHint')} wide><TextInput value={cfg.rewardTitle} onChange={(rewardTitle) => set({ rewardTitle, rewardId: '' })} /></Field>
+        <div className="field-wide stack">
+          <Button size="sm" disabled={twitch.status !== 'connected' || loadingRewards} onClick={async () => {
+            setLoadingRewards(true); const result = await call('twitch:rewards'); setLoadingRewards(false); if (result) setRewards(result);
+          }}>{t('song.loadRewards')}</Button>
+          {rewards.length > 0 && <Select value={cfg.rewardId} onChange={(rewardId) => { const reward = rewards.find((r) => r.id === rewardId); set({ rewardId, rewardTitle: reward?.title ?? cfg.rewardTitle }); }} options={[{ value: '', label: t('song.manualReward') }, ...rewards.map((r) => ({ value: r.id, label: r.title + (!r.inputRequired || !r.enabled ? ' ⚠' : '') }))]} />}
+          {rewards.some((r) => r.id === cfg.rewardId && (!r.inputRequired || !r.enabled)) && <p className="error small">{t('song.rewardNeedsInput')}</p>}
+          {twitch.subscriptionErrors?.['channel.channel_points_custom_reward_redemption.add'] && <p className="error small">{t('song.redemptionUnavailable')} <Button size="sm" onClick={() => navigate('connections')}>{t('nav.connections')}</Button></p>}
+        </div>
+        <Field label={t('song.chatEnabled')} wide><Toggle checked={cfg.chatEnabled} onChange={(chatEnabled) => set({ chatEnabled })} /></Field>
+        {cfg.chatEnabled && <>
+          <Field label={t('song.chatCommand')} hint={`${prefix}${cfg.chatCommand} https://youtu.be/…`}><TextInput value={cfg.chatCommand} onChange={(chatCommand) => set({ chatCommand })} /></Field>
+          <Field label={t('song.chatPermission')}><Select value={cfg.chatPermission} onChange={(chatPermission) => set({ chatPermission })} options={(['everyone', 'subscriber', 'vip', 'moderator', 'broadcaster'] as const).map((value) => ({ value, label: t(`perm.${value}`) }))} /></Field>
+          <Field label={t('song.chatCooldown')}><NumberInput value={cfg.chatCooldownSec} min={0} max={600} onChange={(chatCooldownSec) => set({ chatCooldownSec })} /></Field>
+          {!bot.enabled && <p className="error small field-wide">{t('song.enableBot')} <Button size="sm" onClick={() => saveSettings('bot', { ...bot, enabled: true })}>{t('bot.on')}</Button></p>}
+        </>}
         <Field label={t('song.minDonation')} hint={t('song.minDonationHint')}><NumberInput value={cfg.minDonation} min={0} onChange={(minDonation) => set({ minDonation })} /></Field>
         <Field label={t('song.maxQueue')}><NumberInput value={cfg.maxQueue} min={1} max={100} onChange={(maxQueue) => set({ maxQueue })} /></Field>
         <Field label={t('song.autoPlay')} wide><Toggle checked={cfg.autoPlay} onChange={(autoPlay) => set({ autoPlay })} /></Field>
@@ -288,26 +246,6 @@ function TestAlertButtons({ types }: { types: AlertType[] }) {
           {t(`alertType.${ty}`)}
         </Button>
       ))}
-    </>
-  );
-}
-
-function AlertsDetail() {
-  const t = useT();
-  return (
-    <>
-      <OverlayBar kind="alerts" name={t('ov.alerts')} />
-      <Split
-        settings={
-          <Card>
-            <p className="muted">{t('overlays.alertsManage')}</p>
-            <Button icon="chevron" onClick={() => navigate('alerts')}>
-              {t('overlays.openAlerts')}
-            </Button>
-          </Card>
-        }
-        preview={<OverlayPreview kind="alerts" children={<TestAlertButtons types={['follow', 'sub', 'donation', 'raid']} />} />}
-      />
     </>
   );
 }
@@ -983,42 +921,6 @@ function EmotesDetail() {
             </Button>
           </OverlayPreview>
         }
-      />
-    </>
-  );
-}
-
-// ---------- interactive overlays point to their control page ----------
-
-const INTERACTIVE_TAB: Partial<Record<OverlayKind, string>> = { wheel: 'wheel', poll: 'poll', giveaway: 'giveaway', quiz: 'quiz', boss: 'boss', queue: 'queue', guess: 'guess' };
-
-function InteractiveDetail({ kind }: { kind: OverlayKind }) {
-  const t = useT();
-  const wheels = useApp((d) => d.settings!.wheels);
-  const [sel, setSel] = useState<string>();
-  const w = kind === 'wheel' ? pickInstance(wheels, sel) : undefined;
-  return (
-    <>
-      {kind === 'wheel' && (
-        <div className="chips">
-          {wheels.map((x) => (
-            <button key={x.id} type="button" className={`chip ${x.id === w?.id ? 'active' : ''}`} onClick={() => setSel(x.id)}>
-              {x.name}
-            </button>
-          ))}
-        </div>
-      )}
-      <OverlayBar kind={kind} id={w?.id} name={w?.name ?? t(`ov.${kind}` as TKey)} />
-      <Split
-        settings={
-          <Card>
-            <p className="muted">{t('overlays.interactiveManage')}</p>
-            <Button icon="chevron" onClick={() => navigate('interactive', INTERACTIVE_TAB[kind])}>
-              {t('overlays.openInteractive')}
-            </Button>
-          </Card>
-        }
-        preview={<OverlayPreview kind={kind} id={w?.id} />}
       />
     </>
   );

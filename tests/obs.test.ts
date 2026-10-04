@@ -5,7 +5,7 @@ import { WebSocketServer, type WebSocket } from 'ws';
 import type { AppContext } from '../src/main/core/context';
 import { EventBus } from '../src/main/core/eventBus';
 import { StateHub } from '../src/main/core/state';
-import { ObsService } from '../src/main/obs/obs';
+import { ObsService, overlayIdentity } from '../src/main/obs/obs';
 
 const sha256b64 = (s: string) => createHash('sha256').update(s).digest('base64');
 
@@ -18,6 +18,8 @@ class FakeObs {
   muted: Record<string, boolean> = { Mic: false, Desktop: true };
   salt = 'salt123';
   challenge = 'challenge456';
+  browsers = new Map<string, Record<string, unknown>>();
+  items = new Map<string, { sceneItemId: number; sourceName: string; sceneItemEnabled: boolean }[]>();
 
   constructor(private password?: string) {
     this.wss = new WebSocketServer({ port: 0, handleProtocols: () => 'obswebsocket.json' });
@@ -56,9 +58,21 @@ class FakeObs {
       case 'GetSceneList':
         return ok({ currentProgramSceneName: this.scene, scenes: [{ sceneName: 'BRB' }, { sceneName: 'Game' }, { sceneName: 'Start' }] });
       case 'GetSceneItemList':
-        return ok({ sceneItems: [{ sceneItemId: 1, sourceName: 'Camera', sceneItemEnabled: true }, { sceneItemId: 2, sourceName: 'Alerts', sceneItemEnabled: false }] });
+        return ok({ sceneItems: this.items.get(requestData.sceneName) ?? [{ sceneItemId: 1, sourceName: 'Camera', sceneItemEnabled: true }, { sceneItemId: 2, sourceName: 'Alerts', sceneItemEnabled: false }] });
       case 'GetInputList':
-        return ok({ inputs: [{ inputName: 'Mic' }, { inputName: 'Desktop' }, { inputName: 'Image' }] });
+        return ok({ inputs: [...(requestData?.inputKind ? [] : [{ inputName: 'Mic' }, { inputName: 'Desktop' }, { inputName: 'Image' }]), ...[...this.browsers.keys()].map((inputName) => ({ inputName }))] });
+      case 'GetInputSettings': return ok({ inputSettings: this.browsers.get(requestData.inputName) ?? {} });
+      case 'SetInputSettings': this.browsers.set(requestData.inputName, { ...this.browsers.get(requestData.inputName), ...requestData.inputSettings }); return ok();
+      case 'CreateInput':
+        this.browsers.set(requestData.inputName, requestData.inputSettings);
+        this.items.set(requestData.sceneName, [...this.items.get(requestData.sceneName) ?? [], { sceneItemId: 40, sourceName: requestData.inputName, sceneItemEnabled: true }]);
+        return ok();
+      case 'CreateSceneItem':
+        this.items.set(requestData.sceneName, [...this.items.get(requestData.sceneName) ?? [], { sceneItemId: 41, sourceName: requestData.sourceName, sceneItemEnabled: true }]);
+        return ok();
+      case 'SetSceneItemEnabled':
+        this.items.set(requestData.sceneName, (this.items.get(requestData.sceneName) ?? []).map((i) => i.sceneItemId === requestData.sceneItemId ? { ...i, sceneItemEnabled: requestData.sceneItemEnabled } : i));
+        return ok();
       case 'GetInputMute':
         return requestData.inputName in this.muted ? ok({ inputMuted: this.muted[requestData.inputName] }) : fail();
       case 'GetStreamStatus':
@@ -119,6 +133,70 @@ afterEach(async () => {
 });
 
 describe('ObsService', () => {
+  it('serializes concurrent add requests so they cannot duplicate a browser source', async () => {
+    const fake = new FakeObs(); fake.items.set('Game', []);
+    const { ctx } = makeCtx(fake.port);
+    const obs = new ObsService(ctx);
+    cleanup.push(() => obs.disconnect(), () => fake.close());
+    await obs.connect();
+    expect(await Promise.all([obs.addBrowserSource('Chat', 'http://127.0.0.1:8145/overlay/chat', 400, 600), obs.addBrowserSource('Chat', 'http://127.0.0.1:8145/overlay/chat', 400, 600)]))
+      .toEqual(['created', 'exists']);
+    expect(fake.requests.filter((r) => r.type === 'CreateInput')).toHaveLength(1);
+    expect(fake.items.get('Game')).toHaveLength(1);
+  });
+  it('recognizes old local overlay URLs without matching other services or different instances', () => {
+    expect(overlayIdentity('http://localhost:9999/overlay/goal?id=a')).toBe(overlayIdentity('http://127.0.0.1:8145/overlay/goal?id=a'));
+    expect(overlayIdentity('http://127.0.0.1:8145/overlay/goal?id=a')).not.toBe(overlayIdentity('http://127.0.0.1:8145/overlay/goal?id=b'));
+    expect(overlayIdentity('https://example.com/overlay/chat')).toBeNull();
+    expect(overlayIdentity('http://localhost:9999/some-other-page')).toBeNull();
+  });
+
+  it('repairs a disabled existing source from the live scene, even if the cached list is stale', async () => {
+    const fake = new FakeObs();
+    fake.browsers.set('StreamHelper alerts', { url: 'http://localhost:1111/overlay/alerts', width: 1280, height: 720 });
+    fake.items.set('Game', [{ sceneItemId: 9, sourceName: 'StreamHelper alerts', sceneItemEnabled: false }]);
+    const { ctx, state } = makeCtx(fake.port);
+    state.patch('overlayUrl', 'http://127.0.0.1:8145');
+    const obs = new ObsService(ctx);
+    cleanup.push(() => obs.disconnect(), () => fake.close());
+    await obs.connect();
+    state.patch('obs', { sceneItems: [] });
+    expect(await obs.addBrowserSource('Alerts', 'http://127.0.0.1:8145/overlay/alerts', 1920, 1080)).toBe('exists');
+    expect(fake.browsers.get('StreamHelper alerts')).toMatchObject({ url: 'http://127.0.0.1:8145/overlay/alerts', width: 1280, height: 720, fps: 30, shutdown: false });
+    expect(fake.items.get('Game')?.[0].sceneItemEnabled).toBe(true);
+    expect(fake.requests.filter((r) => r.type === 'CreateInput')).toHaveLength(0);
+    expect(fake.requests.some((r) => r.type === 'PressInputPropertiesButton')).toBe(true);
+  });
+
+  it('reuses another scene source and creates a replacement if it was removed from OBS', async () => {
+    const fake = new FakeObs();
+    fake.browsers.set('Widget', { url: 'http://127.0.0.1:8145/overlay/chat' });
+    fake.items.set('Game', []);
+    const { ctx } = makeCtx(fake.port);
+    const obs = new ObsService(ctx);
+    cleanup.push(() => obs.disconnect(), () => fake.close());
+    await obs.connect();
+    expect(await obs.addBrowserSource('Chat', 'http://127.0.0.1:8145/overlay/chat', 400, 600)).toBe('added');
+    fake.browsers.delete('Widget'); fake.items.set('Game', []);
+    expect(await obs.addBrowserSource('Chat', 'http://127.0.0.1:8145/overlay/chat', 400, 600)).toBe('created');
+    expect(fake.browsers.get('Chat')).toMatchObject({ width: 400, height: 600, reroute_audio: true, fps: 30 });
+  });
+
+  it('reloads local browser sources again after OBS reconnects', async () => {
+    const fake = new FakeObs();
+    fake.browsers.set('Chat', { url: 'http://127.0.0.1:8145/overlay/chat' });
+    fake.browsers.set('External', { url: 'https://example.com/overlay/chat' });
+    const { ctx, state } = makeCtx(fake.port);
+    state.patch('overlayUrl', 'http://127.0.0.1:8145');
+    const obs = new ObsService(ctx);
+    cleanup.push(() => obs.disconnect(), () => fake.close());
+    await obs.connect();
+    fake.socket!.close();
+    await until(() => state.current.obs.status === 'disconnected');
+    await obs.connect();
+    expect(fake.requests.filter((r) => r.type === 'PressInputPropertiesButton' && r.data.inputName === 'Chat')).toHaveLength(2);
+    expect(fake.requests.some((r) => r.type === 'SetInputSettings' && r.data.inputName === 'External')).toBe(false);
+  });
   it('connects and mirrors scenes, sources, audio and outputs', async () => {
     const fake = new FakeObs('hunter2');
     const { ctx, state, toast } = makeCtx(fake.port, 'hunter2');

@@ -14,6 +14,7 @@ export interface AppContext {
   openExternal: (url: string) => void;
   /** Absolute directory with user-imported media (sounds, images). */
   mediaDir: string;
+  isUiVisible?: () => boolean;
 }
 
 export function errorMessage(err: unknown): string {
