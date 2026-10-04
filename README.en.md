@@ -2,9 +2,9 @@
 
 [Русский](README.md) · [English](README.en.md)
 
-StreamHelper is a Windows desktop app for managing a stream, chat, and OBS browser sources from one place. Current version: **0.10.0**. The interface supports Russian and English.
+StreamHelper is a Windows desktop app for managing a stream, chat, and OBS browser sources from one place. Current version: **0.10.1**. The interface supports Russian and English.
 
-Release **0.10.0**: a module-based workspace is the only place to configure features. Add a module first; Monitor shows its status and progress. [Verification report (Russian)](docs/verification-0.10.0.md).
+Release **0.10.1** adds a separate Connections tab, draggable and resizable monitor blocks, fresh profiles, compact modules and a revised alert editor. Widget tests are isolated; streamer commands work while offline. [Verification report (Russian)](docs/verification-0.10.1.md).
 
 Releases are available [in this repository](https://github.com/Rayness/StreamHelper/releases) and in the [public update repository](https://github.com/Rayness/StreamHelper-Releases/releases).
 
@@ -12,21 +12,21 @@ Releases are available [in this repository](https://github.com/Rayness/StreamHel
 
 These screenshots use fictional demo data; they contain no real accounts or tokens.
 
-**Workspace, module catalog and alert editor:**
+**Workspace, connections and alert editor:**
 
-![Workspace](docs/screenshots/workspace-empty-0.10.0.png)
+![Workspace](docs/screenshots/workspace-modules-0.10.1.png)
 
-![Module catalog](docs/screenshots/workspace-catalog-0.10.0.png)
+![Connections](docs/screenshots/connections-0.10.1.png)
 
-![Alert module](docs/screenshots/alerts-content-0.10.0.png)
+![Alert module](docs/screenshots/alerts-content-0.10.1.png)
 
 ## Download and first run
 
-1. Download `StreamHelper-Setup-0.10.0.exe` from [release 0.10.0](https://github.com/Rayness/StreamHelper/releases/tag/v0.10.0) or the [update repository](https://github.com/Rayness/StreamHelper-Releases/releases/tag/v0.10.0). The Windows installer is currently unsigned.
-2. Open **Workspace → Add module → Twitch** and sign in as the broadcaster. Authorization uses a device code on Twitch.
-3. If needed, add **OBS** and enter its WebSocket address, port and password. The usual port is 4455.
+1. Download `StreamHelper-Setup-0.10.1.exe` from [release 0.10.1](https://github.com/Rayness/StreamHelper/releases/tag/v0.10.1) or the [update repository](https://github.com/Rayness/StreamHelper-Releases/releases/tag/v0.10.1). The Windows installer is currently unsigned.
+2. Open **Connections → Twitch** and sign in as the broadcaster. Authorization uses a device code on Twitch.
+3. If needed, open **Connections → OBS** and enter its WebSocket address, port and password. The usual port is 4455.
 4. Add the features you need: Alerts, Chat, Song Requests or individual activities. Select an added module to configure it and use **Add to OBS** for its browser source.
-5. Use **Monitor** to follow progress. The separate bot account is configured inside the **Chat bot** module.
+5. Use **Monitor** to follow progress. Drag blocks by the layers handle and use **Customize monitor** to change their size and visibility. Connect a separate bot account in **Connections → Twitch → Bot account**.
 
 Keep StreamHelper running during the stream. Its local server on `127.0.0.1` serves the overlays and updates them over WebSocket. The default port is 4848; change it in **App preferences** if needed. The app can stay in the system tray when its window is closed.
 
@@ -35,8 +35,9 @@ Keep StreamHelper running during the stream. Its local server on `127.0.0.1` ser
 | Surface | What it does |
 | --- | --- |
 | Workspace | Add, configure and manage only selected modules. Each profile has its own module list. |
-| Monitor | Status, queues, goals, timers, counters, activity results and recent events. No configuration forms. |
-| Profile picker | Duplicate, rename, switch and delete profiles. |
+| Connections | Twitch, bot account, OBS and donation services. Shared across profiles. |
+| Monitor | Status and progress; drag blocks and choose their size and visibility. Layout is saved per profile. |
+| Profile picker | Create a fresh or copied profile, rename, switch and delete profiles. |
 | App preferences | Language, currency, tray behavior, local server port and updates. |
 
 Press `Ctrl+K` to search added modules and their actions. Removed modules cannot be configured through search or old shortcuts; their settings and progress are preserved.
@@ -74,7 +75,7 @@ Each overlay is a separate OBS Browser Source. Each added widget module shows it
 
 **Chat activities:** in **Overlays → Goals**, choose Chat messages or Unique chatters. Bot commands and messages sent by StreamHelper do not count. Each person counts once per goal; resetting the count clears that goal's participant list.
 
-**Profiles:** create a copy of your current setup under **Profiles** and choose which overlays belong to it. Switching in the app or OBS dock makes the other StreamHelper overlays transparent in OBS. Overlay, alert, bot, and interactive changes are saved to the active profile. Service connections are shared.
+**Profiles:** open the profile picker on the left. **New profile** starts with an empty workspace and default feature settings; **Create copy** keeps the current setup. Workspace modules, monitor layout and feature settings are independent. Service connections are shared.
 
 **Messages on screen:** under **Overlays → Message on screen**, choose a single card, a stack, or falling messages. Gravity and bounce are adjustable. Highlighted Twitch messages can appear automatically, and sample messages work without a live stream. Use a 1920×1080 browser source for a full-screen fall.
 

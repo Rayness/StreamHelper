@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { defaultSettings, mergeDefaults, migrateSettings } from '@shared/defaults';
 import { merge3 } from '@shared/merge';
 import { ALL_OVERLAY_KINDS, PROFILE_KEYS, profileSnapshot } from '@shared/profiles';
-import { normalizeWorkspaceCards } from '@shared/workspace';
+import { normalizeWorkspaceCards, normalizeMonitorLayout } from '@shared/workspace';
 import type { Language, OverlayKind, ProfileConfig, ProfileSettingsKey, Settings, SettingsKey } from '@shared/types';
 import type { EventBus } from './eventBus';
 
@@ -39,7 +39,7 @@ export class SettingsStore {
     } else {
       this.data.profiles = this.data.profiles.map((profile) => {
         const config = mergeDefaults(base, profile.config);
-        config.workspace = { cards: normalizeWorkspaceCards(config.workspace.cards) };
+        config.workspace = { ...config.workspace, cards: normalizeWorkspaceCards(config.workspace.cards), monitor: normalizeMonitorLayout(profile.config?.workspace?.monitor) };
         config.alerts.donationTiers = config.alerts.donationTiers.map((tier) => ({
           ...tier,
           style: tier.style ? { ...config.alerts.style, ...tier.style } : undefined,
@@ -106,16 +106,20 @@ export class SettingsStore {
     this.set(key, defaults[key]);
   }
 
-  createProfile(name: string): Settings {
+  createProfile(name: string, mode: 'empty' | 'copy' = 'copy'): Settings {
     const trimmed = name.trim().slice(0, 60);
     if (!trimmed) throw new Error('Profile name is required');
+    if (mode !== 'empty' && mode !== 'copy') throw new Error('Invalid profile mode');
     const id = randomUUID();
+    const config = profileSnapshot(mode === 'empty' ? defaultSettings(this.data.language) : this.data);
     this.data = {
       ...this.data,
+      ...structuredClone(config),
       activeProfileId: id,
-      profiles: [...this.data.profiles, { id, name: trimmed, config: profileSnapshot(this.data), overlays: [...this.data.profiles.find((p) => p.id === this.data.activeProfileId)!.overlays] }],
+      profiles: [...this.data.profiles, { id, name: trimmed, config, overlays: mode === 'empty' ? [...ALL_OVERLAY_KINDS] : [...this.data.profiles.find((p) => p.id === this.data.activeProfileId)!.overlays] }],
     };
     this.scheduleSave();
+    for (const key of PROFILE_KEYS) this.bus.emit('settings:changed', key);
     this.bus.emit('settings:changed', 'profiles');
     return this.data;
   }

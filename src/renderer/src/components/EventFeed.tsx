@@ -75,7 +75,7 @@ export function EventFeed({ limit = 100, readOnly = false }: { limit?: number; r
               {msg && <div className="feed-msg">{msg}</div>}
             </div>
             <span className="feed-time">{clock(e.timestamp)}</span>
-            {!readOnly && alertsAdded && <IconButton icon="replay" label={t('feed.replay')} onClick={() => void call('alerts:replay', e.id)} />}
+            {!readOnly && alertsAdded && e.source !== 'test' && <IconButton icon="replay" label={t('feed.replay')} onClick={() => void call('alerts:replay', e.id)} />}
           </li>
         );
       })}

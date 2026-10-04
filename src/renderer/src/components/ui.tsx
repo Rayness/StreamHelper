@@ -27,10 +27,11 @@ export function IconButton({
   label,
   variant = 'ghost',
   active,
+  className = '',
   ...rest
 }: { icon: IconName; label: string; variant?: Variant; active?: boolean } & ButtonHTMLAttributes<HTMLButtonElement>) {
   return (
-    <button type="button" className={`icon-btn btn-${variant} ${active ? 'active' : ''}`} title={label} aria-label={label} {...rest}>
+    <button type="button" className={`icon-btn btn-${variant} ${active ? 'active' : ''} ${className}`} title={label} aria-label={label} {...rest}>
       <Icon name={icon} size={17} />
     </button>
   );

@@ -11,12 +11,23 @@ import { Button, IconButton } from './ui';
  * Live preview of an overlay: the real overlay page at its native size, scaled down to fit.
  * Tall overlays (chat, wheel) are capped by `maxHeight` and centred.
  */
-export function ScaledFrame({ src, width, height, maxHeight = 460, message }: { src: string; width: number; height: number; maxHeight?: number; message?: OverlayMessage }) {
+export function ScaledFrame({ src, width, height, maxHeight = 460, message, zoomToAlert = false }: { src: string; width: number; height: number; maxHeight?: number; message?: OverlayMessage; zoomToAlert?: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
   const frame = useRef<HTMLIFrameElement>(null);
   const sendPreview = () => { if (message) frame.current?.contentWindow?.postMessage(message, new URL(src).origin); };
   useEffect(sendPreview, [message, src]);
   const [box, setBox] = useState(0);
+  const [bounds, setBounds] = useState<{x:number;y:number;width:number;height:number}>();
+  useEffect(() => {
+    const receive = (event: MessageEvent) => {
+      const b = event.data?.bounds;
+      if (event.source !== frame.current?.contentWindow || event.origin !== new URL(src).origin || event.data?.type !== 'alertPreviewBounds') return;
+      if (!b || ![b.x,b.y,b.width,b.height].every(Number.isFinite) || b.width <= 0 || b.height <= 0) return;
+      setBounds((old) => old && Object.keys(b).every((key) => old[key as keyof typeof old] === b[key]) ? old : b);
+    };
+    window.addEventListener('message', receive);
+    return () => window.removeEventListener('message', receive);
+  }, [src]);
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -25,16 +36,18 @@ export function ScaledFrame({ src, width, height, maxHeight = 460, message }: { 
     setBox(el.clientWidth);
     return () => ro.disconnect();
   }, []);
-  const scale = box ? Math.min(box / width, maxHeight / height) : 0;
+  const detailHeight = Math.min(maxHeight, Math.max(220, box * .65));
+  const detail = zoomToAlert && bounds;
+  const scale = box ? detail ? Math.min(box * .9 / bounds.width, detailHeight * .85 / bounds.height, 1) : Math.min(box / width, maxHeight / height) : 0;
   return (
-    <div ref={ref} className="scaled-frame checker" style={{ height: scale ? height * scale : Math.min(maxHeight, 200) }}>
+    <div ref={ref} className="scaled-frame checker" style={{ height: detail ? detailHeight : scale ? height * scale : Math.min(maxHeight, 200) }}>
       {scale > 0 && (
         <iframe
           ref={frame}
           src={src}
           onLoad={sendPreview}
           title="preview"
-          style={{ width, height, transform: `scale(${scale})`, left: Math.max(0, (box - width * scale) / 2) }}
+          style={{ width, height, transform: `scale(${scale})`, left: detail ? box/2 - (bounds.x + bounds.width/2)*scale : Math.max(0, (box - width * scale) / 2), top: detail ? detailHeight/2 - (bounds.y + bounds.height/2)*scale : 0 }}
           tabIndex={-1}
         />
       )}

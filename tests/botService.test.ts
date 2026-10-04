@@ -77,6 +77,12 @@ afterEach(() => { bot.stop(); settings.flush(); });
 const flush = () => new Promise((r) => setTimeout(r, 5));
 
 describe('BotService', () => {
+  it('responds to broadcaster commands while the stream is offline', async () => {
+    const b=settings.get('bot');
+    settings.set('bot',{...b,commands:[{...b.commands[0],enabled:true,trigger:'test',aliases:[],response:'works offline',permission:'broadcaster',cooldownSec:0,userCooldownSec:0}]});
+    await bot.onMessage(msg('!test',{broadcaster:true},'streamer'));
+    expect(platform.sent.map((message)=>message.text)).toEqual(['works offline']);
+  });
   it('accepts a song command through the real bot even with link moderation enabled', async () => {
     bot.stop();
     const state = new StateHub(bus);

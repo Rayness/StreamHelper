@@ -3,8 +3,7 @@ import { uid } from '@shared/defaults';
 import { ALERT_TYPES, type BotCommand, type BotSettings, type BotTimer, type ModAction, type ModFilter, type Permission } from '@shared/types';
 import { Button, Card, Empty, Field, IconButton, LinesInput, NumberInput, PageHeader, Select, Tabs, TextArea, TextInput, Toggle } from '../components/ui';
 import { useT, type TFn } from '../i18n';
-import { saveSettings, useApp, useSub } from '../store';
-import { TwitchCard } from './Connections';
+import { navigate, saveSettings, useApp, useSub } from '../store';
 
 type Tab = 'commands' | 'builtins' | 'timers' | 'counters' | 'moderation' | 'events';
 const TABS: Tab[] = ['commands', 'builtins', 'timers', 'counters', 'moderation', 'events'];
@@ -31,7 +30,7 @@ export function Bot() {
           </>
         }
       />
-      <details className="settings-disclosure"><summary>{t('conn.twitchBot')}</summary><TwitchCard account="bot" /></details>
+      <Button size="sm" icon="plug" onClick={() => navigate('connections','twitch')}>{t('conn.twitchBot')}</Button>
       <Tabs<Tab>
         value={tab}
         onChange={setTab}

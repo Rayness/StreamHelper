@@ -162,6 +162,13 @@
         current.style.top = bounds.top + 'px';
         current.style.transform = `scale(${bounds.scale})`;
         current.style.transformOrigin = 'top left';
+        if (SH.preview && window.parent !== window) {
+          const parts = [...current.querySelectorAll('.title,.message,.media')].map((el) => el.getBoundingClientRect()).filter((r) => r.width && r.height);
+          if (parts.length) {
+            const x = Math.min(...parts.map((r) => r.left)), y = Math.min(...parts.map((r) => r.top));
+            window.parent.postMessage({type:'alertPreviewBounds',bounds:{x,y,width:Math.max(...parts.map((r) => r.right))-x,height:Math.max(...parts.map((r) => r.bottom))-y}}, '*');
+          }
+        }
       }
       function scheduleFit() { if (!layoutFrame) layoutFrame = requestAnimationFrame(fit); }
       new ResizeObserver(scheduleFit).observe(stage);
@@ -216,6 +223,7 @@
         const clamp = (value, fallback, min, max) => Math.min(max, Math.max(min, Number.isFinite(Number(value)) ? Number(value) : fallback));
         position.style.width = clamp(style.width, 90, 10, 100) + '%';
         const box = SH.el('div', `alert ${a.animation} enter ${a.style.layout === 'side' ? 'side' : ''}`);
+        if (SH.preview) box.classList.remove('enter');
         box.style.padding = clamp(style.padding, 16, 0, 100) + 'px';
         box.style.borderRadius = clamp(style.borderRadius, 16, 0, 100) + 'px';
         box.style.textAlign = ['left', 'center', 'right'].includes(style.textAlign) ? style.textAlign : 'center';

@@ -38,7 +38,7 @@ export function OverlayDetail({ kind }: { kind: OverlayKind }) {
                 <p className="muted small">{t('overlays.eventsHint')}</p>
               </Card>
             }
-            preview={<OverlayPreview kind="events" children={<TestAlertButtons types={['follow', 'sub', 'donation']} />} />}
+            preview={<OverlayPreview kind="events" children={<TestAlertButtons kind="events" types={['follow', 'sub', 'donation']} />} />}
           />
         </>
       );
@@ -237,12 +237,12 @@ function SongDetail() {
   </>;
 }
 
-function TestAlertButtons({ types }: { types: AlertType[] }) {
+function TestAlertButtons({ types, kind }: { types: AlertType[]; kind: 'events' | 'rewards' | 'collab' }) {
   const t = useT();
   return (
     <>
       {types.map((ty) => (
-        <Button key={ty} size="sm" icon="play" onClick={() => void call('alerts:test', ty)}>
+        <Button key={ty} size="sm" icon="play" onClick={() => void call('overlays:test', kind, ty)}>
           {t(`alertType.${ty}`)}
         </Button>
       ))}
@@ -355,7 +355,7 @@ function RewardsDetail() {
         <Field label={t('rewards.showInput')}><Toggle checked={cfg.showInput} onChange={(showInput) => set({ showInput })} /></Field>
         <Field label={t('common.accent')}><ColorInput value={cfg.accentColor} onChange={(accentColor) => set({ accentColor })} /></Field>
       </div>
-    </Card>} preview={<OverlayPreview kind="rewards" maxHeight={450}><TestAlertButtons types={['redemption']} /></OverlayPreview>} />
+    </Card>} preview={<OverlayPreview kind="rewards" maxHeight={450}><TestAlertButtons kind="rewards" types={['redemption']} /></OverlayPreview>} />
   </>;
 }
 
@@ -373,7 +373,7 @@ function CollabDetail() {
         <Field label={t('collab.showRaids')}><Toggle checked={cfg.showRaids} onChange={(showRaids) => set({ showRaids })} /></Field>
         <Field label={t('common.accent')}><ColorInput value={cfg.accentColor} onChange={(accentColor) => set({ accentColor })} /></Field>
       </div>
-    </Card>} preview={<OverlayPreview kind="collab" maxHeight={370}><TestAlertButtons types={['raid']} /></OverlayPreview>} />
+    </Card>} preview={<OverlayPreview kind="collab" maxHeight={370}><TestAlertButtons kind="collab" types={['raid']} /></OverlayPreview>} />
   </>;
 }
 

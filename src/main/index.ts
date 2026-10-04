@@ -17,7 +17,8 @@ import { StreamerBotService } from './integrations/streamerbot';
 import { DiscordService } from './integrations/discord';
 import { SubForStreamService } from './integrations/subForStream';
 import { ActionRunner } from './features/actions';
-import { AlertQueue, sampleEvent } from './features/alerts';
+import { AlertQueue } from './features/alerts';
+import { OverlayTests } from './features/overlayTests';
 import { TextOverlays } from './features/banners';
 import { AdsService } from './features/ads';
 import { BossService } from './features/boss';
@@ -130,6 +131,7 @@ async function bootstrap(): Promise<void> {
     (alert) => overlay.broadcast('alerts', { type: 'alert', alert }),
     () => overlay.broadcast('alerts', { type: 'alertSkip' }),
   );
+  const overlayTests = new OverlayTests(ctx, alerts, (kind, message) => overlay.broadcast(kind, message), (event) => push('event', event));
   let hub!: OverlayHub;
   let dockRoute!: ReturnType<typeof createDockRoutes>;
   let songRequests!: SongRequestService;
@@ -243,7 +245,7 @@ async function bootstrap(): Promise<void> {
         case 'profileActivate': if (id) return void settings.activateProfile(id); break;
         case 'alertsPause': return alerts.togglePause();
         case 'alertsSkip': return alerts.skip();
-        case 'alertsTest': if (id && ALERT_TYPES.includes(id as AlertType)) { bus.emit('event', sampleEvent(id as AlertType, settings.get('language'), settings.get('currency'))); return; } break;
+        case 'alertsTest': if (id && ALERT_TYPES.includes(id as AlertType)) { overlayTests.alert(id as AlertType); return; } break;
         case 'pollStart': return poll.start();
         case 'pollEnd': return poll.end();
         case 'pollClear': return poll.clear();
@@ -362,7 +364,7 @@ async function bootstrap(): Promise<void> {
       settings.reset(key);
       return settings.all;
     },
-    'profiles:create': (name) => settings.createProfile(name),
+    'profiles:create': (name, mode) => settings.createProfile(name, mode),
     'profiles:rename': (id, name) => settings.renameProfile(id, name),
     'profiles:activate': (id) => settings.activateProfile(id),
     'profiles:delete': (id) => settings.deleteProfile(id),
@@ -376,7 +378,8 @@ async function bootstrap(): Promise<void> {
     'chat:send': async (text, replyTo) => {
       const p = platforms.get('twitch');
       if (!p?.isChatReady()) throw new Error('chat is not connected');
-      await p.sendMessage(text, replyTo, { asBroadcaster: !secrets.get('twitchBot') });
+      const botToken = secrets.get('twitchBot');
+      await p.sendMessage(text, replyTo, { asBroadcaster: !botToken || botToken.userId === twitch.broadcasterId });
     },
     'chat:delete': (id) => twitch.deleteMessage(id),
     'chat:timeout': (userId, sec) => twitch.timeout(userId, sec),
@@ -401,7 +404,8 @@ async function bootstrap(): Promise<void> {
     'obs:toggleMute': (input) => obs.toggleMute(input),
     'obs:stream': (m) => obs.stream(m),
     'obs:record': (m) => obs.record(m),
-    'alerts:test': (type: AlertType, donationAmount?: number) => bus.emit('event', sampleEvent(type, settings.get('language'), settings.get('currency'), donationAmount)),
+    'alerts:test': (type, donationAmount, tierId) => overlayTests.alert(type, donationAmount, tierId),
+    'overlays:test': (kind, type) => overlayTests.widget(kind, type),
     'alerts:pause': (paused) => alerts.setPaused(paused),
     'alerts:skip': () => alerts.skip(),
     'alerts:replay': (id) => alerts.replay(id),

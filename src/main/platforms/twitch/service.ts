@@ -277,7 +277,7 @@ export class TwitchService implements ChatPlatform {
           e,
           (set, v) => this.badges.get(`${set}/${v}`),
           (w) => this.emotes.get(w),
-          this.botId ? [this.botId] : [],
+          this.botId && this.botId !== this.broadcasterId ? [this.botId] : [],
         );
         if (this.isOwnEcho(msg)) msg.fromSelf = true;
         bus.emit('chat:message', msg);
@@ -400,7 +400,7 @@ export class TwitchService implements ChatPlatform {
     if (!opts.asBroadcaster && this.tokens.bot.token && (!this.botId || this.ctx.state.current.twitchBot.status !== 'connected')) {
       throw new Error('The bot account is disconnected. Reconnect it in Connections.');
     }
-    const useBot = !opts.asBroadcaster && !!this.botId && !!this.tokens.bot.token;
+    const useBot = !opts.asBroadcaster && !!this.botId && this.botId !== broadcasterId && !!this.tokens.bot.token;
     const markSelf = !opts.asBroadcaster;
     const message = text.slice(0, 500);
     const pending = { text: message, at: Date.now() };

@@ -1,8 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import { defaultSettings } from '@shared/defaults';
-import { isWorkspaceModule, normalizeWorkspaceCards, resolveModuleAccess, workspaceTarget, WORKSPACE_CARDS } from '@shared/workspace';
+import { isWorkspaceModule, monitorCards, normalizeMonitorLayout, reorderCards, workspaceCards, normalizeWorkspaceCards, resolveModuleAccess, workspaceTarget, WORKSPACE_CARDS } from '@shared/workspace';
 
 describe('module-owned workspace', () => {
+  it('moves services out of the workspace while retaining OBS controls', () => {
+    expect(workspaceCards(['twitch','obs','donationalerts','chat','subforstream'])).toEqual(['obs','chat']);
+  });
+  it('keeps a monitor order independent from installed module order and restores hidden cards', () => {
+    const layout={order:['events','chat','alerts'],hidden:['chat'],sizes:{chat:{width:2,height:'tall'}}};
+    expect(monitorCards(['chat','alerts','events','goal'],layout)).toEqual(['events','alerts','goal']);
+    expect(monitorCards(['chat','alerts'],{...layout,hidden:[]})).toEqual(['chat','alerts']);
+    expect(normalizeMonitorLayout({order:['chat','fake'],hidden:['twitch'],sizes:{chat:{width:99,height:'invalid'}}})).toEqual({order:['chat'],hidden:[],sizes:{chat:{width:1,height:'compact'}}});
+    expect(reorderCards(['chat','alerts','events'],'chat','events')).toEqual(['alerts','events','chat']);
+    expect(reorderCards(['chat','alerts','events'],'events','chat')).toEqual(['events','chat','alerts']);
+  });
   it('starts empty and never installs modules by visiting a route', () => {
     const settings = defaultSettings('ru');
     expect(settings.workspace.cards).toEqual([]);

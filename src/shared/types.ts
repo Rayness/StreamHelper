@@ -964,7 +964,13 @@ export interface Settings {
   minimizeToTray: boolean;
   profiles: StreamProfile[];
   activeProfileId: string;
-  workspace: { cards: WorkspaceCard[] };
+  workspace: { cards: WorkspaceCard[]; monitor?: MonitorLayout };
+}
+
+export interface MonitorLayout {
+  order: WorkspaceCard[];
+  hidden: WorkspaceCard[];
+  sizes: Partial<Record<WorkspaceCard, { width: 1 | 2 | 3; height: 'compact' | 'normal' | 'tall' }>>;
 }
 
 export type WorkspaceCard = 'stream' | 'obs' | 'actions' | 'bot' | 'twitch' | 'donationalerts' | 'streamlabs' | 'streamelements' | 'streamerbot' | 'discord' | 'subforstream' | OverlayKind;
@@ -1065,7 +1071,7 @@ export interface IpcInvoke {
   /** `base` is the value the editor started from, so changes made by the app meanwhile survive the save. */
   'settings:set': <K extends SettingsKey>(key: K, value: Settings[K], profileId?: string, base?: Settings[K]) => Settings;
   'settings:reset': (key: SettingsKey) => Settings;
-  'profiles:create': (name: string) => Settings;
+  'profiles:create': (name: string, mode?: 'empty' | 'copy') => Settings;
   'profiles:rename': (id: string, name: string) => Settings;
   'profiles:activate': (id: string) => Settings;
   'profiles:delete': (id: string) => Settings;
@@ -1101,7 +1107,8 @@ export interface IpcInvoke {
   'obs:toggleMute': (input: string) => void;
   'obs:stream': (mode: 'start' | 'stop' | 'toggle') => void;
   'obs:record': (mode: 'start' | 'stop' | 'toggle') => void;
-  'alerts:test': (type: AlertType, donationAmount?: number) => void;
+  'alerts:test': (type: AlertType, donationAmount?: number, tierId?: string) => void;
+  'overlays:test': (kind: 'events' | 'rewards' | 'collab', type: AlertType) => void;
   'alerts:pause': (paused: boolean) => void;
   'alerts:skip': () => void;
   'alerts:replay': (eventId: string) => void;

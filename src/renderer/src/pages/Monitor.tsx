@@ -1,20 +1,28 @@
-import { normalizeWorkspaceCards } from '@shared/workspace';
+import { useRef, useState } from 'react';
+import { monitorCards, normalizeMonitorLayout, reorderCards, workspaceCards } from '@shared/workspace';
 import { timerValue } from '@shared/timer';
 import { formatClock } from '@shared/template';
 import { ChatView } from '../components/ChatView';
 import { EventFeed } from '../components/EventFeed';
-import { Button, Card, Empty, StatusText } from '../components/ui';
+import { Button, Card, Empty, IconButton, Select, StatusText, Toggle } from '../components/ui';
 import { useNow } from '../hooks';
 import { useT } from '../i18n';
 import { moduleDef } from '../workspaceModules';
-import { navigate, openModule, useApp } from '../store';
-import type { ConnectionState, OverlayKind, WorkspaceCard } from '@shared/types';
+import { navigate, openModule, saveSettings, useApp } from '../store';
+import type { ConnectionState, MonitorLayout, OverlayKind, WorkspaceCard } from '@shared/types';
 
 export function Monitor() {
   const t = useT();
   const s = useApp((d) => d.settings!);
   const state = useApp((d) => d.state!);
-  const cards = normalizeWorkspaceCards(s.workspace.cards);
+  const [editing, setEditing] = useState(false);
+  const [dropTarget, setDropTarget] = useState<WorkspaceCard>();
+  const dragging = useRef<WorkspaceCard | undefined>(undefined);
+  const layout = normalizeMonitorLayout(s.workspace.monitor);
+  const installed = workspaceCards(s.workspace.cards);
+  const cards = monitorCards(installed, layout);
+  const saveLayout = (patch: Partial<MonitorLayout>) => saveSettings('workspace', { ...s.workspace, monitor: { ...layout, ...patch } });
+  const move = (from: WorkspaceCard, to: WorkspaceCard) => saveLayout({ order: reorderCards(cards, from, to) });
   const now = useNow(cards.includes('timer') && s.timers.some((timer) => timer.running) ? 1000 : 60_000);
   const connection = (id: WorkspaceCard): ConnectionState | undefined => ({ twitch:state.twitch, obs:state.obs, donationalerts:state.donationalerts, streamlabs:state.streamlabs, streamelements:state.streamelements, streamerbot:state.streamerbot, discord:state.discord, subforstream:state.subForStream, kawaki:state.kawaki })[id as 'twitch'];
   const name = (id: WorkspaceCard) => { const m = moduleDef(id); return m.title ? t(m.title) : m.name!; };
@@ -47,7 +55,19 @@ export function Monitor() {
       default: return <p className="muted">{t('workspace.sources',{n:state.overlayKinds[id as OverlayKind] ?? 0})}</p>;
     }
   };
-  return <div className="workspace monitor"><header className="workspace-header"><div><h1>{t('workspace.monitor')}</h1><p className="muted small">{t('workspace.monitorHint')}</p></div><Button icon="layers" onClick={() => navigate('workspace')}>{t('workspace.title')}</Button></header>
-    {!cards.length ? <Empty icon="dashboard" title={t('workspace.monitorEmpty')}>{t('workspace.monitorEmptyHint')}</Empty> : <div className="monitor-grid">{cards.map((id) => <Card key={id} className={`monitor-card monitor-${id}`} icon={moduleDef(id).icon} title={name(id)} actions={<Button size="sm" onClick={() => openModule(id)}>{t('workspace.openModule')}</Button>}>{observation(id)}</Card>)}</div>}
+  return <div className="workspace monitor"><header className="workspace-header"><div><h1>{t('workspace.monitor')}</h1><p className="muted small">{t('monitor.hint')}</p></div><div className="row-gap"><Button data-monitor-edit icon="settings" onClick={() => setEditing(!editing)}>{t(editing ? 'workspace.done' : 'monitor.edit')}</Button><Button icon="layers" onClick={() => navigate('workspace')}>{t('workspace.title')}</Button></div></header>
+    {editing && <div className="monitor-customize"><p className="muted small">{t('monitor.customizeHint')}</p><div className="row-gap wrap">{installed.map((id) => <Toggle key={id} label={name(id)} checked={!layout.hidden.includes(id)} onChange={(show) => saveLayout({ hidden: show ? layout.hidden.filter((item) => item !== id) : [...layout.hidden, id] })} />)}</div><Button size="sm" onClick={() => saveLayout({order:[],hidden:[],sizes:{}})}>{t('monitor.reset')}</Button></div>}
+    {!cards.length ? <Empty icon="dashboard" title={t('workspace.monitorEmpty')}>{t('workspace.monitorEmptyHint')}</Empty> : <div className="monitor-grid">{cards.map((id, index) => {
+      const size = layout.sizes[id] ?? { width: 1, height: 'compact' };
+      return <section key={id} data-monitor-card={id} data-width={size.width} data-height={size.height} className={`monitor-slot ${dropTarget === id ? 'drop-target' : ''}`} style={{ gridColumn:`span ${size.width}` }}
+        onDragOver={(e) => { if (dragging.current) { e.preventDefault(); e.dataTransfer.dropEffect='move'; setDropTarget(id); } }}
+        onDrop={(e) => { e.preventDefault(); if (dragging.current) move(dragging.current,id); dragging.current=undefined; setDropTarget(undefined); }}>
+        <Card className={`monitor-card monitor-${id}`} icon={moduleDef(id).icon} title={name(id)} actions={<><IconButton className="monitor-drag" icon="layers" label={t('monitor.drag')} draggable onDragStart={(e) => { dragging.current=id; e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain',id); }} onDragEnd={() => { dragging.current=undefined; setDropTarget(undefined); }} /><IconButton icon="external" label={t('workspace.openModule')} onClick={() => openModule(id)} /></>}>{observation(id)}</Card>
+        {editing && <div className="monitor-card-options"><IconButton icon="chevron" label={t('workspace.moveLeft')} disabled={!index} onClick={() => move(id,cards[index-1])} /><IconButton icon="chevron" label={t('workspace.moveRight')} disabled={index === cards.length-1} onClick={() => move(id,cards[index+1])} />
+          <Select value={String(size.width)} onChange={(width) => saveLayout({ sizes:{...layout.sizes,[id]:{...size,width:Number(width) as 1|2|3}} })} options={(['1','2','3']).map((value) => ({value,label:t('monitor.columns',{n:value})}))} />
+          <Select value={size.height} onChange={(height) => saveLayout({ sizes:{...layout.sizes,[id]:{...size,height}} })} options={(['compact','normal','tall'] as const).map((value) => ({value,label:t(`monitor.height.${value}`)}))} />
+        </div>}
+      </section>;
+    })}</div>}
   </div>;
 }

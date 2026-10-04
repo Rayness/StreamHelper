@@ -32,6 +32,7 @@ export function Alerts() {
   const [tierId, setTierId] = useState<string>('');
   const [previewKey, setPreviewKey] = useState(0);
   const [step, setStep] = useState<'content' | 'appearance' | 'position'>('content');
+  const [detailPreview, setDetailPreview] = useState(true);
   const tier = selected === 'donation' ? alerts.donationTiers?.find((item) => item.id === tierId) : undefined;
   const v = tier?.variant ?? alerts.types[selected];
   const style = tier?.style ?? alerts.style;
@@ -61,12 +62,11 @@ export function Alerts() {
   };
 
   return (
-    <div className="page">
+    <div className="page alerts-page">
       <PageHeader title={t('nav.alerts')} subtitle={t('alerts.subtitle')} />
       <OverlayBar kind="alerts" name={t('nav.alerts')} />
       <div className="workspace-alert-run"><div><strong>{queue.current || t(queue.paused ? 'dash.alertsPaused' : 'workspace.alertIdle')}</strong><span className="muted small">{t('dash.alertQueue',{n:queue.queueLength})}</span></div><Button data-alert-control="pause" icon={queue.paused ? 'play' : 'pause'} onClick={() => void call('alerts:pause', !queue.paused)}>{t(queue.paused ? 'dash.alertsResume' : 'dash.alertsPause')}</Button><Button data-alert-control="skip" icon="skip" disabled={!queue.current} onClick={() => void call('alerts:skip')}>{t('dash.alertsSkip')}</Button></div>
-      <div className="alerts-layout">
-        <Card className="alert-types">
+      <div className="alert-type-picker">
           <ul className="type-list">
             {ALERT_TYPES.map((type) => (
               <li key={type} className={type === selected ? 'active' : ''}>
@@ -74,25 +74,18 @@ export function Alerts() {
                   <Icon name={EVENT_ICON[type]} size={16} />
                   <span>{t(`alertType.${type}`)}</span>
                 </button>
-                <Toggle
-                  checked={alerts.types[type].enabled}
-                  onChange={(enabled) => saveSettings('alerts', { ...alerts, types: { ...alerts.types, [type]: { ...alerts.types[type], enabled } } })}
-                />
+                <span className={`alert-enabled-dot ${alerts.types[type].enabled ? 'on' : ''}`} />
               </li>
             ))}
           </ul>
-        </Card>
-
+        <div className="alert-selection-info"><strong>{t(`alertType.${selected}`)}</strong><Toggle checked={alerts.types[selected].enabled} label={t('alerts.enabledForEvent')} onChange={(enabled) => saveSettings('alerts', { ...alerts, types: { ...alerts.types, [selected]: { ...alerts.types[selected], enabled } } })} /></div>
+      </div>
+      <div className="alerts-layout alerts-redesigned">
         <div className="alert-editor">
           <div className="tabs" role="tablist">{(['content', 'appearance', 'position'] as const).map((id, i) => <button key={id} type="button" role="tab" aria-selected={step === id} className={`tab ${step === id ? 'active' : ''}`} onClick={() => setStep(id)}>{i + 1}. {t(`alerts.step.${id}`)}</button>)}</div>
           {step === 'content' && <>
           <Card
             title={t(`alertType.${selected}`)}
-            actions={
-              <Button size="sm" variant="primary" icon="play" onClick={() => void call('alerts:test', selected, tier ? tier.minAmount : undefined)}>
-                {t('alerts.test')}
-              </Button>
-            }
           >
             {selected === 'donation' && <div className="stack" style={{ marginBottom: 16 }}>
               <p className="muted small">{t('alerts.tiersHint')}</p>
@@ -130,6 +123,7 @@ export function Alerts() {
                   options={(['fade', 'slide', 'zoom', 'bounce'] as const).map((a) => ({ value: a, label: t(`anim.${a}`) }))}
                 />
               </Field>
+            </div><details className="alert-media-settings"><summary>{t('alerts.mediaSettings')}</summary><div className="form">
               <Field label={t('alerts.volume')}>
                 <input type="range" min={0} max={1} step={0.05} value={v.volume} onChange={(e) => setVariant({ volume: Number(e.target.value) })} />
               </Field>
@@ -142,11 +136,12 @@ export function Alerts() {
               <Field label={t('alerts.tts')} hint={t('alerts.ttsHint')} wide>
                 <Toggle checked={v.tts} onChange={(tts) => setVariant({ tts })} />
               </Field>
-            </div>
+            </div></details>
           </Card>
           </>}
           {step === 'appearance' && <>
           <Card title={tier ? `${t('alerts.style')} · ≥ ${tier.minAmount}` : t('alerts.style')}>
+            <p className="muted small">{t(tier ? 'alerts.tierStyleHint' : 'alerts.sharedStyleHint')}</p>
             <div className="form">
               <Field label={t('common.font')} hint={t('common.fontHint')}>
                 <TextInput value={style.fontFamily} onChange={(fontFamily) => setStyle({ fontFamily })} />
@@ -170,6 +165,7 @@ export function Alerts() {
                   ]}
                 />
               </Field>
+            </div><details className="alert-style-details"><summary>{t('alerts.moreStyle')}</summary><div className="form">
               <Field label={t('alerts.gap')}>
                 <NumberInput value={alerts.gapSec} min={0} max={30} onChange={(gapSec) => saveSettings('alerts', { ...alerts, gapSec })} />
               </Field>
@@ -181,14 +177,14 @@ export function Alerts() {
               <Field label={t('alerts.opacity')}><NumberInput value={style.backgroundOpacity} min={0} max={100} onChange={(backgroundOpacity) => setStyle({ backgroundOpacity })} /></Field>
               <Field label={t('alerts.padding')}><NumberInput value={style.padding} min={0} max={100} onChange={(padding) => setStyle({ padding })} /></Field>
               <Field label={t('alerts.radius')}><NumberInput value={style.borderRadius} min={0} max={100} onChange={(borderRadius) => setStyle({ borderRadius })} /></Field>
-            </div>
+            </div></details>
           </Card>
           </>}
           {step === 'position' && <>
           <Card title={t('alerts.position')}>
             <p className="muted small">{t('alerts.positionHelp')}</p>
             <div className="position-presets">{positionPresets.map((preset, i) => <button key={i} type="button" className={style.x === preset.x && style.y === preset.y ? 'active' : ''} aria-label={t('alerts.preset', { n: i + 1 })} onClick={() => setStyle({ ...preset, width: preset.x === 50 ? 90 : 40 })}><span /></button>)}</div>
-            <div className="form">
+            <details className="alert-position-details"><summary>{t('alerts.precisePosition')}</summary><div className="form">
               <Field label={t('alerts.anchor')}>
                 <Select value={style.anchor} onChange={(anchor) => setStyle({ anchor })} options={(['center', 'topLeft', 'topRight', 'bottomLeft', 'bottomRight'] as const).map((anchor) => ({ value: anchor, label: t(`alerts.anchor_${anchor}`) }))} />
               </Field>
@@ -196,7 +192,7 @@ export function Alerts() {
               <Field label={t('alerts.x')}><NumberInput value={style.x} min={0} max={100} onChange={(x) => setStyle({ x })} /></Field>
               <Field label={t('alerts.y')}><NumberInput value={style.y} min={0} max={100} onChange={(y) => setStyle({ y })} /></Field>
               <Field label={t('alerts.safeMargin')} hint={t('alerts.safeMarginHint')}><NumberInput value={style.safeMargin} min={0} max={200} onChange={(safeMargin) => setStyle({ safeMargin })} /></Field>
-            </div>
+            </div></details>
           </Card>
           </>}
         </div>
@@ -204,14 +200,22 @@ export function Alerts() {
         <div className="alert-preview-col">
           <Card
             title={t('alerts.preview')}
-            actions={<Button size="sm" icon="replay" onClick={() => setPreviewKey((k) => k + 1)}>{t('common.reload')}</Button>}
+            actions={<><IconButton icon="replay" label={t('common.reload')} onClick={() => setPreviewKey((k) => k + 1)} /><Button className="alert-test" size="sm" variant="primary" icon="play" onClick={() => void call('alerts:test', selected, tier?.minAmount, tier?.id)}>{t('alerts.testSelected')}</Button></>}
           >
             {overlayUrl ? (
               <>
-                <ScaledFrame key={previewKey} src={`${overlayUrl}/overlay/alerts?preview=1`} width={1920} height={1080} message={{ type: 'alert', alert: previewAlert }} />
+                <div className="row-gap preview-mode"><Button size="sm" variant={detailPreview && step !== 'position' ? 'primary' : 'secondary'} disabled={step === 'position'} onClick={() => setDetailPreview(true)}>{t('alerts.previewDetail')}</Button><Button size="sm" variant={!detailPreview || step === 'position' ? 'primary' : 'secondary'} onClick={() => setDetailPreview(false)}>{t('alerts.previewScreen')}</Button></div>
+                <div className={step === 'position' ? 'alert-placement-canvas' : ''} role={step === 'position' ? 'slider' : undefined} tabIndex={step === 'position' ? 0 : undefined} aria-label={step === 'position' ? t('alerts.dragPosition') : undefined} aria-valuetext={step === 'position' ? `${style.x}%, ${style.y}%` : undefined}
+                  onPointerDown={(e) => { if (step !== 'position' || e.button !== 0) return; e.preventDefault(); e.currentTarget.setPointerCapture(e.pointerId); const r=e.currentTarget.getBoundingClientRect(); setStyle({x:Math.round(Math.max(0,Math.min(100,(e.clientX-r.left)/r.width*100))),y:Math.round(Math.max(0,Math.min(100,(e.clientY-r.top)/r.height*100)))}); }}
+                  onPointerMove={(e) => { if (step !== 'position' || !e.currentTarget.hasPointerCapture(e.pointerId)) return; const r=e.currentTarget.getBoundingClientRect(); setStyle({x:Math.round(Math.max(0,Math.min(100,(e.clientX-r.left)/r.width*100))),y:Math.round(Math.max(0,Math.min(100,(e.clientY-r.top)/r.height*100)))}); }}
+                  onPointerUp={(e) => { if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId); }}
+                  onKeyDown={(e) => { if (step !== 'position' || !e.key.startsWith('Arrow')) return; e.preventDefault(); const delta=e.shiftKey ? 5 : 1; setStyle({x:Math.max(0,Math.min(100,style.x+(e.key==='ArrowRight'?delta:e.key==='ArrowLeft'?-delta:0))),y:Math.max(0,Math.min(100,style.y+(e.key==='ArrowDown'?delta:e.key==='ArrowUp'?-delta:0)))}); }}>
+                  <ScaledFrame key={previewKey} src={`${overlayUrl}/overlay/alerts?preview=1`} width={1920} height={1080} zoomToAlert={detailPreview && step !== 'position'} maxHeight={420} message={{ type: 'alert', alert: previewAlert }} />
+                  {step === 'position' && <span className="alert-position-pin" style={{left:`${style.x}%`,top:`${style.y}%`}}>+</span>}
+                </div>
+                {step === 'position' && <p className="muted small">{t('alerts.dragPosition')}</p>}
                 <p className="muted small">{t('alerts.localPreviewHint')}</p>
-                <Button variant="primary" icon="play" onClick={() => void call('alerts:test', selected, tier?.minAmount)}>{t('alerts.test')}</Button>
-                <CopyField value={`${overlayUrl}/overlay/alerts`} />
+                <details className="alert-source-details"><summary>{t('alerts.sourceLink')}</summary><CopyField value={`${overlayUrl}/overlay/alerts`} /></details>
               </>
             ) : (
               <p className="muted">{t('overlays.serverDown')}</p>

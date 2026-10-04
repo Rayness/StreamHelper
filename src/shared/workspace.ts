@@ -1,8 +1,38 @@
 import { ALL_OVERLAY_KINDS } from './profiles';
-import type { WorkspaceCard } from './types';
+import type { MonitorLayout, WorkspaceCard } from './types';
 
 export const INTERACTIVE_MODULES = ['wheel', 'poll', 'giveaway', 'queue', 'guess', 'quiz', 'boss'] as const;
 export const CONNECTION_MODULES = ['twitch', 'donationalerts', 'streamlabs', 'streamelements', 'streamerbot', 'discord'] as const;
+export const CONNECTION_TABS = [...CONNECTION_MODULES, 'obs', 'subforstream'] as const;
+export type ConnectionTab = typeof CONNECTION_TABS[number];
+export const isConnectionOnly = (id: WorkspaceCard) => CONNECTION_MODULES.includes(id as typeof CONNECTION_MODULES[number]) || id === 'subforstream';
+export const workspaceCards = (value: unknown) => normalizeWorkspaceCards(value).filter((id) => !isConnectionOnly(id));
+
+export function normalizeMonitorLayout(value: unknown): MonitorLayout {
+  const raw = value && typeof value === 'object' ? value as Partial<MonitorLayout> : {};
+  const sizes: MonitorLayout['sizes'] = {};
+  for (const id of WORKSPACE_CARDS) {
+    const size = raw.sizes?.[id];
+    if (size && typeof size === 'object') sizes[id] = {
+      width: [1,2,3].includes(size.width) ? size.width : 1,
+      height: ['compact','normal','tall'].includes(size.height) ? size.height : 'compact',
+    };
+  }
+  return { order: workspaceCards(raw.order), hidden: workspaceCards(raw.hidden), sizes };
+}
+
+export function monitorCards(cards: unknown, layout: unknown): WorkspaceCard[] {
+  const installed = workspaceCards(cards);
+  const normalized = normalizeMonitorLayout(layout);
+  return [...new Set([...normalized.order, ...installed])].filter((id) => installed.includes(id) && !normalized.hidden.includes(id));
+}
+
+export function reorderCards(cards: WorkspaceCard[], from: WorkspaceCard, to: WorkspaceCard): WorkspaceCard[] {
+  if (from === to || !cards.includes(from) || !cards.includes(to)) return cards;
+  const next = cards.filter((id) => id !== from);
+  next.splice(cards.indexOf(to), 0, from);
+  return next;
+}
 export const WORKSPACE_CARDS: readonly WorkspaceCard[] = ['stream', 'obs', 'actions', 'bot', ...CONNECTION_MODULES, 'subforstream', ...ALL_OVERLAY_KINDS];
 
 /** Preserve explicit selections from the old card layout, including an empty workspace. */

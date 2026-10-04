@@ -1,10 +1,28 @@
 import { useState } from 'react';
 import { DEFAULT_TWITCH_CLIENT_ID, twitchClientId } from '@shared/defaults';
+import { CONNECTION_TABS, type ConnectionTab } from '@shared/workspace';
 import type { ConnectionState, DeviceCodePrompt } from '@shared/types';
 import { Button, Card, CopyField, Field, NumberInput, StatusText, TextInput, Toggle } from '../components/ui';
+import { Icon } from '../components/icons';
+import { moduleDef } from '../workspaceModules';
+import { SubForStream } from './Obs';
 import { useNow } from '../hooks';
 import { useT } from '../i18n';
-import { call, callOk, saveSettings, useApp } from '../store';
+import { call, callOk, saveSettings, useApp, useSub } from '../store';
+
+export function Connections() {
+  const t = useT();
+  const [selected, setSelected] = useSub<ConnectionTab>('connections', 'twitch', CONNECTION_TABS);
+  const state = useApp((d) => d.state!);
+  return <div className="workspace connections-page">
+    <header className="workspace-header"><div><h1>{t('nav.connections')}</h1><p className="muted small">{t('connections.hint')}</p></div></header>
+    <div className="connections-layout"><aside className="connections-list" aria-label={t('nav.connections')}>
+      {CONNECTION_TABS.map((id) => <button key={id} data-connection={id} className={selected === id ? 'active' : ''} onClick={() => setSelected(id)}><Icon name={moduleDef(id).icon} size={18} /><span>{moduleDef(id).name}</span><span className={`status-dot status-${state[id === 'subforstream' ? 'subForStream' : id].status}`} /></button>)}
+    </aside><section className="connection-editor" data-connection-editor={selected} key={selected}>
+      {selected === 'subforstream' ? <SubForStream /> : <ConnectionDetail kind={selected} />}
+    </section></div>
+  </div>;
+}
 
 function Account({ state }: { state: ConnectionState }) {
   if (!state.account) return null;
@@ -306,7 +324,7 @@ export function ConnectionDetail({ kind }: { kind: 'twitch' | 'obs' | 'donationa
   const t = useT();
   const cfg = useApp((d) => d.settings!.twitch);
   switch (kind) {
-    case 'twitch': return <><TwitchCard account="broadcaster" /><details className="settings-disclosure"><summary>{t('settings.advanced')}</summary><Field label="Twitch Client ID" hint={t('settings.clientIdHint')}><TextInput value={cfg.clientId} placeholder={DEFAULT_TWITCH_CLIENT_ID} mono onChange={(clientId) => saveSettings('twitch', { ...cfg, clientId: clientId.trim() })} /></Field></details></>;
+    case 'twitch': return <><TwitchCard account="broadcaster" /><details className="settings-disclosure"><summary>{t('conn.twitchBot')}</summary><TwitchCard account="bot" /></details><details className="settings-disclosure"><summary>{t('settings.advanced')}</summary><Field label="Twitch Client ID" hint={t('settings.clientIdHint')}><TextInput value={cfg.clientId} placeholder={DEFAULT_TWITCH_CLIENT_ID} mono onChange={(clientId) => saveSettings('twitch', { ...cfg, clientId: clientId.trim() })} /></Field></details></>;
     case 'obs': return <ObsCard />;
     case 'donationalerts': return <DonationAlertsCard />;
     case 'streamlabs': return <StreamlabsCard />;

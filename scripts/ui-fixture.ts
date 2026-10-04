@@ -6,6 +6,8 @@ import type { AppContext } from '../src/main/core/context';
 import type { IpcInvoke, OverlayKind, OverlayMessage } from '../src/shared/types';
 import { sampleChatMessage } from '../src/main/features/chatHistory';
 import { sampleEvent, AlertQueue } from '../src/main/features/alerts';
+import { OverlayTests } from '../src/main/features/overlayTests';
+import { EmoteRain } from '../src/main/features/emotes';
 import { SongRequestService } from '../src/main/features/songRequests';
 import { OverlayServer } from '../src/main/overlay/server';
 
@@ -31,18 +33,22 @@ export async function createFixture(root: string, dataDir: string, push: (channe
   state.patch('twitch', { status: 'connected', account: { userId: 'fixture', login: 'streamer', displayName: 'Streamer' } });
   alerts = new AlertQueue(ctx, (alert) => overlay.broadcast('alerts', { type: 'alert', alert }), () => overlay.broadcast('alerts', { type: 'alertSkip' }));
   songs = new SongRequestService(ctx, { pauseCurrent: async () => null, resumeSource: async () => undefined } as any, (message) => overlay.broadcast('song', message));
+  const testBroadcasts: {kind:OverlayKind;message:OverlayMessage}[] = [];
+  const broadcast = (kind:OverlayKind,message:OverlayMessage) => {testBroadcasts.push({kind,message});overlay.broadcast(kind,message);};
+  new EmoteRain(ctx,{broadcast} as any);
+  const overlayTests = new OverlayTests(ctx,alerts,broadcast,(event) => push('event',event));
   bus.on('settings:changed', () => push('settings', settings.all));
   bus.on('state:dirty', () => push('state', state.current));
   const calls: { channel: string; args: unknown[] }[] = [];
   return {
-    calls, settings, state, songs,
+    calls, settings, state, songs, testBroadcasts,
     async invoke(channel: string, ...args: any[]) {
       calls.push({ channel, args });
       switch (channel as keyof IpcInvoke) {
-        case 'app:init': return { settings: settings.all, state: state.current, chat: [chat], events: [], version: '0.10.0 QA' };
+        case 'app:init': return { settings: settings.all, state: state.current, chat: [chat], events: [], version: '0.10.1 QA' };
         case 'settings:reset': settings.reset(args[0]); return settings.all;
         case 'settings:set': settings.setForProfile(args[0], args[1], args[2], args[3]); return settings.all;
-        case 'profiles:create': return settings.createProfile(args[0]);
+        case 'profiles:create': return settings.createProfile(args[0],args[1]);
         case 'profiles:activate': return settings.activateProfile(args[0]);
         case 'profiles:overlay': return settings.setProfileOverlay(args[0], args[1], args[2]);
         case 'chat:send': {
@@ -52,7 +58,8 @@ export async function createFixture(root: string, dataDir: string, push: (channe
         case 'media:list': return [];
         case 'song:add': return songs.add(args[0]);
         case 'twitch:rewards': return [{ id: 'song-reward', title: 'Заказ музыки', inputRequired: true, enabled: true }];
-        case 'alerts:test': bus.emit('event', sampleEvent(args[0], 'ru', 'RUB', args[1])); return;
+        case 'alerts:test': return overlayTests.alert(args[0],args[1],args[2]);
+        case 'overlays:test': return overlayTests.widget(args[0],args[1]);
         case 'alerts:pause': return alerts.setPaused(args[0]);
         case 'alerts:skip': return alerts.skip();
         case 'twitch:searchCategories': return [];

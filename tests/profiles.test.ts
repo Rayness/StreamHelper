@@ -7,6 +7,47 @@ import { SettingsStore } from '../src/main/core/store';
 import { defaultSettings } from '../src/shared/defaults';
 
 describe('stream profiles', () => {
+  it('creates a fresh profile with default feature settings, retained connections and independent monitor layout', () => {
+    const dir=mkdtempSync(join(tmpdir(),'streamhelper-fresh-profile-'));
+    const store=new SettingsStore(join(dir,'settings.json'),new EventBus(),'ru');
+    try {
+      const first=store.get('activeProfileId');
+      store.set('workspace',{cards:['chat','alerts'],monitor:{order:['alerts','chat'],hidden:['chat'],sizes:{alerts:{width:2,height:'tall'}}}});
+      store.set('bot',{...store.get('bot'),counters:{wins:99}});
+      store.set('twitch',{clientId:'shared-access'});
+      store.createProfile('Чистый','empty');
+      expect(store.get('workspace').cards).toEqual([]);
+      expect(store.get('bot').counters.wins).not.toBe(99);
+      expect(store.get('twitch').clientId).toBe('shared-access');
+      const fresh=store.get('activeProfileId');
+      store.activateProfile(first);
+      expect(store.get('bot').counters.wins).toBe(99);
+      expect(store.get('workspace').monitor?.hidden).toEqual(['chat']);
+      store.createProfile('Копия','copy');
+      expect(store.get('workspace').monitor?.sizes.alerts?.width).toBe(2);
+      store.activateProfile(fresh);
+      expect(store.get('workspace').cards).toEqual([]);
+    } finally {store.flush();rmSync(dir,{recursive:true,force:true});}
+  });
+  it('does not copy the active monitor layout into a legacy inactive profile without one', () => {
+    const dir=mkdtempSync(join(tmpdir(),'streamhelper-monitor-migration-'));
+    const file=join(dir,'settings.json');
+    try {
+      const store=new SettingsStore(file,new EventBus(),'ru');
+      const first=store.get('activeProfileId');
+      store.set('workspace',{cards:['chat','alerts'],monitor:{order:['alerts','chat'],hidden:['chat'],sizes:{}}});
+      store.createProfile('Старый'); store.flush();
+      const stored=JSON.parse(readFileSync(file,'utf8'));
+      delete stored.profiles.find((p:any)=>p.id===first).config.workspace.monitor;
+      writeFileSync(file,JSON.stringify(stored));
+      const reopened=new SettingsStore(file,new EventBus(),'ru');
+      expect(reopened.get('workspace').monitor?.hidden).toEqual(['chat']);
+      reopened.activateProfile(first);
+      expect(reopened.get('workspace').monitor?.hidden).toEqual([]);
+      expect(reopened.get('workspace').monitor?.order).toEqual([]);
+      reopened.flush();
+    } finally {rmSync(dir,{recursive:true,force:true});}
+  });
   it('persists independent workspaces including an intentionally empty layout', () => {
     const dir = mkdtempSync(join(tmpdir(), 'streamhelper-workspace-'));
     const path = join(dir, 'settings.json');

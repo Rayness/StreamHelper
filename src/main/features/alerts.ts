@@ -45,6 +45,10 @@ export class AlertQueue {
   enqueueEvent(e: StreamEvent): void {
     const alert = renderAlert(e, this.ctx.settings.get('alerts'), this.ctx.settings.get('currency'));
     if (!alert) return;
+    this.enqueueAlert(alert);
+  }
+
+  enqueueAlert(alert: RenderedAlert): void {
     this.queue.push(alert);
     this.sync();
     this.next();

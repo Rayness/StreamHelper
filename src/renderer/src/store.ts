@@ -58,6 +58,12 @@ export async function call<K extends keyof IpcInvoke>(
   ...args: Parameters<IpcInvoke[K]>
 ): Promise<Awaited<ReturnType<IpcInvoke[K]>> | undefined> {
   try {
+    if (channel === 'alerts:test' || channel === 'overlays:test' || channel === 'chat:test') {
+      const profileId = data.settings?.activeProfileId;
+      flushSaves();
+      await settingsWrite;
+      if (data.settings?.activeProfileId !== profileId) return undefined;
+    }
     return await window.api.invoke(channel, ...args);
   } catch (err) {
     const msg = String((err as Error)?.message ?? err).replace(/^Error invoking remote method '[^']+': (Error: )?/, '');
@@ -147,7 +153,7 @@ export async function profileAction<K extends 'profiles:create' | 'profiles:rena
 export type Page = 'workspace' | 'dashboard' | 'interactive' | 'alerts' | 'overlays' | 'profiles' | 'bot' | 'obs' | 'kawaki' | 'connections' | 'settings';
 
 interface NavState {
-  page: 'workspace' | 'dashboard';
+  page: 'workspace' | 'dashboard' | 'connections';
   module?: WorkspaceCard;
   catalog?: true | WorkspaceCard;
   dialog?: 'profiles' | 'settings';
@@ -160,7 +166,8 @@ function readNav(): NavState {
     const raw = JSON.parse(localStorage.getItem('nav') ?? 'null');
     if (raw && typeof raw.page === 'string') {
       const sub = raw.sub && typeof raw.sub === 'object' ? raw.sub : {};
-      return { page: raw.version === 2 && raw.page === 'dashboard' ? 'dashboard' : 'workspace', sub,
+      if (['twitch','donationalerts','streamlabs','streamelements','streamerbot','discord','subforstream'].includes(raw.module)) return { page:'connections',sub:{...sub,connections:raw.module} };
+      return { page: raw.page === 'connections' ? 'connections' : raw.version === 2 && raw.page === 'dashboard' ? 'dashboard' : 'workspace', sub,
         module: isWorkspaceModule(raw.module) ? raw.module : workspaceTarget(raw.page, sub[raw.page]) };
     }
   } catch {
@@ -186,12 +193,14 @@ export function navigate(page: Page, sub?: string): void {
   flushSaves();
   const remembered = sub === undefined ? nav.sub : { ...nav.sub, [page]: sub };
   if (page === 'profiles' || page === 'settings') { setNav({ ...nav, dialog: page, sub: remembered }); return; }
+  if (page === 'connections') { setNav({ page: 'connections', sub: remembered }); return; }
   const target = workspaceTarget(page, sub ?? remembered[page]);
   setNav({ page: page === 'dashboard' ? 'dashboard' : 'workspace', sub: remembered,
     ...resolveModuleAccess(target, data.settings?.workspace.cards) });
 }
 
 export function openModule(module: WorkspaceCard): void {
+  if (['twitch','donationalerts','streamlabs','streamelements','streamerbot','discord','subforstream'].includes(module)) { navigate('connections', module); return; }
   flushSaves();
   setNav({ page: 'workspace', sub: nav.sub, ...resolveModuleAccess(module, data.settings?.workspace.cards) });
 }

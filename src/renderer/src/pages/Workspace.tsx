@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
-import { CONNECTION_MODULES, INTERACTIVE_MODULES, normalizeWorkspaceCards } from '@shared/workspace';
+import { CONNECTION_MODULES, INTERACTIVE_MODULES, workspaceCards } from '@shared/workspace';
 import type { OverlayKind, WorkspaceCard, SettingsKey } from '@shared/types';
 import { Icon } from '../components/icons';
 import { Button, Empty, IconButton, TextInput } from '../components/ui';
@@ -19,13 +19,13 @@ const Connection = lazy(() => import('./Connections').then((m) => ({ default: m.
 const Interactive = lazy(() => import('./Interactive').then((m) => ({ default: m.InteractiveModule })));
 const Overlay = lazy(() => import('./Overlays').then((m) => ({ default: m.OverlayDetail })));
 const RESET_KEYS: Partial<Record<WorkspaceCard, SettingsKey>> = { alerts:'alerts', bot:'bot', chat:'chatOverlay', actions:'actions' };
-const GROUPS: ('all' | ModuleGroup)[] = ['all','setup','channel','display','fun','automation'];
+const GROUPS: ('all' | ModuleGroup)[] = ['all','channel','display','fun','automation'];
 
 function ModuleEditor({ id }: { id: WorkspaceCard }) {
   if (id === 'chat' || id === 'events') return <Conversation kind={id} />;
   if (id === 'alerts') return <Alerts />;
   if (id === 'bot') return <Bot />;
-  if (id === 'obs') return <><Connection kind="obs" /><Obs /></>;
+  if (id === 'obs') return <Obs />;
   if (id === 'actions') return <Actions />;
   if (id === 'subforstream') return <SubForStream />;
   if (id === 'stream') return <Stream />;
@@ -43,7 +43,7 @@ export function Workspace() {
   const nav = useNav();
   const [query, setQuery] = useState('');
   const [group, setGroup] = useState<'all' | ModuleGroup>('all');
-  const cards = normalizeWorkspaceCards(workspace.cards);
+  const cards = workspaceCards(workspace.cards);
   // Membership is checked on every render, including settings pushes and profile changes.
   const editor = nav.module && cards.includes(nav.module) ? nav.module : undefined;
   const missing = nav.module && !cards.includes(nav.module) ? nav.module : typeof nav.catalog === 'string' ? nav.catalog : undefined;
@@ -53,11 +53,11 @@ export function Workspace() {
   }, [profileId]);
   useEffect(() => { if (missing) { setQuery(''); setGroup('all'); } }, [missing]);
   const name = (id: WorkspaceCard) => { const m = moduleDef(id); return m.title ? t(m.title) : m.name!; };
-  const save = (next: WorkspaceCard[]) => saveSettings('workspace', { cards: next });
+  const save = (next: WorkspaceCard[]) => saveSettings('workspace', { ...workspace, cards: next });
   const add = (id: WorkspaceCard) => { if (!cards.includes(id)) save([...cards, id]); openModule(id); };
   const move = (id: WorkspaceCard, delta: number) => { const next = [...cards]; const i = next.indexOf(id); if (i + delta < 0 || i + delta >= next.length) return; [next[i], next[i + delta]] = [next[i + delta], next[i]]; save(next); };
   useEffect(() => { document.querySelector('.content')?.scrollTo({ top: 0 }); }, [nav.module, nav.catalog, profileId]);
-  const choices = MODULES.filter((m) => (group === 'all' || m.group === group) && (!query.trim() || `${m.title ? t(m.title) : m.name} ${t(m.description)}`.toLowerCase().includes(query.trim().toLowerCase())));
+  const choices = MODULES.filter((m) => m.group !== 'setup' && (group === 'all' || m.group === group) && (!query.trim() || `${m.title ? t(m.title) : m.name} ${t(m.description)}`.toLowerCase().includes(query.trim().toLowerCase())));
   return <div className="workspace">
     <header className="workspace-header"><div><h1>{t('workspace.title')}</h1><p className="muted small">{t('workspace.hint')}</p></div><Button variant="primary" icon="plus" onClick={openCatalog}>{t('workspace.add')}</Button></header>
     <div className="workspace-layout">

@@ -32,6 +32,7 @@ function buildCommands(t: TFn): Command[] {
   const out: Command[] = [
     {id:'page:workspace',label:t('workspace.title'),group:go,icon:'layers',run:() => navigate('workspace')},
     {id:'page:dashboard',label:t('workspace.monitor'),group:go,icon:'dashboard',run:() => navigate('dashboard')},
+    {id:'page:connections',label:t('nav.connections'),group:go,icon:'plug',run:() => navigate('connections')},
     {id:'page:profiles',label:t('nav.profiles'),group:go,icon:'users',run:() => navigate('profiles')},
     {id:'page:settings',label:t('workspace.preferences'),group:go,icon:'settings',run:() => navigate('settings')},
     {id:'catalog',label:t('workspace.add'),group:go,icon:'plus',run:openCatalog},

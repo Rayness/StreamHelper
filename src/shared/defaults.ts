@@ -1,4 +1,4 @@
-import { normalizeWorkspaceCards } from './workspace';
+import { normalizeWorkspaceCards, normalizeMonitorLayout } from './workspace';
 import type {
   AlertSettings,
   AlertType,
@@ -581,7 +581,7 @@ export function migrateSettings(s: Settings): Settings {
   const missing = defaultBuiltins(s.language).filter((b) => !known.has(b.id));
   return {
     ...s,
-    workspace: { cards: normalizeWorkspaceCards(s.workspace.cards) },
+    workspace: { ...s.workspace, cards: normalizeWorkspaceCards(s.workspace.cards), monitor: normalizeMonitorLayout(s.workspace.monitor) },
     alerts: {
       ...s.alerts,
       donationTiers: s.alerts.donationTiers.map((tier) => ({

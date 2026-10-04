@@ -62,6 +62,27 @@ const chatEvent = (id: string, userId: string, text: string) => ({
 const notify = (type: string, e: unknown) => (twitch as any).onNotification(type, e);
 
 describe('TwitchService', () => {
+  it('recognizes an automated echo before the HTTP reply when streamer and bot IDs match', async () => {
+    secrets.twitchBot={...secrets.twitch!};
+    state.patch('twitchBot',{status:'connected',account:state.current.twitch.account});
+    handler=() => { notify('channel.chat.message',chatEvent('early','1','auto')); return {status:200,json:{data:[{is_sent:true}]}}; };
+    await twitch.sendMessage('auto');
+    expect(chat[0].fromSelf).toBe(true);
+    notify('channel.chat.message',chatEvent('manual','1','!test'));
+    expect(chat[1].fromSelf).toBeUndefined();
+  });
+  it('accepts manual streamer commands if the same account was connected as the bot, while ignoring automated echoes', async () => {
+    secrets.twitchBot={...secrets.twitch!};
+    state.patch('twitchBot',{status:'connected',account:state.current.twitch.account});
+    notify('channel.chat.message',chatEvent('manual','1','!test'));
+    expect(chat[0].fromSelf).toBeUndefined();
+    expect(chat[0].roles.broadcaster).toBe(true);
+    await twitch.sendMessage('reply');
+    notify('channel.chat.message',chatEvent('sent1','1','reply'));
+    expect(chat[1].fromSelf).toBe(true);
+    notify('channel.chat.message',chatEvent('manual2','1','!test'));
+    expect(chat[2].fromSelf).toBeUndefined();
+  });
   it('sends automated messages with the separate bot token and sender ID', async () => {
     secrets.twitchBot = { ...secrets.twitch!, accessToken: 'bot-token', userId: '2', login: 'helper' };
     state.patch('twitchBot', { status: 'connected', account: { userId: '2', login: 'helper', displayName: 'Helper' } });

@@ -11,8 +11,8 @@ export function Profiles() {
   const [newName, setNewName] = useState('');
   const [editName, setEditName] = useState(active?.name ?? '');
   useEffect(() => setEditName(active?.name ?? ''), [activeId, active?.name]);
-  const create = async () => {
-    if (await profileAction('profiles:create', newName.trim() || `${active.name} ${profiles.length + 1}`)) setNewName('');
+  const create = async (mode: 'empty' | 'copy') => {
+    if (await profileAction('profiles:create', newName.trim() || (mode === 'copy' ? `${active.name} ${profiles.length + 1}` : t('profiles.freshName')), mode)) setNewName('');
   };
   return (
     <div className="page page-wide">
@@ -27,8 +27,10 @@ export function Profiles() {
             </button>)}
           </div>
           <div className="row-gap profile-create">
-            <TextInput value={newName} onChange={setNewName} placeholder={t('profiles.newName')} onKeyDown={(e) => { if (e.key === 'Enter') void create(); }} />
-            <Button icon="plus" onClick={() => void create()}>{t('profiles.create')}</Button>
+            <TextInput value={newName} onChange={setNewName} placeholder={t('profiles.newName')} onKeyDown={(e) => { if (e.key === 'Enter') void create('empty'); }} />
+            <Button variant="primary" icon="plus" onClick={() => void create('empty')}>{t('profiles.fresh')}</Button>
+            <Button icon="copy" onClick={() => void create('copy')}>{t('profiles.create')}</Button>
+            <p className="muted small">{t('profiles.freshHint')}</p>
           </div>
         </Card>
         <div className="profile-content">
