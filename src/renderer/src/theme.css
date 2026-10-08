@@ -1,0 +1,192 @@
+/* ---------- appearance: themes, accent, glass, density, corners ----------
+   `appearance.ts` sets data-theme / data-glass / data-material / data-density /
+   data-corners / data-motion on <html> and the --accent / --glass-alpha variables. */
+
+:root[data-theme] {
+  --bg: var(--t-bg);
+  --sidebar: var(--t-sidebar);
+  --panel: var(--t-panel);
+  --panel-2: var(--t-panel-2);
+  --panel-3: var(--t-panel-3);
+  --border: var(--t-border);
+  --accent-strong: color-mix(in srgb, var(--accent) 86%, #000);
+  --accent-soft: color-mix(in srgb, var(--accent) 13%, transparent);
+  --accent-text: color-mix(in srgb, var(--accent) 72%, #fff);
+  --text-strong: #fff;
+  --overlay: #05050acc;
+  --glass-blur: 22px;
+  --radius-lg: 18px;
+}
+
+/* Midnight: the original look. */
+:root[data-theme='midnight'] {
+  --t-bg: #0d0d12; --t-sidebar: #111118; --t-panel: #15151d; --t-panel-2: #1b1b25; --t-panel-3: #22222e; --t-border: #262633;
+  --text: #ececf3; --text-2: #b9b9c8; --muted: #80809a; --faint: #5c5c72;
+  --input-bg: #101017; --border-hover: #3a3a4c; --track: #2d2d3b; --thumb: #cfcfe0; --scrollbar: #2c2c3a;
+  --checker-a: #1a1a22; --checker-b: #22222c;
+}
+:root[data-theme='graphite'] {
+  --t-bg: #121212; --t-sidebar: #161616; --t-panel: #1b1b1b; --t-panel-2: #222; --t-panel-3: #2a2a2a; --t-border: #2f2f2f;
+  --text: #ededed; --text-2: #bdbdbd; --muted: #8a8a8a; --faint: #666;
+  --input-bg: #151515; --border-hover: #464646; --track: #343434; --thumb: #d4d4d4; --scrollbar: #343434;
+  --checker-a: #1c1c1c; --checker-b: #262626;
+}
+:root[data-theme='ocean'] {
+  --t-bg: #0a1018; --t-sidebar: #0d1520; --t-panel: #101a26; --t-panel-2: #15212f; --t-panel-3: #1b2a3a; --t-border: #203041;
+  --text: #e8f0f8; --text-2: #b2c2d4; --muted: #7b8ea3; --faint: #546a80;
+  --input-bg: #0b131c; --border-hover: #31475e; --track: #24364a; --thumb: #d2deea; --scrollbar: #22344a;
+  --checker-a: #111b26; --checker-b: #172331;
+}
+:root[data-theme='oled'] {
+  --t-bg: #000; --t-sidebar: #050505; --t-panel: #0a0a0a; --t-panel-2: #111; --t-panel-3: #181818; --t-border: #1f1f1f;
+  --text: #f2f2f2; --text-2: #c0c0c0; --muted: #828282; --faint: #555;
+  --input-bg: #050505; --border-hover: #363636; --track: #272727; --thumb: #ddd; --scrollbar: #222;
+  --checker-a: #0c0c0c; --checker-b: #161616;
+}
+:root[data-theme='light'] {
+  color-scheme: light;
+  --t-bg: #f2f2f7; --t-sidebar: #e9e9f1; --t-panel: #fff; --t-panel-2: #f6f6fa; --t-panel-3: #ececf3; --t-border: #dadae4;
+  --text: #17171f; --text-2: #3c3c4c; --muted: #6c6c7e; --faint: #9a9aaa;
+  --input-bg: #fff; --border-hover: #c2c2d0; --track: #cdcdd9; --thumb: #fff; --scrollbar: #c6c6d2;
+  --checker-a: #e7e7ee; --checker-b: #f6f6fa;
+  --accent-text: color-mix(in srgb, var(--accent) 78%, #000);
+  --text-strong: #111;
+  --overlay: #1b1b2a66;
+}
+:root[data-theme='light'] .toggle-thumb { box-shadow: 0 1px 2px #0003; }
+
+/* ---------- glass ---------- */
+
+:root[data-theme][data-glass] {
+  --sidebar: color-mix(in srgb, var(--t-sidebar) var(--glass-alpha), transparent);
+  --panel: color-mix(in srgb, var(--t-panel) var(--glass-alpha), transparent);
+  --panel-2: color-mix(in srgb, var(--t-panel-2) calc(var(--glass-alpha) + 8%), transparent);
+  --panel-3: color-mix(in srgb, var(--t-panel-3) calc(var(--glass-alpha) + 8%), transparent);
+  --border: color-mix(in srgb, var(--t-border) 70%, color-mix(in srgb, var(--text) 10%, transparent));
+}
+/* Without a system backdrop the blur needs something to blur: a soft accent glow. */
+:root[data-glass]:not([data-material]) body {
+  background:
+    radial-gradient(60vw 60vh at 12% 8%, color-mix(in srgb, var(--accent) 24%, transparent), transparent 70%),
+    radial-gradient(50vw 55vh at 92% 90%, color-mix(in srgb, var(--accent) 16%, #2b8cff 10%), transparent 70%),
+    var(--t-bg);
+}
+/* Mica / Acrylic is drawn by Windows behind a transparent page. */
+:root[data-material] body { background: color-mix(in srgb, var(--t-bg) 30%, transparent); }
+:root[data-material] { --bg: transparent; }
+
+/* Blur only on large containers: a backdrop-filter on every card would trap dropdowns
+   in their own stacking context and cost a lot of GPU time. */
+:root[data-glass] .sidebar,
+:root[data-glass] .workspace-canvas,
+:root[data-glass] .workspace-dialog,
+:root[data-glass] .palette,
+:root[data-glass] .toast,
+:root[data-glass] .workspace-module-menu > div {
+  backdrop-filter: blur(var(--glass-blur)) saturate(150%);
+}
+:root[data-glass] .workspace-module-menu > div { background: color-mix(in srgb, var(--t-panel-2) 94%, transparent); }
+:root[data-glass] .workspace-dialog { background: color-mix(in srgb, var(--t-bg) calc(var(--glass-alpha) + 10%), transparent); }
+:root[data-glass] .card,
+:root[data-glass] .workspace-canvas { box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 6%, transparent); }
+
+/* ---------- corners ---------- */
+
+:root[data-corners='sharp'] { --radius: 4px; --radius-sm: 3px; --radius-lg: 6px; }
+:root[data-corners='round'] { --radius: 18px; --radius-sm: 12px; --radius-lg: 26px; }
+:root[data-corners] .workspace-canvas,
+:root[data-corners] .workspace-dialog { border-radius: var(--radius-lg); }
+
+/* ---------- density ---------- */
+
+:root[data-density='compact'] .btn-md,
+:root[data-density='compact'] .input { height: 30px; }
+:root[data-density='compact'] .btn-sm { height: 25px; }
+:root[data-density='compact'] .card-head { padding: 10px 12px 0; }
+:root[data-density='compact'] .card-body { padding: 10px 12px 12px; }
+:root[data-density='compact'] .form { gap: 10px 12px; }
+:root[data-density='compact'] .workspace { padding: 16px; gap: 14px; }
+:root[data-density='compact'] .workspace-canvas { padding: 16px; }
+:root[data-density='compact'] .workspace-rail button { padding: 8px 10px; }
+:root[data-density='compact'] .sidebar li button { padding-top: 7px; padding-bottom: 7px; }
+
+/* ---------- motion ---------- */
+
+:root[data-motion='off'] *,
+:root[data-motion='off'] *::before,
+:root[data-motion='off'] *::after {
+  animation-duration: 0.01ms !important;
+  transition-duration: 0.01ms !important;
+}
+
+/* ---------- appearance settings ---------- */
+
+.theme-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.theme-card {
+  display: flex; flex-direction: column; gap: 8px; padding: 8px; text-align: left;
+  border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel-2);
+  color: var(--text-2); font: inherit; font-size: 12.5px; cursor: pointer;
+}
+.theme-card:hover { border-color: var(--border-hover); }
+.theme-card.active { border-color: var(--accent); color: var(--text-strong); box-shadow: 0 0 0 3px var(--accent-soft); }
+.theme-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.theme-sample { display: grid; grid-template-columns: 26% 1fr; height: 64px; border-radius: var(--radius-sm); overflow: hidden; border: 1px solid #8882; }
+.theme-sample > i { display: block; }
+.theme-sample > span { display: flex; flex-direction: column; gap: 5px; padding: 8px; }
+.theme-sample b { display: block; height: 7px; border-radius: 4px; }
+.theme-name { display: flex; align-items: center; justify-content: space-between; gap: 6px; font-weight: 550; }
+
+.accent-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.accent-swatch {
+  width: 30px; height: 30px; border-radius: 50%; border: 2px solid transparent; cursor: pointer;
+  box-shadow: inset 0 0 0 1px #0003; display: grid; place-items: center; color: #fff;
+}
+.accent-swatch.active { border-color: var(--text); }
+.accent-swatch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.accent-custom { position: relative; width: 30px; height: 30px; border-radius: 50%; overflow: hidden; border: 1px dashed var(--border-hover); display: grid; place-items: center; color: var(--muted); }
+.accent-custom input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+
+.segmented { display: inline-flex; padding: 3px; gap: 2px; border-radius: var(--radius-sm); background: var(--input-bg); border: 1px solid var(--border); flex-wrap: wrap; }
+.segmented button { border: 0; background: transparent; color: var(--text-2); font: inherit; font-size: 12.5px; padding: 5px 11px; border-radius: calc(var(--radius-sm) - 2px); cursor: pointer; }
+.segmented button:hover { color: var(--text); }
+.segmented button.active { background: var(--accent-soft); color: var(--text-strong); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent); }
+.segmented button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.range-row { display: flex; align-items: center; gap: 10px; }
+.range-row input[type='range'] { flex: 1; accent-color: var(--accent); }
+.range-row output { min-width: 44px; text-align: right; font-variant-numeric: tabular-nums; color: var(--text-2); }
+
+.settings-layout { display: grid; grid-template-columns: 190px minmax(0, 1fr); gap: 20px; align-items: start; }
+.settings-nav { display: flex; flex-direction: column; gap: 3px; position: sticky; top: 0; }
+.settings-nav button { display: flex; gap: 10px; align-items: center; padding: 10px 12px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--text-2); font: inherit; text-align: left; cursor: pointer; }
+.settings-nav button:hover { background: var(--panel-2); color: var(--text); }
+.settings-nav button.active { background: var(--accent-soft); color: var(--accent-text); }
+.settings-section { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+@media (max-width: 760px) { .settings-layout { grid-template-columns: 1fr; } .settings-nav { position: static; flex-direction: row; flex-wrap: wrap; } }
+
+/* Sidebar footer: settings + quick theme switch in one row. */
+.sidebar-quick { display: flex; align-items: center; gap: 2px; margin: 8px 2px 0; }
+.sidebar-quick .workspace-preferences { flex: 1; min-width: 0; margin: 0; border-radius: var(--radius-sm); }
+.sidebar-quick .workspace-preferences span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sidebar-quick .workspace-preferences:hover { background: var(--panel-2); color: var(--text); }
+.sidebar-quick .icon-btn { flex: none; }
+
+
+/* Module menu: a labelled button instead of a bare gear. */
+.workspace-module-menu summary { align-items: center; gap: 7px; font-size: 13px; color: var(--text-2); background: var(--panel-2); user-select: none; }
+.workspace-module-menu summary:hover { border-color: var(--border-hover); color: var(--text); }
+.workspace-module-menu summary::-webkit-details-marker { display: none; }
+.workspace-module-menu-arrow { transform: rotate(90deg); transition: transform 0.15s; }
+.workspace-module-menu[open] .workspace-module-menu-arrow { transform: rotate(-90deg); }
+
+.shortcut-list { display: grid; gap: 2px; margin: 8px 0 0; }
+.shortcut-list > div { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 9px 4px; border-bottom: 1px solid var(--border); }
+.shortcut-list > div:last-child { border-bottom: 0; }
+.shortcut-list dt { display: flex; gap: 4px; }
+.shortcut-list dd { margin: 0; color: var(--text-2); }
+.shortcut-list kbd { font-family: var(--mono); font-size: 11.5px; padding: 3px 7px; border-radius: 5px; border: 1px solid var(--border-hover); background: var(--panel-2); color: var(--text); box-shadow: inset 0 -1px 0 var(--border-hover); }
+/* Shortcut hints as generated content: they stay out of the button's accessible name. */
+[data-kbd] { position: relative; }
+[data-kbd]::after { content: attr(data-kbd); position: absolute; right: 10px; top: 50%; transform: translateY(-50%); padding-left: 6px; font-size: 10.5px; color: var(--faint); font-family: var(--mono); background: inherit; opacity: 0; transition: opacity 0.15s; pointer-events: none; }
+[data-kbd]:hover::after, [data-kbd]:focus-visible::after { opacity: 1; }
+.field > .segmented { align-self: flex-start; }

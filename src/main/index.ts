@@ -1,8 +1,13 @@
 import { copyFileSync, existsSync, mkdirSync, readdirSync } from 'node:fs';
 import { basename, extname, join } from 'node:path';
 import { randomBytes } from 'node:crypto';
-import { app, BrowserWindow, clipboard, dialog, Menu, nativeImage, shell, Tray } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, Menu, nativeImage, nativeTheme, shell, Tray } from 'electron';
 import { ALERT_TYPES, type AlertType, type IpcPush, type Language, type MediaFile } from '@shared/types';
+import { release } from 'node:os';
+import { normalizeAppearance } from '@shared/defaults';
+
+/** Mica / Acrylic window backdrops exist from Windows 11 22H2 (build 22621). */
+const WINDOW_MATERIAL = process.platform === 'win32' && Number(release().split('.')[2] ?? 0) >= 22621;
 import { BotService } from './bot/bot';
 import type { AppContext } from './core/context';
 import { EventBus } from './core/eventBus';
@@ -157,16 +162,18 @@ async function bootstrap(): Promise<void> {
           body += chunk.toString();
           if (body.length > 1024) throw new Error('Request too large');
         }
-        const data = JSON.parse(body) as { id?: unknown; nonce?: unknown; error?: unknown };
+        const data = JSON.parse(body) as { id?: unknown; nonce?: unknown; error?: unknown; kind?: unknown };
         if (typeof data.id !== 'string' || typeof data.nonce !== 'string') throw new Error('Invalid request');
-        const accepted = await songRequests.playerFinished(data.id, data.nonce, typeof data.error === 'string' ? data.error : '');
+        const accepted = await songRequests.playerFinished(data.id, data.nonce, typeof data.error === 'string' ? data.error : '', data.kind === 'video' ? 'video' : 'player');
         res.writeHead(accepted ? 204 : 409); res.end();
       } catch { res.writeHead(400); res.end(); }
       return true;
     },
   });
 
-  songRequests = new SongRequestService(ctx, music, (message) => overlay.broadcast('song', message), (text, replyTo) => twitch.sendMessage(text, replyTo));
+  songRequests = new SongRequestService(ctx, music, (message) => overlay.broadcast('song', message), (text, replyTo) => twitch.sendMessage(text, replyTo), {
+    rewards: { settle: (rewardId, redemptionId, status) => twitch.settleRedemption(rewardId, redemptionId, status) },
+  });
 
   const sendToAllChats = async (text: string) => {
     const ready = platforms.ready();
@@ -307,9 +314,15 @@ async function bootstrap(): Promise<void> {
     }, mainWindow?.isVisible() ? 100 : 1000);
   });
   let settingsTimer: NodeJS.Timeout | null = null;
+  let lastSongListen = settings.get('songRequests').listen;
   bus.on('settings:changed', (key) => {
     if (key === 'overlayPort') void startOverlay(true);
     if (key === 'language') createTray();
+    if (key === 'appearance') applyAppearance();
+    if (key === 'songRequests' || key === 'profiles') {
+      const listen = settings.get('songRequests').listen;
+      if (listen !== lastSongListen) { lastSongListen = listen; void obs.applySongAudio(); }
+    }
     if (settingsTimer) return;
     settingsTimer = setTimeout(() => {
       settingsTimer = null;
@@ -358,6 +371,7 @@ async function bootstrap(): Promise<void> {
       chat: chatHistory.recent(),
       events: alerts.recentEvents,
       version: app.getVersion(),
+      windowMaterial: WINDOW_MATERIAL,
     }),
     'settings:set': (key, value, profileId, base) => { settings.setForProfile(key, value, profileId, base); return settings.all; },
     'settings:reset': (key) => {
@@ -375,6 +389,17 @@ async function bootstrap(): Promise<void> {
     'twitch:updateStream': (patch) => twitch.updateStream(patch),
     'twitch:searchCategories': (q) => twitch.searchCategories(q),
     'twitch:rewards': () => twitch.listRewards(),
+    'twitch:createSongReward': async (title, cost) => {
+      try {
+        return await twitch.createSongReward(title, cost);
+      } catch (error) {
+        const status = (error as { status?: number }).status;
+        const ru = settings.get('language') === 'ru';
+        if (status === 401 || status === 403) throw new Error(ru ? 'Нет права управлять наградами. Переподключите Twitch в «Подключениях» и попробуйте снова.' : 'No permission to manage rewards. Reconnect Twitch in Connections and try again.');
+        if (status === 400 && /DUPLICATE/i.test(String((error as Error).message))) throw new Error(ru ? 'Награда с таким названием уже есть. Выберите её из списка или смените название.' : 'A reward with this title already exists. Pick it from the list or change the title.');
+        throw error;
+      }
+    },
     'chat:send': async (text, replyTo) => {
       const p = platforms.get('twitch');
       if (!p?.isChatReady()) throw new Error('chat is not connected');
@@ -412,10 +437,12 @@ async function bootstrap(): Promise<void> {
     'actions:run': (id) => actions.run(id),
     'timer:control': (id, op, sec) => progress.controlTimer(id, op, sec),
     'banner:showNow': (id) => text.showNow(id),
-    'song:add': (url) => songRequests.add(url),
+    'song:add': (url) => songRequests.addManual(url),
     'song:play': (id) => songRequests.play(id),
     'song:skip': () => songRequests.skip(),
     'song:remove': (id) => songRequests.remove(id),
+    'song:pause': (paused) => songRequests.pause(paused),
+    'song:move': (id, index) => songRequests.move(id, index),
     'music:control': (source, action) => music.control(source, action),
     'subs:check': () => subForStream.check(),
     'subs:clear': () => subForStream.clear(),
@@ -556,6 +583,8 @@ async function bootstrap(): Promise<void> {
         nodeIntegration: false,
       },
     });
+    applyAppearance();
+    mainWindow.webContents.on('did-finish-load', applyAppearance);
     mainWindow.on('ready-to-show', () => mainWindow?.show());
     mainWindow.on('close', (e) => {
       if (!quitting && settings.get('minimizeToTray')) {
@@ -576,6 +605,23 @@ async function bootstrap(): Promise<void> {
 
     if (!app.isPackaged && process.env['ELECTRON_RENDERER_URL']) void mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL']);
     else void mainWindow.loadFile(join(__dirname, '../renderer/index.html'));
+  }
+
+  /** Window-level part of the appearance: system backdrop (Windows 11), light/dark frame, zoom. */
+  function applyAppearance(): void {
+    const win = mainWindow;
+    if (!win || win.isDestroyed()) return;
+    const look = normalizeAppearance(settings.get('appearance'));
+    nativeTheme.themeSource = look.theme === 'light' ? 'light' : 'dark';
+    const material = look.glass && WINDOW_MATERIAL ? look.windowMaterial : 'none';
+    try {
+      // Without a transparent background colour the backdrop stays hidden behind it.
+      win.setBackgroundColor(material === 'none' ? (look.theme === 'light' ? '#f4f4f8' : '#0e0e13') : '#00000000');
+      win.setBackgroundMaterial(material);
+    } catch {
+      /* older Windows: the CSS glass still works */
+    }
+    win.webContents.setZoomFactor(look.scale / 100);
   }
 
   function createTray(): void {

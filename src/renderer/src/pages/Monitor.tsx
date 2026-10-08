@@ -1,29 +1,116 @@
-import { useRef, useState } from 'react';
-import { monitorCards, normalizeMonitorLayout, reorderCards, workspaceCards } from '@shared/workspace';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { monitorCards, normalizeMonitorLayout, workspaceCards } from '@shared/workspace';
+import { compactRects, gridBottom, monitorRects, MONITOR_COLS, placeCard, sortedCards, type MonitorRects } from '@shared/monitorGrid';
 import { timerValue } from '@shared/timer';
 import { formatClock } from '@shared/template';
 import { ChatView } from '../components/ChatView';
 import { EventFeed } from '../components/EventFeed';
-import { Button, Card, Empty, IconButton, Select, StatusText, Toggle } from '../components/ui';
+import { Button, Card, Empty, IconButton, StatusText, Toggle } from '../components/ui';
 import { useNow } from '../hooks';
 import { useT } from '../i18n';
 import { moduleDef } from '../workspaceModules';
 import { navigate, openModule, saveSettings, useApp } from '../store';
-import type { ConnectionState, MonitorLayout, OverlayKind, WorkspaceCard } from '@shared/types';
+import type { ConnectionState, MonitorLayout, MonitorRect, OverlayKind, WorkspaceCard } from '@shared/types';
+
+const ROW = 24;
+const GAP = 12;
+/** Pointer travel before a press on a header becomes a drag (keeps clicks working). */
+const DRAG_THRESHOLD = 4;
+
+interface Drag { id: WorkspaceCard; mode: 'move' | 'resize'; origin: MonitorRect; base: MonitorRects; startX: number; startY: number; dx: number; dy: number; active: boolean }
+
+function useNarrow(): boolean {
+  const query = '(max-width: 800px)';
+  const [narrow, setNarrow] = useState(() => window.matchMedia(query).matches);
+  useEffect(() => {
+    const media = window.matchMedia(query);
+    const onChange = () => setNarrow(media.matches);
+    media.addEventListener('change', onChange);
+    return () => media.removeEventListener('change', onChange);
+  }, []);
+  return narrow;
+}
+
+const gridArea = (r: MonitorRect): CSSProperties => ({ gridColumn: `${r.x + 1} / span ${r.w}`, gridRow: `${r.y + 1} / span ${r.h}` });
 
 export function Monitor() {
   const t = useT();
   const s = useApp((d) => d.settings!);
   const state = useApp((d) => d.state!);
   const [editing, setEditing] = useState(false);
-  const [dropTarget, setDropTarget] = useState<WorkspaceCard>();
-  const dragging = useRef<WorkspaceCard | undefined>(undefined);
+  const [drag, setDrag] = useState<Drag | null>(null);
+  const grid = useRef<HTMLDivElement>(null);
+  const narrow = useNarrow();
   const layout = normalizeMonitorLayout(s.workspace.monitor);
   const installed = workspaceCards(s.workspace.cards);
   const cards = monitorCards(installed, layout);
+  const layoutKey = JSON.stringify([cards, layout]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const rects = useMemo(() => monitorRects(cards, layout), [layoutKey]);
   const saveLayout = (patch: Partial<MonitorLayout>) => saveSettings('workspace', { ...s.workspace, monitor: { ...layout, ...patch } });
-  const move = (from: WorkspaceCard, to: WorkspaceCard) => saveLayout({ order: reorderCards(cards, from, to) });
+  // Saving freezes every visible card where it is; hidden cards keep their last spot.
+  const savePositions = (next: MonitorRects) => saveLayout({ positions: { ...layout.positions, ...next } });
   const now = useNow(cards.includes('timer') && s.timers.some((timer) => timer.running) ? 1000 : 60_000);
+
+  /** One grid step in pixels, measured from the live grid width. */
+  const unit = () => {
+    const width = grid.current?.clientWidth ?? 1200;
+    return { x: (width - GAP * (MONITOR_COLS - 1)) / MONITOR_COLS + GAP, y: ROW + GAP };
+  };
+  const target = (d: Drag): MonitorRect => {
+    const u = unit();
+    const cols = Math.round(d.dx / u.x);
+    const rows = Math.round(d.dy / u.y);
+    return d.mode === 'move' ? { ...d.origin, x: d.origin.x + cols, y: d.origin.y + rows } : { ...d.origin, w: d.origin.w + cols, h: d.origin.h + rows };
+  };
+  const preview = drag?.active ? placeCard(drag.base, drag.id, target(drag)) : rects;
+
+  // Window listeners instead of pointer capture: the drag survives leaving the card.
+  const dragRef = useRef(drag);
+  dragRef.current = drag;
+  const finish = useRef<(d: Drag) => void>(() => undefined);
+  finish.current = (d) => savePositions(placeCard(d.base, d.id, target(d)));
+  const dragging = !!drag;
+  useEffect(() => {
+    if (!dragging) return;
+    const move = (e: PointerEvent) => {
+      const d = dragRef.current;
+      if (!d) return;
+      const dx = e.clientX - d.startX;
+      const dy = e.clientY - d.startY;
+      setDrag({ ...d, dx, dy, active: d.active || Math.hypot(dx, dy) > DRAG_THRESHOLD });
+    };
+    const up = () => {
+      const d = dragRef.current;
+      if (d?.active) finish.current(d);
+      setDrag(null);
+    };
+    const cancel = (e: KeyboardEvent) => { if (e.key === 'Escape') setDrag(null); };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
+    window.addEventListener('keydown', cancel);
+    return () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', up);
+      window.removeEventListener('keydown', cancel);
+    };
+  }, [dragging]);
+
+  const begin = (id: WorkspaceCard, mode: Drag['mode'], e: React.PointerEvent) => {
+    if (narrow || e.button !== 0 || !rects[id]) return;
+    e.preventDefault();
+    setDrag({ id, mode, origin: rects[id]!, base: rects, startX: e.clientX, startY: e.clientY, dx: 0, dy: 0, active: false });
+  };
+  const onKey = (id: WorkspaceCard, e: React.KeyboardEvent) => {
+    const step = ({ ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] } as Record<string, number[]>)[e.key];
+    if (!step || !rects[id]) return;
+    e.preventDefault();
+    const r = rects[id]!;
+    savePositions(placeCard(rects, id, e.shiftKey ? { ...r, w: r.w + step[0], h: r.h + step[1] } : { ...r, x: r.x + step[0], y: r.y + step[1] }));
+  };
+
   const connection = (id: WorkspaceCard): ConnectionState | undefined => ({ twitch:state.twitch, obs:state.obs, donationalerts:state.donationalerts, streamlabs:state.streamlabs, streamelements:state.streamelements, streamerbot:state.streamerbot, discord:state.discord, subforstream:state.subForStream, kawaki:state.kawaki })[id as 'twitch'];
   const name = (id: WorkspaceCard) => { const m = moduleDef(id); return m.title ? t(m.title) : m.name!; };
   const observation = (id: WorkspaceCard) => {
@@ -55,19 +142,23 @@ export function Monitor() {
       default: return <p className="muted">{t('workspace.sources',{n:state.overlayKinds[id as OverlayKind] ?? 0})}</p>;
     }
   };
+  const order = narrow ? sortedCards(rects) : sortedCards(preview);
+  const rows = gridBottom(preview) + (drag?.active ? 8 : 0);
   return <div className="workspace monitor"><header className="workspace-header"><div><h1>{t('workspace.monitor')}</h1><p className="muted small">{t('monitor.hint')}</p></div><div className="row-gap"><Button data-monitor-edit icon="settings" onClick={() => setEditing(!editing)}>{t(editing ? 'workspace.done' : 'monitor.edit')}</Button><Button icon="layers" onClick={() => navigate('workspace')}>{t('workspace.title')}</Button></div></header>
-    {editing && <div className="monitor-customize"><p className="muted small">{t('monitor.customizeHint')}</p><div className="row-gap wrap">{installed.map((id) => <Toggle key={id} label={name(id)} checked={!layout.hidden.includes(id)} onChange={(show) => saveLayout({ hidden: show ? layout.hidden.filter((item) => item !== id) : [...layout.hidden, id] })} />)}</div><Button size="sm" onClick={() => saveLayout({order:[],hidden:[],sizes:{}})}>{t('monitor.reset')}</Button></div>}
-    {!cards.length ? <Empty icon="dashboard" title={t('workspace.monitorEmpty')}>{t('workspace.monitorEmptyHint')}</Empty> : <div className="monitor-grid">{cards.map((id, index) => {
-      const size = layout.sizes[id] ?? { width: 1, height: 'compact' };
-      return <section key={id} data-monitor-card={id} data-width={size.width} data-height={size.height} className={`monitor-slot ${dropTarget === id ? 'drop-target' : ''}`} style={{ gridColumn:`span ${size.width}` }}
-        onDragOver={(e) => { if (dragging.current) { e.preventDefault(); e.dataTransfer.dropEffect='move'; setDropTarget(id); } }}
-        onDrop={(e) => { e.preventDefault(); if (dragging.current) move(dragging.current,id); dragging.current=undefined; setDropTarget(undefined); }}>
-        <Card className={`monitor-card monitor-${id}`} icon={moduleDef(id).icon} title={name(id)} actions={<><IconButton className="monitor-drag" icon="layers" label={t('monitor.drag')} draggable onDragStart={(e) => { dragging.current=id; e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain',id); }} onDragEnd={() => { dragging.current=undefined; setDropTarget(undefined); }} /><IconButton icon="external" label={t('workspace.openModule')} onClick={() => openModule(id)} /></>}>{observation(id)}</Card>
-        {editing && <div className="monitor-card-options"><IconButton icon="chevron" label={t('workspace.moveLeft')} disabled={!index} onClick={() => move(id,cards[index-1])} /><IconButton icon="chevron" label={t('workspace.moveRight')} disabled={index === cards.length-1} onClick={() => move(id,cards[index+1])} />
-          <Select value={String(size.width)} onChange={(width) => saveLayout({ sizes:{...layout.sizes,[id]:{...size,width:Number(width) as 1|2|3}} })} options={(['1','2','3']).map((value) => ({value,label:t('monitor.columns',{n:value})}))} />
-          <Select value={size.height} onChange={(height) => saveLayout({ sizes:{...layout.sizes,[id]:{...size,height}} })} options={(['compact','normal','tall'] as const).map((value) => ({value,label:t(`monitor.height.${value}`)}))} />
-        </div>}
-      </section>;
-    })}</div>}
+    {editing && <div className="monitor-customize"><p className="muted small">{t('monitor.customizeHint')}</p><div className="row-gap wrap">{installed.map((id) => <Toggle key={id} label={name(id)} checked={!layout.hidden.includes(id)} onChange={(show) => saveLayout({ hidden: show ? layout.hidden.filter((item) => item !== id) : [...layout.hidden, id] })} />)}</div><div className="row-gap wrap"><Button size="sm" icon="layers" onClick={() => savePositions(compactRects(rects))}>{t('monitor.compact')}</Button><Button size="sm" icon="replay" onClick={() => saveLayout({ order: [], hidden: [], sizes: {}, positions: {} })}>{t('monitor.reset')}</Button></div></div>}
+    {!cards.length ? <Empty icon="dashboard" title={t('workspace.monitorEmpty')}>{t('workspace.monitorEmptyHint')}</Empty> : <div ref={grid} className={`monitor-grid ${drag?.active ? 'dragging' : ''} ${narrow ? 'stacked' : ''}`} style={narrow ? undefined : { gridTemplateRows: `repeat(${rows}, ${ROW}px)`, gap: GAP }}>
+      {drag?.active && drag.mode === 'move' && <div className="monitor-placeholder" style={gridArea(preview[drag.id]!)} />}
+      {order.map((id) => {
+        const r = preview[id]!;
+        const moving = !!drag?.active && drag.id === id;
+        // The dragged card follows the pointer from where it started; the placeholder shows where it lands.
+        const style: CSSProperties = narrow ? {} : moving && drag!.mode === 'move' ? { ...gridArea(drag!.origin), transform: `translate(${drag!.dx}px, ${drag!.dy}px)` } : gridArea(r);
+        return <section key={id} data-monitor-card={id} data-x={r.x} data-y={r.y} data-w={r.w} data-h={r.h} className={`monitor-slot ${moving ? 'moving' : ''}`} style={style}
+          onPointerDown={(e) => { const el = e.target as Element; if (el.closest('.card-head') && !el.closest('button:not(.monitor-drag), a, input, select')) begin(id, 'move', e); }}>
+          <Card className={`monitor-card monitor-${id}`} icon={moduleDef(id).icon} title={name(id)} actions={<><IconButton className="monitor-drag" icon="grip" label={`${t('monitor.drag')}. ${t('monitor.keysHint')}`} onKeyDown={(e) => onKey(id, e)} /><IconButton icon="external" label={t('workspace.openModule')} onClick={() => openModule(id)} /></>}>{observation(id)}</Card>
+          {!narrow && <span className="monitor-resize" title={t('monitor.resize')} onPointerDown={(e) => { e.stopPropagation(); begin(id, 'resize', e); }} />}
+        </section>;
+      })}
+    </div>}
   </div>;
 }

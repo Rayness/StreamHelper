@@ -14,6 +14,8 @@ export interface Toast {
 export interface AppData {
   ready: boolean;
   version: string;
+  /** Windows can draw Mica / Acrylic behind the window. */
+  windowMaterial: boolean;
   settings: Settings | null;
   state: RuntimeState | null;
   chat: ChatMessage[];
@@ -23,7 +25,7 @@ export interface AppData {
 
 const CHAT_LIMIT = 500;
 
-let data: AppData = { ready: false, version: '', settings: null, state: null, chat: [], events: [], toasts: [] };
+let data: AppData = { ready: false, version: '', windowMaterial: false, settings: null, state: null, chat: [], events: [], toasts: [] };
 const listeners = new Set<() => void>();
 const subscribe = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; };
 

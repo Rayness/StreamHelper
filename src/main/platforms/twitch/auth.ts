@@ -11,6 +11,8 @@ export const BROADCASTER_SCOPES = [
   'moderator:manage:shoutouts',
   'channel:read:subscriptions',
   'channel:read:redemptions',
+  // Create the song-request reward and refund / fulfil its redemptions.
+  'channel:manage:redemptions',
   'channel:manage:broadcast',
   'bits:read',
 ];

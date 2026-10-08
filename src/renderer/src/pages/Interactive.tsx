@@ -178,9 +178,12 @@ function BulkSegments({ wheel, onApply }: { wheel: Wheel; onApply: (s: WheelSegm
           variant="primary"
           icon="check"
           onClick={() => {
+            // Repeated labels must not reuse one segment: duplicate ids broke editing and deleting.
+            const used = new Set<string>();
             onApply(
               lines.map((label, i) => {
-                const existing = wheel.segments.find((s) => s.label === label);
+                const existing = wheel.segments.find((s) => s.label === label && !used.has(s.id));
+                if (existing) used.add(existing.id);
                 return existing ?? { id: uid('seg_'), label, color: WHEEL_COLORS[i % WHEEL_COLORS.length], weight: 1 };
               }),
             );

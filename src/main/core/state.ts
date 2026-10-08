@@ -27,7 +27,7 @@ export function initialRuntimeState(): RuntimeState {
     ad: { activeId: null, endsAt: null },
     spotlight: null,
     music: { status: 'connecting', track: null, sources: [] },
-    songRequests: { queue: [], current: null, playerConnected: false, lastError: null },
+    songRequests: { queue: [], current: null, paused: false, obsAudio: null, playerConnected: false, lastError: null },
     update: { status: 'idle', version: null, progress: 0, error: null },
     dockUrl: '',
     bannersShown: [],

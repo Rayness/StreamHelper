@@ -32,7 +32,7 @@ export async function createFixture(root: string, dataDir: string, push: (channe
   state.patch('overlayUrl', `http://127.0.0.1:${overlay.port}`);
   state.patch('twitch', { status: 'connected', account: { userId: 'fixture', login: 'streamer', displayName: 'Streamer' } });
   alerts = new AlertQueue(ctx, (alert) => overlay.broadcast('alerts', { type: 'alert', alert }), () => overlay.broadcast('alerts', { type: 'alertSkip' }));
-  songs = new SongRequestService(ctx, { pauseCurrent: async () => null, resumeSource: async () => undefined } as any, (message) => overlay.broadcast('song', message));
+  songs = new SongRequestService(ctx, { pauseCurrent: async () => null, resumeSource: async () => undefined } as any, (message) => overlay.broadcast('song', message), undefined, { lookup: async () => ({ ok: true, title: 'Тестовый трек' }) });
   const testBroadcasts: {kind:OverlayKind;message:OverlayMessage}[] = [];
   const broadcast = (kind:OverlayKind,message:OverlayMessage) => {testBroadcasts.push({kind,message});overlay.broadcast(kind,message);};
   new EmoteRain(ctx,{broadcast} as any);
@@ -56,8 +56,12 @@ export async function createFixture(root: string, dataDir: string, push: (channe
           push('chat:message',message); return;
         }
         case 'media:list': return [];
-        case 'song:add': return songs.add(args[0]);
-        case 'twitch:rewards': return [{ id: 'song-reward', title: 'Заказ музыки', inputRequired: true, enabled: true }];
+        case 'song:add': return songs.addManual(args[0]);
+        case 'song:move': return songs.move(args[0], args[1]);
+        case 'song:pause': return songs.pause(args[0]);
+        case 'song:remove': return songs.remove(args[0]);
+        case 'twitch:rewards': return [{ id: 'song-reward', title: 'Заказ музыки', inputRequired: true, enabled: true, manageable: true }];
+        case 'twitch:createSongReward': return { id: 'song-reward', title: args[0] };
         case 'alerts:test': return overlayTests.alert(args[0],args[1],args[2]);
         case 'overlays:test': return overlayTests.widget(args[0],args[1]);
         case 'alerts:pause': return alerts.setPaused(args[0]);

@@ -10,7 +10,7 @@ describe('module-owned workspace', () => {
     const layout={order:['events','chat','alerts'],hidden:['chat'],sizes:{chat:{width:2,height:'tall'}}};
     expect(monitorCards(['chat','alerts','events','goal'],layout)).toEqual(['events','alerts','goal']);
     expect(monitorCards(['chat','alerts'],{...layout,hidden:[]})).toEqual(['chat','alerts']);
-    expect(normalizeMonitorLayout({order:['chat','fake'],hidden:['twitch'],sizes:{chat:{width:99,height:'invalid'}}})).toEqual({order:['chat'],hidden:[],sizes:{chat:{width:1,height:'compact'}}});
+    expect(normalizeMonitorLayout({order:['chat','fake'],hidden:['twitch'],sizes:{chat:{width:99,height:'invalid'}}})).toEqual({order:['chat'],hidden:[],sizes:{chat:{width:1,height:'compact'}},positions:{}});
     expect(reorderCards(['chat','alerts','events'],'chat','events')).toEqual(['alerts','events','chat']);
     expect(reorderCards(['chat','alerts','events'],'events','chat')).toEqual(['events','chat','alerts']);
   });

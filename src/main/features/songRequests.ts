@@ -26,6 +26,36 @@ export function youtubeVideoId(input: string): string | null {
   }
 }
 
+/** Result of asking YouTube about a video before it is queued. */
+export type VideoCheck = { ok: true; title?: string } | { ok: false; reason: 'notFound' | 'embedBlocked' };
+export type VideoLookup = (videoId: string) => Promise<VideoCheck | null>;
+
+/**
+ * YouTube oEmbed needs no API key: 200 = embeddable (with title), 401/403 = the owner blocked
+ * embedding (it would fail in OBS), 400/404 = removed, private or wrong. `null` = could not check;
+ * the request is then accepted and the player reports problems later.
+ */
+export const oembedLookup: VideoLookup = async (videoId) => {
+  try {
+    const url = `https://www.youtube.com/oembed?format=json&url=${encodeURIComponent(`https://www.youtube.com/watch?v=${videoId}`)}`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
+    if (res.ok) {
+      const json = await res.json().catch(() => null) as { title?: unknown } | null;
+      return { ok: true, title: typeof json?.title === 'string' ? json.title.slice(0, 200) : undefined };
+    }
+    if (res.status === 401 || res.status === 403) return { ok: false, reason: 'embedBlocked' };
+    if (res.status === 400 || res.status === 404) return { ok: false, reason: 'notFound' };
+    return null;
+  } catch {
+    return null;
+  }
+};
+
+/** Channel-points bookkeeping; only works for rewards created by this app. */
+export interface RedemptionSettler { settle(rewardId: string, redemptionId: string, status: 'FULFILLED' | 'CANCELED'): Promise<void> }
+
+type Rejection = 'noLink' | 'full' | 'duplicate' | 'notFound' | 'embedBlocked' | 'playback';
+
 export function youtubeUrlInText(text: string): string | null {
   for (const raw of text.match(/https?:\/\/[^\s<>"']+/gi) ?? []) {
     const url = raw.replace(/[),.!?;]+$/, '');
@@ -37,6 +67,7 @@ export function youtubeUrlInText(text: string): string | null {
 /** Persistent queue for requests from channel points, donations and the streamer's own controls. */
 export class SongRequestService {
   private current: SongRequest | null = null;
+  private paused = false;
   private nonce: string | null = null;
   private resumeId: string | null = null;
   private seen = new Set<string>();
@@ -51,6 +82,7 @@ export class SongRequestService {
     private music: MusicService,
     private broadcast: (message: OverlayMessage) => void,
     private reply?: (text: string, replyTo?: string) => Promise<void>,
+    private options: { lookup?: VideoLookup; rewards?: RedemptionSettler } = {},
   ) {
     ctx.bus.on('event', (event) => this.onEvent(event));
     ctx.bus.on('settings:changed', (key) => {
@@ -61,7 +93,7 @@ export class SongRequestService {
   }
 
   get overlayMessage(): OverlayMessage {
-    return { type: 'song', request: this.current, nonce: this.nonce, config: this.ctx.settings.get('songRequests'), queue: this.ctx.settings.get('songQueue'), lang: this.ctx.settings.get('language') };
+    return { type: 'song', request: this.current, nonce: this.nonce, paused: this.paused, config: this.ctx.settings.get('songRequests'), queue: this.ctx.settings.get('songQueue'), lang: this.ctx.settings.get('language') };
   }
 
   setPlayerConnected(connected: boolean): void {
@@ -70,6 +102,7 @@ export class SongRequestService {
     if (!connected) {
       this.generation++;
       this.current = null;
+      this.paused = false;
       this.nonce = null;
       this.sync();
       void this.resumeMusic();
@@ -77,13 +110,93 @@ export class SongRequestService {
     if (connected) void this.maybeStart();
   }
 
-  add(url: string, userName = 'Streamer', source: SongRequest['source'] = 'manual', id = randomBytes(10).toString('hex')): void {
+  private get ru(): boolean { return this.ctx.settings.get('language') === 'ru'; }
+
+  private reason(code: Rejection): string {
+    const ru = this.ru;
+    switch (code) {
+      case 'noLink': return ru ? 'в заказе нет ссылки на видео YouTube.' : 'the request has no YouTube video link.';
+      case 'full': return ru ? 'очередь заказов заполнена, попробуйте позже.' : 'the song queue is full, try again later.';
+      case 'duplicate': return ru ? 'это видео уже есть в очереди.' : 'this video is already queued.';
+      case 'notFound': return ru ? 'видео не найдено (удалено, приватное или неверная ссылка).' : 'video not found (removed, private or a wrong link).';
+      case 'embedBlocked': return ru ? 'автор запретил воспроизводить это видео вне YouTube. Попробуйте другую загрузку песни.' : 'the owner blocked playing this video outside YouTube. Try another upload of the song.';
+      case 'playback': return ru ? 'YouTube не дал воспроизвести это видео.' : 'YouTube refused to play this video.';
+    }
+  }
+
+  private say(text: string, replyTo?: string): void {
+    // Answers to a chat command always go out; redemption notices follow the setting.
+    if (!this.reply || (!replyTo && !this.ctx.settings.get('songRequests').replyInChat)) return;
+    void this.reply(text, replyTo).catch(() => undefined); // chat may be offline; the request itself is unaffected
+  }
+
+  private settle(request: Pick<SongRequest, 'redemption'> | null | undefined, status: 'FULFILLED' | 'CANCELED'): void {
+    const r = request?.redemption;
+    if (!r || !this.options.rewards) return;
+    if (status === 'CANCELED' && !this.ctx.settings.get('songRequests').refundRejected) return;
+    // Fails for rewards not created by this app; that is expected and harmless.
+    void this.options.rewards.settle(r.rewardId, r.id, status).catch(() => undefined);
+  }
+
+  private reject(userName: string, code: Rejection, redemption?: SongRequest['redemption'], replyTo?: string): string {
+    const reason = this.reason(code);
+    this.ctx.state.patch('songRequests', { lastRejected: { userName, reason, at: Date.now() } });
+    this.settle({ redemption }, 'CANCELED');
+    const refunded = !!redemption && !!this.options.rewards && this.ctx.settings.get('songRequests').refundRejected;
+    this.say(`@${userName}, ${reason}${refunded ? (this.ru ? ' Баллы возвращены.' : ' Points refunded.') : ''}`, replyTo);
+    return reason;
+  }
+
+  private precheck(videoId: string): Rejection | null {
+    const queue = this.ctx.settings.get('songQueue');
+    if (queue.some((item) => item.videoId === videoId)) return 'duplicate';
+    if (queue.length >= Math.max(1, this.ctx.settings.get('songRequests').maxQueue)) return 'full';
+    return null;
+  }
+
+  /**
+   * One entry point for every viewer request: checks the link, asks YouTube whether the video
+   * exists and may be embedded, queues it and tells the viewer. Rejected redemptions are refunded.
+   */
+  async request(text: string, userName: string, source: SongRequest['source'], id: string, redemption?: SongRequest['redemption'], replyTo?: string): Promise<{ ok: true; position: number } | { ok: false; reason: string }> {
+    const url = youtubeUrlInText(text);
+    const videoId = url ? youtubeVideoId(url) : null;
+    if (!url || !videoId) return { ok: false, reason: this.reject(userName, 'noLink', redemption, replyTo) };
+    const early = this.precheck(videoId);
+    if (early) return { ok: false, reason: this.reject(userName, early, redemption, replyTo) };
+    const check = await (this.options.lookup ?? oembedLookup)(videoId);
+    if (check && !check.ok) return { ok: false, reason: this.reject(userName, check.reason, redemption, replyTo) };
+    try {
+      this.add(url, userName, source, id, { title: check?.title, redemption });
+    } catch {
+      // The queue changed while YouTube was answering.
+      return { ok: false, reason: this.reject(userName, this.precheck(videoId) ?? 'full', redemption, replyTo) };
+    }
+    const position = this.ctx.settings.get('songQueue').findIndex((item) => item.id === id) + 1;
+    const title = check?.title ? `«${check.title}»` : (this.ru ? 'трек' : 'your song');
+    this.say(this.ru ? `@${userName}, ${title} в очереди: №${position}.` : `@${userName}, ${title} is queued at #${position}.`, replyTo);
+    return { ok: true, position };
+  }
+
+  /** The streamer's own "Add" button: same checks, errors go back to the UI. */
+  async addManual(url: string): Promise<void> {
+    const videoId = youtubeVideoId(url.trim());
+    if (!videoId) throw new Error(this.ru ? 'Вставьте ссылку на одно видео YouTube.' : 'Paste a single YouTube video link.');
+    const early = this.precheck(videoId);
+    if (early) throw new Error(this.reason(early));
+    const check = await (this.options.lookup ?? oembedLookup)(videoId);
+    if (check && !check.ok) throw new Error(this.reason(check.reason));
+    this.add(url.trim(), this.ru ? 'Стример' : 'Streamer', 'manual', undefined, { title: check?.title });
+  }
+
+  add(url: string, userName = 'Streamer', source: SongRequest['source'] = 'manual', id = randomBytes(10).toString('hex'), extra: Pick<SongRequest, 'title' | 'redemption'> = {}): void {
     const videoId = youtubeVideoId(url);
     if (!videoId) throw new Error('Send a single YouTube video link');
     const queue = this.ctx.settings.get('songQueue');
     if (queue.length >= Math.max(1, this.ctx.settings.get('songRequests').maxQueue)) throw new Error('Song request queue is full');
     if (queue.some((item) => item.videoId === videoId)) throw new Error('This video is already in the queue');
-    const request: SongRequest = { id, videoId, url: `https://www.youtube.com/watch?v=${videoId}`, userName, source, requestedAt: Date.now() };
+    const request: SongRequest = { id, videoId, url: `https://www.youtube.com/watch?v=${videoId}`, userName, source, requestedAt: Date.now(),
+      ...(extra.title ? { title: extra.title } : {}), ...(extra.redemption ? { redemption: extra.redemption } : {}) };
     this.ctx.settings.set('songQueue', [...queue, request]);
     void this.maybeStart();
   }
@@ -119,6 +232,7 @@ export class SongRequestService {
       queue = this.ctx.settings.get('songQueue');
       if (!queue.length) { await this.resumeMusic(); return; }
       this.current = queue[0];
+      this.paused = false;
       this.nonce = randomBytes(20).toString('hex');
       this.ctx.state.patch('songRequests', { lastError: null });
       this.sync();
@@ -131,6 +245,35 @@ export class SongRequestService {
 
   async skip(): Promise<void> {
     if (!this.current) return;
+    this.settle(this.current, 'FULFILLED');
+    await this.dropCurrent();
+  }
+
+  /** Pause or resume the playing video in OBS without losing its place. */
+  pause(paused: boolean): void {
+    if (!this.current || this.paused === paused) return;
+    this.paused = paused;
+    this.sync();
+    this.broadcast(this.overlayMessage);
+  }
+
+  /** Reorder the upcoming requests; the playing one stays where it is. */
+  move(id: string, index: number): void {
+    const queue = this.ctx.settings.get('songQueue');
+    const playing = queue.filter((item) => item.id === this.current?.id);
+    const upcoming = queue.filter((item) => item.id !== this.current?.id);
+    const from = upcoming.findIndex((item) => item.id === id);
+    if (from < 0) return;
+    const [item] = upcoming.splice(from, 1);
+    upcoming.splice(Math.max(0, Math.min(upcoming.length, Math.round(index))), 0, item);
+    this.ctx.settings.set('songQueue', [...playing, ...upcoming]);
+    this.broadcast(this.overlayMessage);
+  }
+
+  /** Remove the playing request and move on to the next one (or give Windows music back). */
+  private async dropCurrent(): Promise<void> {
+    if (!this.current) return;
+    this.paused = false;
     this.ctx.settings.set('songQueue', this.ctx.settings.get('songQueue').filter((item) => item.id !== this.current?.id));
     this.current = null;
     this.nonce = null;
@@ -151,11 +294,25 @@ export class SongRequestService {
       void this.skip();
       return;
     }
+    // Removed by the streamer before it played: the viewer gets the points back.
+    this.settle(this.ctx.settings.get('songQueue').find((item) => item.id === id), 'CANCELED');
     this.ctx.settings.set('songQueue', this.ctx.settings.get('songQueue').filter((item) => item.id !== id));
   }
 
-  async playerFinished(id: string, nonce: string, error = ''): Promise<boolean> {
+  /**
+   * `kind: 'video'` means this particular video cannot play (removed, embedding blocked):
+   * drop it, refund and continue with the next request so the stream is not stuck.
+   * Anything else is a player problem (no YouTube access, OBS source) and keeps the request.
+   */
+  async playerFinished(id: string, nonce: string, error = '', kind: 'video' | 'player' = 'player'): Promise<boolean> {
     if (!this.current || id !== this.current.id || nonce !== this.nonce) return false;
+    if (error && kind === 'video') {
+      const failed = this.current;
+      this.reject(failed.userName, 'playback', failed.redemption);
+      this.ctx.state.patch('songRequests', { lastError: `${failed.title ?? failed.url}: ${error.slice(0, 160)}` });
+      await this.dropCurrent();
+      return true;
+    }
     if (error) {
       // A blocked embed/network failure must never consume a paid request or drain the queue.
       this.autoBlocked = true;
@@ -167,13 +324,15 @@ export class SongRequestService {
       await this.resumeMusic();
       return true;
     }
-    await this.skip();
+    this.settle(this.current, 'FULFILLED');
+    await this.dropCurrent();
     return true;
   }
 
   private sync(): void {
     this.ctx.state.patch('songRequests', {
       current: this.current,
+      paused: this.paused,
       queue: this.ctx.settings.get('songQueue').filter((item) => item.id !== this.current?.id),
     });
   }
@@ -198,17 +357,16 @@ export class SongRequestService {
     if (!hasPermission(message.roles, cfg.chatPermission)) response = ru ? 'У вас нет доступа к заказу музыки.' : 'You cannot request songs.';
     else if ((this.chatCooldowns.get(message.userId) ?? 0) > Date.now()) return true;
     else {
-      try {
-        const url = youtubeUrlInText(parsed.args.join(' '));
-        if (!url) throw new Error(ru ? 'Укажите ссылку на одно видео YouTube.' : 'Provide a single YouTube video link.');
-        this.add(url, message.userName, 'chat', `chat_${message.id}`);
+      // Replies (queued / rejected) are sent by `request` itself.
+      const result = await this.request(parsed.args.join(' '), message.userName, 'chat', `chat_${message.id}`, undefined, message.id);
+      if (result.ok) {
         this.chatCooldowns.delete(message.userId);
         this.chatCooldowns.set(message.userId, Date.now() + Math.max(0, cfg.chatCooldownSec) * 1000);
         if (this.chatCooldowns.size > 1000) this.chatCooldowns.delete(this.chatCooldowns.keys().next().value!);
-        response = ru ? `${message.userName}, трек добавлен в очередь.` : `${message.userName}, your song is queued.`;
-      } catch (error) { response = String((error as Error).message ?? error); }
+      }
+      return true;
     }
-    await this.reply?.(response, message.id);
+    await this.reply?.(response, message.id).catch(() => undefined);
     return true;
   }
 
@@ -251,12 +409,14 @@ export class SongRequestService {
     this.seen.add(event.id);
     this.seenOrder.push(event.id);
     if (this.seenOrder.length > 500) this.seen.delete(this.seenOrder.shift()!);
-    const url = youtubeUrlInText(text);
-    if (!url) {
-      if (source === 'redemption') this.ctx.state.patch('songRequests', { lastError: this.ctx.settings.get('language') === 'ru' ? 'Заказ не содержит ссылки YouTube. Включите обязательный ввод текста в награде Twitch.' : 'Request has no YouTube link. Require text input on the Twitch reward.' });
-      return;
+    if (!youtubeUrlInText(text)) {
+      // A donation without a link is just a donation; a song redemption without one is a mistake.
+      if (source !== 'redemption') return;
+      if (!text.trim()) this.ctx.state.patch('songRequests', { lastError: this.ru ? 'Заказ не содержит ссылки YouTube. Включите обязательный ввод текста в награде Twitch.' : 'Request has no YouTube link. Require text input on the Twitch reward.' });
     }
-    try { this.add(url, event.userName, source, event.id); }
-    catch (error) { this.ctx.state.patch('songRequests', { lastError: String((error as Error).message ?? error) }); }
+    const redemption = event.type === 'redemption' && event.rewardId ? { id: event.id, rewardId: event.rewardId } : undefined;
+    void this.request(text, event.userName, source, event.id, redemption).catch((error) => {
+      this.ctx.state.patch('songRequests', { lastError: String((error as Error).message ?? error) });
+    });
   }
 }

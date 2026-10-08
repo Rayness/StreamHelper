@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { CONNECTION_MODULES, INTERACTIVE_MODULES, workspaceCards } from '@shared/workspace';
 import type { OverlayKind, WorkspaceCard, SettingsKey } from '@shared/types';
+import { ErrorBoundary } from '../components/ErrorBoundary';
 import { Icon } from '../components/icons';
 import { Button, Empty, IconButton, TextInput } from '../components/ui';
 import { useT } from '../i18n';
@@ -29,7 +30,8 @@ function ModuleEditor({ id }: { id: WorkspaceCard }) {
   if (id === 'actions') return <Actions />;
   if (id === 'subforstream') return <SubForStream />;
   if (id === 'stream') return <Stream />;
-  if (id === 'kawaki') return <><Kawaki /><Overlay kind="kawaki" /></>;
+  // Kawaki already includes its overlay preview, link and style card.
+  if (id === 'kawaki') return <Kawaki />;
   if (CONNECTION_MODULES.includes(id as typeof CONNECTION_MODULES[number])) return <Connection kind={id as typeof CONNECTION_MODULES[number]} />;
   if (INTERACTIVE_MODULES.includes(id as typeof INTERACTIVE_MODULES[number])) return <Interactive kind={id as typeof INTERACTIVE_MODULES[number]} />;
   return <Overlay kind={id as OverlayKind} />;
@@ -44,6 +46,18 @@ export function Workspace() {
   const [query, setQuery] = useState('');
   const [group, setGroup] = useState<'all' | ModuleGroup>('all');
   const cards = workspaceCards(workspace.cards);
+  const menu = useRef<HTMLDetailsElement>(null);
+  // The module menu is a <details>: close it on an outside click or Escape like any other menu.
+  useEffect(() => {
+    const close = (e: Event) => {
+      const el = menu.current;
+      if (!el?.open) return;
+      if (e instanceof KeyboardEvent ? e.key === 'Escape' : !el.contains(e.target as Node)) el.removeAttribute('open');
+    };
+    document.addEventListener('pointerdown', close);
+    document.addEventListener('keydown', close);
+    return () => { document.removeEventListener('pointerdown', close); document.removeEventListener('keydown', close); };
+  }, []);
   // Membership is checked on every render, including settings pushes and profile changes.
   const editor = nav.module && cards.includes(nav.module) ? nav.module : undefined;
   const missing = nav.module && !cards.includes(nav.module) ? nav.module : typeof nav.catalog === 'string' ? nav.catalog : undefined;
@@ -77,8 +91,8 @@ export function Workspace() {
           <div className="workspace-catalog-grid">{choices.map((m) => <button key={m.id} data-add-module={m.id} type="button" className={`workspace-module-choice ${cards.includes(m.id) ? 'added' : ''}`} disabled={cards.includes(m.id)} onClick={() => add(m.id)}><span className="workspace-tile-icon"><Icon name={m.icon} size={23} /></span><strong>{name(m.id)}</strong><p>{t(m.description)}</p><span className="workspace-tile-action"><Icon name={cards.includes(m.id) ? 'check' : 'plus'} size={15} />{t(cards.includes(m.id) ? 'workspace.added' : 'common.add')}</span></button>)}</div>
           {!choices.length && <p className="muted">{t('palette.empty')}</p>}
         </div> : editor ? <div className="workspace-editor" data-editor-module={editor} key={`${profileId}:${editor}`}>
-          <header className="workspace-canvas-head"><div><span className="workspace-eyebrow">{t('workspace.modules')}</span><h2><Icon name={moduleDef(editor).icon} size={24} />{name(editor)}</h2><p className="muted small">{t(moduleDef(editor).description)}</p></div><details className="workspace-module-menu"><summary aria-label={t('workspace.edit')}><Icon name="settings" size={17} /></summary><div><Button size="sm" disabled={cards[0] === editor} onClick={() => move(editor,-1)}>{t('workspace.moveLeft')}</Button><Button size="sm" disabled={cards.at(-1) === editor} onClick={() => move(editor,1)}>{t('workspace.moveRight')}</Button><Button size="sm" variant="danger" icon="trash" onClick={() => { save(cards.filter((id) => id !== editor)); navigate('workspace'); }}>{t('workspace.remove')}</Button>{RESET_KEYS[editor] && <Button size="sm" onClick={() => { if (window.confirm(t('settings.resetConfirm'))) void profileAction('settings:reset', RESET_KEYS[editor]!); }}>{t('workspace.reset')}</Button>}<p className="muted small">{t('workspace.removeHint')}</p></div></details></header>
-          <Suspense fallback={<span role="status">…</span>}><ModuleEditor id={editor} /></Suspense>
+          <header className="workspace-canvas-head"><div><span className="workspace-eyebrow">{t('workspace.modules')}</span><h2><Icon name={moduleDef(editor).icon} size={24} />{name(editor)}</h2><p className="muted small">{t(moduleDef(editor).description)}</p></div><details className="workspace-module-menu" ref={menu} onClick={(e) => { if ((e.target as Element).closest('button')) menu.current?.removeAttribute('open'); }}><summary title={t('workspace.edit')}><Icon name="settings" size={16} /><span>{t('workspace.moduleActions')}</span><Icon name="chevron" size={13} className="workspace-module-menu-arrow" /></summary><div><Button size="sm" disabled={cards[0] === editor} onClick={() => move(editor,-1)}>{t('workspace.moveLeft')}</Button><Button size="sm" disabled={cards.at(-1) === editor} onClick={() => move(editor,1)}>{t('workspace.moveRight')}</Button><Button size="sm" variant="danger" icon="trash" onClick={() => { save(cards.filter((id) => id !== editor)); navigate('workspace'); }}>{t('workspace.remove')}</Button>{RESET_KEYS[editor] && <Button size="sm" onClick={() => { if (window.confirm(t('settings.resetConfirm'))) void profileAction('settings:reset', RESET_KEYS[editor]!); }}>{t('workspace.reset')}</Button>}<p className="muted small">{t('workspace.removeHint')}</p></div></details></header>
+          <ErrorBoundary><Suspense fallback={<span role="status">…</span>}><ModuleEditor id={editor} /></Suspense></ErrorBoundary>
         </div> : <div className="workspace-overview-content">
           {!cards.length ? <div className="workspace-welcome"><span className="workspace-welcome-icon"><Icon name="layers" size={42} /></span><Empty icon="plus" title={t('workspace.empty')}>{t('workspace.emptyHint')}</Empty><Button variant="primary" icon="plus" onClick={openCatalog}>{t('workspace.add')}</Button></div> : <><header className="workspace-canvas-head"><div><h2>{t('workspace.overview')}</h2><p className="muted">{t('workspace.select')}</p></div><span className="pill">{t('workspace.moduleCount',{n:cards.length})}</span></header><div className="workspace-installed-grid">{cards.map((id) => <button key={id} className="workspace-installed" onClick={() => openModule(id)}><Icon name={moduleDef(id).icon} size={25} /><strong>{name(id)}</strong><p>{t(moduleDef(id).description)}</p><span>{t('workspace.settings')} <Icon name="chevron" size={14} /></span></button>)}</div><Button icon="dashboard" onClick={() => navigate('dashboard')}>{t('workspace.monitor')}</Button></>}
         </div>}

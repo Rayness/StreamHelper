@@ -101,7 +101,7 @@ class FakeObs {
   }
 }
 
-function makeCtx(port: number, password?: string) {
+function makeCtx(port: number, password?: string, songRequests?: { listen: string }) {
   const bus = new EventBus();
   const state = new StateHub(bus);
   const secrets: Record<string, unknown> = { obsPassword: password };
@@ -109,7 +109,7 @@ function makeCtx(port: number, password?: string) {
   const ctx = {
     bus,
     state,
-    settings: { get: (k: string) => (k === 'obs' ? { host: '127.0.0.1', port, autoConnect: false } : undefined) },
+    settings: { get: (k: string) => (k === 'obs' ? { host: '127.0.0.1', port, autoConnect: false } : k === 'songRequests' ? songRequests : undefined) },
     secrets: { get: (k: string) => secrets[k], set: (k: string, v: unknown) => (secrets[k] = v) },
     toast,
     openExternal: vi.fn(),
@@ -231,6 +231,29 @@ describe('ObsService', () => {
 
     await obs.toggleMute('Mic');
     await until(() => state.current.obs.inputs.find((i) => i.name === 'Mic')?.muted === true);
+  });
+
+  it('routes only Song Request sources to stream / headphones as chosen', async () => {
+    const fake = new FakeObs(); fake.items.set('Game', []);
+    fake.browsers.set('Songs', { url: 'http://127.0.0.1:1234/overlay/song', reroute_audio: false });
+    fake.browsers.set('Chat', { url: 'http://127.0.0.1:1234/overlay/chat', reroute_audio: true });
+    fake.browsers.set('Other site', { url: 'https://example.com/overlay/song', reroute_audio: false });
+    const listen = { listen: 'viewers' };
+    const { ctx, state } = makeCtx(fake.port, undefined, listen);
+    const obs = new ObsService(ctx);
+    cleanup.push(() => obs.disconnect(), () => fake.close());
+    await obs.connect(undefined, true);
+    const monitor = () => fake.requests.filter((r) => r.type === 'SetInputAudioMonitorType').map((r) => r.data);
+    expect(monitor()).toEqual([{ inputName: 'Songs', monitorType: 'OBS_MONITORING_TYPE_NONE' }]);
+    expect(fake.browsers.get('Songs')!.reroute_audio).toBe(true);
+    expect(fake.browsers.get('Other site')!.reroute_audio).toBe(false);
+    expect(state.current.songRequests.obsAudio).toEqual({ sources: 1, error: null });
+    listen.listen = 'both';
+    await obs.applySongAudio();
+    expect(monitor().at(-1)).toEqual({ inputName: 'Songs', monitorType: 'OBS_MONITORING_TYPE_MONITOR_AND_OUTPUT' });
+    listen.listen = 'me';
+    await obs.applySongAudio();
+    expect(monitor().at(-1)).toEqual({ inputName: 'Songs', monitorType: 'OBS_MONITORING_TYPE_MONITOR_ONLY' });
   });
 
   it('reports a wrong password without retrying', async () => {

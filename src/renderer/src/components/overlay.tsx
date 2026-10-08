@@ -15,7 +15,11 @@ export function ScaledFrame({ src, width, height, maxHeight = 460, message, zoom
   const ref = useRef<HTMLDivElement>(null);
   const frame = useRef<HTMLIFrameElement>(null);
   const sendPreview = () => { if (message) frame.current?.contentWindow?.postMessage(message, new URL(src).origin); };
-  useEffect(sendPreview, [message, src]);
+  // Callers rebuild `message` on every render; resend only when its content changes,
+  // otherwise each state push restarted the preview animation.
+  const messageKey = message ? JSON.stringify(message) : '';
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(sendPreview, [messageKey, src]);
   const [box, setBox] = useState(0);
   const [bounds, setBounds] = useState<{x:number;y:number;width:number;height:number}>();
   useEffect(() => {

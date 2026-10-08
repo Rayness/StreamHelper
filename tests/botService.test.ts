@@ -88,14 +88,14 @@ describe('BotService', () => {
     const state = new StateHub(bus);
     const ctx = { bus, settings, state } as AppContext;
     const registry = new PlatformRegistry(); registry.register(platform);
-    const songs = new SongRequestService(ctx, { pauseCurrent: async () => null, resumeSource: async () => undefined } as any, () => undefined, (text, id) => platform.sendMessage(text, id));
+    const songs = new SongRequestService(ctx, { pauseCurrent: async () => null, resumeSource: async () => undefined } as any, () => undefined, (text, id) => platform.sendMessage(text, id), { lookup: async () => null });
     settings.set('songRequests', { ...settings.get('songRequests'), enabled:true });
     const config = settings.get('bot');
     settings.set('bot', { ...config, moderation:{ ...config.moderation, links:{ ...config.moderation.links, enabled:true, allowed:[] } } });
     bot = new BotService(ctx, registry, stream, songs);
     await bot.onMessage(msg('!sr https://youtu.be/M7lc1UVf-VE'));
     expect(settings.get('songQueue')).toMatchObject([{ source:'chat', videoId:'M7lc1UVf-VE' }]);
-    expect(platform.sent[0].text).toContain('your song is queued');
+    expect(platform.sent[0].text).toContain('is queued at #1');
     expect(platform.deleted).toEqual([]);
   });
   it('answers custom commands and aliases with variables', async () => {
