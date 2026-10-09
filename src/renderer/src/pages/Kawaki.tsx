@@ -17,7 +17,7 @@ export function Kawaki() {
       <PageHeader title="Kawaki" subtitle={t('kawaki.subtitle')} actions={<StatusText status={st.status} error={st.error} />} />
       <div className="kawaki-layout">
         <div className="stack-lg">
-          <AccountCard />
+          <KawakiAccountCard />
           {connected && <NowWatchingCard />}
           {connected && st.partner && <PartnerCard />}
           <ChatTitleCard />
@@ -42,7 +42,7 @@ export function Kawaki() {
   );
 }
 
-function AccountCard() {
+export function KawakiAccountCard() {
   const t = useT();
   const st = useApp((d) => d.state!.kawaki);
   const now = useNow(1000);

@@ -6,6 +6,7 @@ import { init, useApp } from './store';
 import './styles.css';
 import './features.css';
 import './workspace.css';
+import './studio.css';
 import './theme.css';
 
 function Root() {

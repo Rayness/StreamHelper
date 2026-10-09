@@ -7,7 +7,7 @@ export const INTERACTIVE_MODULES = ['wheel', 'poll', 'giveaway', 'queue', 'guess
 export const FEATURE_MODULES = ['clipper', 'curse', 'duel', 'melody', 'ducking', 'stocks', 'portal', 'report', 'shield'] as const;
 export type FeatureModule = typeof FEATURE_MODULES[number];
 export const CONNECTION_MODULES = ['twitch', 'donationalerts', 'streamlabs', 'streamelements', 'streamerbot', 'discord'] as const;
-export const CONNECTION_TABS = [...CONNECTION_MODULES, 'obs', 'subforstream'] as const;
+export const CONNECTION_TABS = [...CONNECTION_MODULES, 'obs', 'kawaki', 'subforstream'] as const;
 export type ConnectionTab = typeof CONNECTION_TABS[number];
 export const isConnectionOnly = (id: WorkspaceCard) => CONNECTION_MODULES.includes(id as typeof CONNECTION_MODULES[number]) || id === 'subforstream';
 export const workspaceCards = (value: unknown) => normalizeWorkspaceCards(value).filter((id) => !isConnectionOnly(id));
@@ -43,7 +43,8 @@ export function reorderCards(cards: WorkspaceCard[], from: WorkspaceCard, to: Wo
   return next;
 }
 export const TOOL_MODULES = ['clipper', 'ducking', 'shield', 'report'] as const;
-export const WORKSPACE_CARDS: readonly WorkspaceCard[] = ['stream', 'obs', 'actions', 'bot', ...CONNECTION_MODULES, 'subforstream', ...TOOL_MODULES, ...ALL_OVERLAY_KINDS];
+/** Custom overlays live in their own Designer tab, not in the module workspace. */
+export const WORKSPACE_CARDS: readonly WorkspaceCard[] = ['stream', 'obs', 'actions', 'bot', ...CONNECTION_MODULES, 'subforstream', ...TOOL_MODULES, ...ALL_OVERLAY_KINDS.filter((kind) => kind !== 'custom')];
 
 /** Preserve explicit selections from the old card layout, including an empty workspace. */
 export function normalizeWorkspaceCards(value: unknown): WorkspaceCard[] {

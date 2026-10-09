@@ -142,9 +142,32 @@ export interface ObsSceneItem {
   enabled: boolean;
 }
 
+/** One StreamHelper overlay placed in an OBS scene. */
+export interface ObsAppSource {
+  /** Top-level scene the overlay is shown in. */
+  scene: string;
+  /** Group or StreamHelper container scene that holds the item; null = directly in the scene. */
+  parent: string | null;
+  parentType: 'group' | 'container' | null;
+  /** Scene (or group) the item id belongs to. */
+  itemScene: string;
+  itemId: number;
+  sourceName: string;
+  kind: OverlayKind;
+  /** Instance id (`?id=`): a goal, label, custom overlay... */
+  id: string | null;
+  /** Per-scene settings variant (`?v=`). */
+  variant: string | null;
+  enabled: boolean;
+}
+
 export interface ObsState extends ConnectionState {
   scenes: string[];
   currentScene: string;
+  /** StreamHelper browser sources found in every scene, including inside groups and our container scenes. */
+  appSources: ObsAppSource[];
+  /** Nested scenes StreamHelper uses as its "StreamHelper" group (hidden from scene pickers). */
+  containers: string[];
   sceneItems: ObsSceneItem[];
   inputs: { name: string; muted: boolean }[];
   streaming: boolean;
@@ -361,6 +384,7 @@ export interface SpotlightOverlaySettings {
   bounce: number;
   x: number;
   y: number;
+  fontFamily: string;
 }
 
 export type GoalKind = 'followers' | 'subs' | 'bits' | 'donations' | 'chatMessages' | 'chatters' | 'manual';
@@ -380,6 +404,7 @@ export interface Goal {
   donationSources?: DonationSource[];
   showPercent?: boolean;
   showAmounts?: boolean;
+  fontFamily?: string;
   /** Internal count for the unique-chatters activity; persisted across restarts. */
   chattersSeen?: string[];
 }
@@ -423,6 +448,8 @@ export type ActionStep =
   | { type: 'clipMoment' }
   | { type: 'shieldToggle' }
   | { type: 'curseVote' }
+  /** Set a custom variable; `value` is a template, "+5" / "-1" change a number. */
+  | { type: 'variable'; name: string; value: string }
   | { type: 'wait'; ms: number };
 
 export interface QuickAction {
@@ -459,6 +486,8 @@ export interface Banner {
   intervalSec: number;
   /** Ticker speed, px per second. */
   tickerSpeed: number;
+  /** Ticker strip width, percent of the browser source (placed by `align`). */
+  tickerWidth?: number;
   /** 0 = stays on screen while visible; otherwise pops up every N minutes for `scheduleShowSec`. */
   scheduleEveryMin: number;
   scheduleShowSec: number;
@@ -477,6 +506,19 @@ export interface RewardOverlaySettings {
   maxItems: number;
   showInput: boolean;
   accentColor: string;
+  fontFamily: string;
+}
+
+export interface EventsOverlaySettings {
+  fontFamily: string;
+  fontSize: number;
+  textColor: string;
+  background: string;
+}
+
+export interface LiveOverlaySettings {
+  fontFamily: string;
+  accentColor: string;
 }
 
 export interface CollabOverlaySettings {
@@ -484,6 +526,7 @@ export interface CollabOverlaySettings {
   guests: string[];
   showRaids: boolean;
   accentColor: string;
+  fontFamily: string;
 }
 
 export type MusicSourceKind = 'spotify' | 'yandex' | 'browser' | 'other';
@@ -549,6 +592,7 @@ export interface SongRequestSettings {
   volume: number;
   accentColor: string;
   backgroundOpacity: number;
+  fontFamily: string;
 }
 
 /** viewers = stream only, both = stream + streamer's headphones, me = headphones only. */
@@ -580,6 +624,7 @@ export interface MusicOverlaySettings {
   fontSize: number;
   backgroundOpacity: number;
   showSource: boolean;
+  fontFamily: string;
 }
 
 export interface AdCampaign {
@@ -597,6 +642,7 @@ export interface AdCampaign {
   durationSec: number;
   everyMin: number;
   onlyWhenLive: boolean;
+  fontFamily?: string;
 }
 
 export interface BossSettings {
@@ -608,6 +654,7 @@ export interface BossSettings {
   redemptionTitle: string;
   accentColor: string;
   announce: boolean;
+  fontFamily: string;
 }
 
 export interface BossState {
@@ -1344,6 +1391,152 @@ export interface KawakiSettings {
   fontFamily: string;
 }
 
+// ---------- Donation board ----------
+
+export interface DonationRecord {
+  id: string;
+  name: string;
+  amount: number;
+  currency: string;
+  /** Amount in the main currency, when known (top lists compare these). */
+  amountMain: number | null;
+  message: string;
+  source: DonationSource;
+  at: number;
+}
+
+/** latest = newest first, top = biggest donors (summed), all = every donation one by one, total = sum. */
+export type DonationsPage = 'latest' | 'top' | 'all' | 'total';
+
+export interface DonationsOverlaySettings {
+  /** Pages shown in turn. */
+  pages: DonationsPage[];
+  pageSec: number;
+  /** list = several rows, single = one donation at a time, ticker = a scrolling line. */
+  layout: 'list' | 'single' | 'ticker';
+  /** Rows in "latest" and "top". */
+  count: number;
+  /** "single" layout: seconds per donation. */
+  itemSec: number;
+  tickerSpeed: number;
+  /** session = since the stats were last reset, all = whole history. */
+  period: 'session' | 'all';
+  showTitle: boolean;
+  showMessage: boolean;
+  titles: Record<DonationsPage, string>;
+  fontFamily: string;
+  fontSize: number;
+  textColor: string;
+  accentColor: string;
+  background: string;
+  align: 'left' | 'center' | 'right';
+}
+
+export interface DonationsBoard {
+  latest: DonationRecord[];
+  top: { name: string; amount: number; count: number }[];
+  all: DonationRecord[];
+  total: number;
+  count: number;
+  currency: string;
+}
+
+// ---------- Custom variables ----------
+
+export interface CustomVariable {
+  id: string;
+  /** Used as {name} in any template. */
+  name: string;
+  value: string;
+  description: string;
+}
+
+// ---------- Overlay designer ----------
+
+interface CustomElementBase {
+  id: string;
+  name: string;
+  /** Position and size in canvas pixels. */
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  rotation: number;
+  /** 0..100 */
+  opacity: number;
+  visible: boolean;
+  locked: boolean;
+}
+
+export type CustomElement =
+  | (CustomElementBase & {
+      type: 'text';
+      /** Template with variables: {title}, {lastfollower}, {count:deaths}... */
+      text: string;
+      fontFamily: string;
+      fontSize: number;
+      fontWeight: number;
+      italic: boolean;
+      uppercase: boolean;
+      color: string;
+      align: 'left' | 'center' | 'right';
+      valign: 'top' | 'middle' | 'bottom';
+      letterSpacing: number;
+      lineHeight: number;
+      strokeColor: string;
+      strokeWidth: number;
+      shadow: boolean;
+      /** Single line: shrink to fit instead of wrapping. */
+      autoFit: boolean;
+    })
+  | (CustomElementBase & { type: 'image'; media: string | null; fit: 'contain' | 'cover' | 'fill'; radius: number })
+  | (CustomElementBase & {
+      type: 'shape';
+      shape: 'rect' | 'ellipse' | 'line';
+      fill: string;
+      /** Second color: a gradient when set. */
+      fill2: string;
+      gradientAngle: number;
+      borderColor: string;
+      borderWidth: number;
+      radius: number;
+      blur: number;
+    })
+  | (CustomElementBase & {
+      type: 'widget';
+      kind: OverlayKind;
+      /** Instance of the embedded overlay (a goal, label...). */
+      itemId: string | null;
+    });
+
+export type CustomElementType = CustomElement['type'];
+
+export interface CustomOverlay {
+  id: string;
+  name: string;
+  width: number;
+  height: number;
+  /** CSS color behind everything; transparent by default. */
+  background: string;
+  elements: CustomElement[];
+}
+
+/** A custom overlay as sent to the browser source: text templates already filled in. */
+export type RenderedCustomOverlay = CustomOverlay;
+
+// ---------- Per-scene overlay settings ----------
+
+export interface OverlayVariant {
+  id: string;
+  kind: OverlayKind;
+  /** OBS scene the variant was made for (also its label). */
+  scene: string;
+  /** Changed top-level fields of the overlay's settings section. */
+  overrides: Record<string, unknown>;
+}
+
+export type ObsGroupMode = 'perScene' | 'shared' | 'none';
+
 export interface Settings {
   version: 1;
   language: Language;
@@ -1355,12 +1548,21 @@ export interface Settings {
   streamerbot: { enabled: boolean; port: number };
   discord: { enabled: boolean; notifyLive: boolean; notifyOffline: boolean; notifyDonations: boolean };
   subForStream: { enabled: boolean; port: number };
-  obs: { host: string; port: number; autoConnect: boolean };
+  obs: { host: string; port: number; autoConnect: boolean; group: ObsGroupMode };
   bot: BotSettings;
   alerts: AlertSettings;
   chatOverlay: ChatOverlaySettings;
   spotlightOverlay: SpotlightOverlaySettings;
   rewardsOverlay: RewardOverlaySettings;
+  eventsOverlay: EventsOverlaySettings;
+  liveOverlay: LiveOverlaySettings;
+  donationsOverlay: DonationsOverlaySettings;
+  /** Donations received (newest first), for the donation board. Not per profile. */
+  donationLog: DonationRecord[];
+  /** User variables available in every template. Not per profile. */
+  variables: CustomVariable[];
+  customOverlays: CustomOverlay[];
+  overlayVariants: OverlayVariant[];
   collabOverlay: CollabOverlaySettings;
   musicOverlay: MusicOverlaySettings;
   songRequests: SongRequestSettings;
@@ -1437,7 +1639,7 @@ export type ToolModule = 'clipper' | 'ducking' | 'shield' | 'report';
 
 export type WorkspaceCard = 'stream' | 'obs' | 'actions' | 'bot' | 'twitch' | 'donationalerts' | 'streamlabs' | 'streamelements' | 'streamerbot' | 'discord' | 'subforstream' | ToolModule | OverlayKind;
 
-export type ProfileSettingsKey = 'workspace' | 'bot' | 'alerts' | 'chatOverlay' | 'spotlightOverlay' | 'rewardsOverlay' | 'collabOverlay' | 'musicOverlay' | 'songRequests' | 'goals' | 'timers' | 'actions' | 'banners' | 'ads' | 'labels' | 'emoteRain' | 'wheels' | 'poll' | 'giveaway' | 'quiz' | 'boss' | 'kawaki' | 'viewerQueue' | 'guess' | 'counterOverlays' | 'hype' | 'leadersOverlay'
+export type ProfileSettingsKey = 'workspace' | 'bot' | 'alerts' | 'chatOverlay' | 'spotlightOverlay' | 'rewardsOverlay' | 'eventsOverlay' | 'liveOverlay' | 'donationsOverlay' | 'customOverlays' | 'overlayVariants' | 'collabOverlay' | 'musicOverlay' | 'songRequests' | 'goals' | 'timers' | 'actions' | 'banners' | 'ads' | 'labels' | 'emoteRain' | 'wheels' | 'poll' | 'giveaway' | 'quiz' | 'boss' | 'kawaki' | 'viewerQueue' | 'guess' | 'counterOverlays' | 'hype' | 'leadersOverlay'
   | 'clipper' | 'curses' | 'duel' | 'melody' | 'ducking' | 'market' | 'portal' | 'report' | 'shield';
 export type ProfileConfig = Pick<Settings, ProfileSettingsKey>;
 export interface StreamProfile { id: string; name: string; config: ProfileConfig; overlays: OverlayKind[] }
@@ -1447,7 +1649,7 @@ export type SettingsKey = keyof Settings;
 // ---------- Overlay wire protocol ----------
 
 export type OverlayKind = 'chat' | 'alerts' | 'goal' | 'timer' | 'events' | 'rewards' | 'collab' | 'music' | 'song' | 'banner' | 'ad' | 'label' | 'emotes' | 'wheel' | 'poll' | 'giveaway' | 'kawaki' | 'quiz' | 'boss' | 'live' | 'spotlight' | 'queue' | 'guess' | 'counter' | 'hype' | 'leaders'
-  | 'curse' | 'duel' | 'melody' | 'stocks' | 'portal';
+  | 'curse' | 'duel' | 'melody' | 'stocks' | 'portal' | 'donations' | 'custom';
 
 export interface RenderedBanner extends Omit<Banner, 'slides'> {
   slides: { id: string; text: string; image: string | null }[];
@@ -1490,7 +1692,7 @@ export type OverlayMessage =
   | { type: 'goal'; goal: Goal | null }
   | { type: 'timer'; timer: OverlayTimer | null; now: number }
   | { type: 'event'; event: StreamEvent }
-  | { type: 'events'; events: StreamEvent[] }
+  | { type: 'events'; events: StreamEvent[]; style?: EventsOverlaySettings }
   | { type: 'rewards'; events: StreamEventOf<'redemption'>[]; config: RewardOverlaySettings }
   | { type: 'reward'; event: StreamEventOf<'redemption'> }
   | { type: 'collab'; config: CollabOverlaySettings; raids: StreamEventOf<'raid'>[]; lang: Language }
@@ -1500,7 +1702,7 @@ export type OverlayMessage =
   | { type: 'banner'; banner: RenderedBanner | null }
   | { type: 'ad'; campaign: AdCampaign | null; endsAt: number | null }
   | { type: 'boss'; boss: BossState; style: BossSettings; lang: Language; prefix: string }
-  | { type: 'live'; stream: StreamInfo; lang: Language }
+  | { type: 'live'; stream: StreamInfo; lang: Language; style?: LiveOverlaySettings }
   | { type: 'spotlight'; message: ChatMessage | null }
   | { type: 'spotlightConfig'; config: SpotlightOverlaySettings }
   | { type: 'spotlightRemove'; id: string }
@@ -1526,6 +1728,8 @@ export type OverlayMessage =
   | { type: 'portalConfig'; config: PortalSettings; channel: string; lang: Language }
   | { type: 'portal'; message: PortalMessage }
   | { type: 'portalDelete'; id: string }
+  | { type: 'donations'; board: DonationsBoard; style: DonationsOverlaySettings; lang: Language }
+  | { type: 'custom'; overlay: RenderedCustomOverlay | null }
   | { type: 'reload' };
 
 // ---------- IPC ----------
@@ -1635,7 +1839,15 @@ export interface IpcInvoke {
   'kawaki:cancelLogin': () => void;
   'kawaki:refresh': () => void;
   /** Create a browser source in the current OBS scene. */
-  'obs:addBrowserSource': (name: string, url: string, width: number, height: number) => void;
+  'obs:addBrowserSource': (name: string, url: string, width: number, height: number, scene?: string) => void;
+  'obs:refreshAppSources': () => void;
+  'obs:setItemEnabled': (sceneName: string, itemId: number, enabled: boolean) => void;
+  'obs:removeItem': (sceneName: string, itemId: number) => void;
+  /** Move the StreamHelper sources lying loose in a scene into its StreamHelper group. */
+  'obs:tidyScene': (scene: string) => number;
+  /** Installed system font families. */
+  'fonts:system': () => string[];
+  'donations:clear': () => void;
   /** Every OBS input and scene name (filters can sit on both). */
   'obs:sources': () => string[];
   'obs:filters': (source: string) => string[];

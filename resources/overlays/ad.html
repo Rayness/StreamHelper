@@ -89,6 +89,7 @@
       const effect = effects.has(c.entrance) ? c.entrance : 'slideUp';
       const duration = Number.isFinite(Number(c.entranceMs)) ? Math.max(150, Math.min(2500, Number(c.entranceMs))) : 550;
       root.className = c.position || 'bottomRight';
+      SH.useFont(root, c.fontFamily || 'Montserrat');
       root.style.width = Math.max(200, Math.min(1600, Number(c.width) || 700)) + 'px';
       root.style.setProperty('--accent', c.accentColor || '#9b6bff');
       root.style.setProperty('--enter-ms', duration + 'ms');

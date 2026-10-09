@@ -2,13 +2,14 @@ import { useState } from 'react';
 import { DEFAULT_TWITCH_CLIENT_ID, twitchClientId } from '@shared/defaults';
 import { CONNECTION_TABS, type ConnectionTab } from '@shared/workspace';
 import type { ConnectionState, DeviceCodePrompt } from '@shared/types';
-import { Button, Card, CopyField, Field, NumberInput, StatusText, TextInput, Toggle } from '../components/ui';
+import { Button, Card, CopyField, Field, NumberInput, Select, StatusText, TextInput, Toggle } from '../components/ui';
 import { Icon } from '../components/icons';
 import { moduleDef } from '../workspaceModules';
 import { SubForStream } from './Obs';
+import { KawakiAccountCard } from './Kawaki';
 import { useNow } from '../hooks';
 import { useT } from '../i18n';
-import { call, callOk, saveSettings, useApp, useSub } from '../store';
+import { call, callOk, openModule, saveSettings, useApp, useSub } from '../store';
 
 export function Connections() {
   const t = useT();
@@ -17,11 +18,22 @@ export function Connections() {
   return <div className="workspace connections-page">
     <header className="workspace-header"><div><h1>{t('nav.connections')}</h1><p className="muted small">{t('connections.hint')}</p></div></header>
     <div className="connections-layout"><aside className="connections-list" aria-label={t('nav.connections')}>
-      {CONNECTION_TABS.map((id) => <button key={id} data-connection={id} className={selected === id ? 'active' : ''} onClick={() => setSelected(id)}><Icon name={moduleDef(id).icon} size={18} /><span>{moduleDef(id).name}</span><span className={`status-dot status-${state[id === 'subforstream' ? 'subForStream' : id].status}`} /></button>)}
+      {CONNECTION_TABS.map((id) => <button key={id} data-connection={id} className={selected === id ? 'active' : ''} onClick={() => setSelected(id)}><Icon name={moduleDef(id).icon} size={18} /><span>{id === 'kawaki' ? 'Kawaki' : moduleDef(id).name}</span><span className={`status-dot status-${state[id === 'subforstream' ? 'subForStream' : id].status}`} /></button>)}
     </aside><section className="connection-editor" data-connection-editor={selected} key={selected}>
-      {selected === 'subforstream' ? <SubForStream /> : <ConnectionDetail kind={selected} />}
+      {selected === 'subforstream' ? <SubForStream /> : selected === 'kawaki' ? <KawakiConnection /> : <ConnectionDetail kind={selected} />}
     </section></div>
   </div>;
+}
+
+/** Kawaki login lives with the other accounts; the Kawaki module keeps the overlay and "now watching". */
+function KawakiConnection() {
+  const t = useT();
+  const cards = useApp((d) => d.settings!.workspace.cards);
+  return <>
+    <KawakiAccountCard />
+    <p className="muted small">{t('kawaki.connectionHint')}</p>
+    <div className="row-gap"><Button icon="tv" onClick={() => openModule('kawaki')}>{cards.includes('kawaki') ? t('kawaki.openModule') : t('kawaki.addModule')}</Button></div>
+  </>;
 }
 
 function Account({ state }: { state: ConnectionState }) {
@@ -296,6 +308,9 @@ function ObsCard() {
         </Field>
         <Field label={t('conn.autoConnect')}>
           <Toggle checked={obs.autoConnect} onChange={(autoConnect) => saveSettings('obs', { ...obs, autoConnect })} />
+        </Field>
+        <Field label={t('obs.groupMode')} hint={t(`obs.groupMode_${obs.group ?? 'perScene'}_hint`)} wide>
+          <Select value={obs.group ?? 'perScene'} onChange={(group) => saveSettings('obs', { ...obs, group })} options={(['perScene', 'shared', 'none'] as const).map((m) => ({ value: m, label: t(`obs.groupMode_${m}`) }))} />
         </Field>
       </div>
       <div className="row-gap">

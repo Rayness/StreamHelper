@@ -4,12 +4,16 @@ export const ALL_OVERLAY_KINDS: readonly OverlayKind[] = [
   'chat', 'alerts', 'goal', 'timer', 'events', 'rewards', 'collab', 'music', 'song',
   'banner', 'ad', 'label', 'emotes', 'wheel', 'poll', 'giveaway', 'kawaki', 'quiz',
   'boss', 'live', 'spotlight', 'queue', 'guess', 'counter', 'hype', 'leaders',
-  'curse', 'duel', 'melody', 'stocks', 'portal',
+  'curse', 'duel', 'melody', 'stocks', 'portal', 'donations', 'custom',
 ];
+
+/** Overlay kinds added after profiles existed: switched on in old profiles once, on upgrade. */
+export const NEW_OVERLAY_KINDS: readonly OverlayKind[] = ['donations', 'custom'];
 
 export const PROFILE_KEYS: readonly ProfileSettingsKey[] = [
   'workspace',
   'bot', 'alerts', 'chatOverlay', 'spotlightOverlay', 'rewardsOverlay', 'collabOverlay', 'musicOverlay',
+  'eventsOverlay', 'liveOverlay', 'donationsOverlay', 'customOverlays', 'overlayVariants',
   'songRequests', 'goals', 'timers', 'actions', 'banners', 'ads', 'labels',
   'emoteRain', 'wheels', 'poll', 'giveaway', 'quiz', 'boss', 'kawaki',
   'viewerQueue', 'guess', 'counterOverlays', 'hype', 'leadersOverlay',

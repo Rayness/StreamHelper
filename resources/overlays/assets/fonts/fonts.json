@@ -1,0 +1,122 @@
+[
+ {
+  "family": "Inter",
+  "category": "sans"
+ },
+ {
+  "family": "Montserrat",
+  "category": "sans"
+ },
+ {
+  "family": "Roboto",
+  "category": "sans"
+ },
+ {
+  "family": "Rubik",
+  "category": "sans"
+ },
+ {
+  "family": "Nunito",
+  "category": "sans"
+ },
+ {
+  "family": "Manrope",
+  "category": "sans"
+ },
+ {
+  "family": "Open Sans",
+  "category": "sans"
+ },
+ {
+  "family": "Raleway",
+  "category": "sans"
+ },
+ {
+  "family": "Onest",
+  "category": "sans"
+ },
+ {
+  "family": "Golos Text",
+  "category": "sans"
+ },
+ {
+  "family": "Exo 2",
+  "category": "sans"
+ },
+ {
+  "family": "Ubuntu",
+  "category": "sans"
+ },
+ {
+  "family": "PT Sans",
+  "category": "sans"
+ },
+ {
+  "family": "Play",
+  "category": "sans"
+ },
+ {
+  "family": "Oswald",
+  "category": "display"
+ },
+ {
+  "family": "Unbounded",
+  "category": "display"
+ },
+ {
+  "family": "Russo One",
+  "category": "display"
+ },
+ {
+  "family": "Dela Gothic One",
+  "category": "display"
+ },
+ {
+  "family": "Comfortaa",
+  "category": "display"
+ },
+ {
+  "family": "Jura",
+  "category": "display"
+ },
+ {
+  "family": "Rubik Mono One",
+  "category": "display"
+ },
+ {
+  "family": "Playfair Display",
+  "category": "serif"
+ },
+ {
+  "family": "Yeseva One",
+  "category": "serif"
+ },
+ {
+  "family": "Lobster",
+  "category": "handwriting"
+ },
+ {
+  "family": "Pacifico",
+  "category": "handwriting"
+ },
+ {
+  "family": "Caveat",
+  "category": "handwriting"
+ },
+ {
+  "family": "Amatic SC",
+  "category": "handwriting"
+ },
+ {
+  "family": "Marck Script",
+  "category": "handwriting"
+ },
+ {
+  "family": "Press Start 2P",
+  "category": "pixel"
+ },
+ {
+  "family": "JetBrains Mono",
+  "category": "mono"
+ }
+]

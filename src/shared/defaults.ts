@@ -16,6 +16,8 @@ import type {
   AlertSettings,
   AlertType,
   CounterOverlay,
+  CustomOverlay,
+  DonationsOverlaySettings,
   GuessSettings,
   HypeSettings,
   LeadersOverlaySettings,
@@ -258,6 +260,7 @@ export function defaultGoal(lang: Language): Goal {
     donationSources: ['donationalerts', 'streamlabs', 'streamelements'],
     showPercent: true,
     showAmounts: true,
+    fontFamily: 'Montserrat',
   };
 }
 
@@ -315,6 +318,7 @@ export function defaultBanner(lang: Language): Banner {
     ],
     intervalSec: 8,
     tickerSpeed: 90,
+    tickerWidth: 100,
     scheduleEveryMin: 0,
     scheduleShowSec: 20,
     fontFamily: 'Montserrat',
@@ -342,6 +346,7 @@ export function defaultAd(lang: Language): AdCampaign {
     durationSec: 15,
     everyMin: 0,
     onlyWhenLive: true,
+    fontFamily: 'Montserrat',
   };
 }
 
@@ -355,6 +360,7 @@ export function defaultBoss(lang: Language): BossSettings {
     redemptionTitle: '',
     accentColor: '#ff5d8f',
     announce: true,
+    fontFamily: 'Montserrat',
   };
 }
 
@@ -656,6 +662,34 @@ export function defaultKawaki(lang: Language): KawakiSettings {
   };
 }
 
+export function defaultDonationsOverlay(lang: Language): DonationsOverlaySettings {
+  const ru = lang === 'ru';
+  return {
+    pages: ['latest', 'top'],
+    pageSec: 12,
+    layout: 'list',
+    count: 5,
+    itemSec: 6,
+    tickerSpeed: 90,
+    period: 'session',
+    showTitle: true,
+    showMessage: false,
+    titles: ru
+      ? { latest: 'Последние донаты', top: 'Топ донатеров', all: 'Все донаты', total: 'Собрано за стрим' }
+      : { latest: 'Latest donations', top: 'Top donors', all: 'All donations', total: 'Raised this stream' },
+    fontFamily: 'Montserrat',
+    fontSize: 26,
+    textColor: '#ffffff',
+    accentColor: '#ffb547',
+    background: 'rgba(14,12,20,0.78)',
+    align: 'left',
+  };
+}
+
+export function defaultCustomOverlay(lang: Language): CustomOverlay {
+  return { id: uid('custom_'), name: lang === 'ru' ? 'Мой оверлей' : 'My overlay', width: 1920, height: 1080, background: 'transparent', elements: [] };
+}
+
 export function defaultSettings(lang: Language): Settings {
   return {
     version: 1,
@@ -668,15 +702,22 @@ export function defaultSettings(lang: Language): Settings {
     streamerbot: { enabled: false, port: 7474 },
     discord: { enabled: false, notifyLive: true, notifyOffline: false, notifyDonations: true },
     subForStream: { enabled: false, port: 5000 },
-    obs: { host: '127.0.0.1', port: 4455, autoConnect: true },
+    obs: { host: '127.0.0.1', port: 4455, autoConnect: true, group: 'perScene' },
     bot: defaultBot(lang),
     alerts: defaultAlerts(lang),
     chatOverlay: defaultChatOverlay(),
-    spotlightOverlay: { autoHighlighted: false, mode: 'single', cardStyle: 'solid', fontSize: 38, accentColor: '#bd96ff', textColor: '#ffffff', background: '#17131f', durationSec: 12, maxMessages: 6, gravity: 1, bounce: 0.55, x: 50, y: 75 },
-    rewardsOverlay: { maxItems: 5, showInput: true, accentColor: '#9b6bff' },
-    collabOverlay: { title: lang === 'ru' ? 'Коллаборация' : 'Collaboration', guests: [], showRaids: true, accentColor: '#9b6bff' },
-    musicOverlay: { source: 'auto', style: 'card', showArtwork: true, showAlbum: true, showProgress: true, hideWhenPaused: true, accentColor: '#1db954', layout: 'horizontal', coverSize: 130, fontSize: 25, backgroundOpacity: 90, showSource: true },
-    songRequests: { enabled: false, rewardTitle: '', rewardId: '', replyInChat: true, refundRejected: true, listen: 'viewers', chatEnabled: true, chatCommand: 'sr', chatPermission: 'everyone', chatCooldownSec: 10, minDonation: 100, autoPlay: true, pauseWindowsMusic: true, resumeWindowsMusic: true, maxQueue: 30, videoLayout: 'full', videoPosition: 'left', videoWidth: 45, showRequester: true, showTitle: true, showQueueCount: true, showControls: true, volume: 100, accentColor: '#9146ff', backgroundOpacity: 88 },
+    spotlightOverlay: { autoHighlighted: false, mode: 'single', cardStyle: 'solid', fontSize: 38, accentColor: '#bd96ff', textColor: '#ffffff', background: '#17131f', durationSec: 12, maxMessages: 6, gravity: 1, bounce: 0.55, x: 50, y: 75, fontFamily: 'Inter' },
+    rewardsOverlay: { maxItems: 5, showInput: true, accentColor: '#9b6bff', fontFamily: 'Segoe UI' },
+    eventsOverlay: { fontFamily: 'Inter', fontSize: 18, textColor: '#ffffff', background: 'rgba(0,0,0,0.45)' },
+    liveOverlay: { fontFamily: 'Montserrat', accentColor: '#f54371' },
+    donationsOverlay: defaultDonationsOverlay(lang),
+    donationLog: [],
+    variables: [],
+    customOverlays: [],
+    overlayVariants: [],
+    collabOverlay: { title: lang === 'ru' ? 'Коллаборация' : 'Collaboration', guests: [], showRaids: true, accentColor: '#9b6bff', fontFamily: 'Segoe UI' },
+    musicOverlay: { source: 'auto', style: 'card', showArtwork: true, showAlbum: true, showProgress: true, hideWhenPaused: true, accentColor: '#1db954', layout: 'horizontal', coverSize: 130, fontSize: 25, backgroundOpacity: 90, showSource: true, fontFamily: 'Segoe UI' },
+    songRequests: { enabled: false, rewardTitle: '', rewardId: '', replyInChat: true, refundRejected: true, listen: 'viewers', chatEnabled: true, chatCommand: 'sr', chatPermission: 'everyone', chatCooldownSec: 10, minDonation: 100, autoPlay: true, pauseWindowsMusic: true, resumeWindowsMusic: true, maxQueue: 30, videoLayout: 'full', videoPosition: 'left', videoWidth: 45, showRequester: true, showTitle: true, showQueueCount: true, showControls: true, volume: 100, accentColor: '#9146ff', backgroundOpacity: 88, fontFamily: 'Segoe UI' },
     songQueue: [],
     goals: [defaultGoal(lang)],
     timers: [defaultTimer(lang)],
@@ -766,8 +807,21 @@ export function migrateSettings(s: Settings): Settings {
       })),
     },
     bot: missing.length ? { ...s.bot, builtins: [...s.bot.builtins, ...missing] } : s.bot,
-    ads: s.ads.map((ad) => ({ ...ad, entrance: ad.entrance ?? 'slideUp', entranceMs: ad.entranceMs ?? 550 })),
-    goals: s.goals.map((goal) => ({ ...defaultGoal(s.language), ...goal })),
+    ...migrateLists(s),
+  };
+}
+
+/**
+ * New fields of list items (`mergeDefaults` keeps stored arrays as they are). Also used for the
+ * copies kept in profiles, so switching to an old profile never brings back items without them.
+ */
+export function migrateLists<T extends Pick<Settings, 'ads' | 'goals' | 'banners' | 'customOverlays' | 'overlayVariants'>>(s: T): Pick<Settings, 'ads' | 'goals' | 'banners' | 'customOverlays' | 'overlayVariants'> {
+  return {
+    ads: s.ads.map((ad) => ({ ...ad, entrance: ad.entrance ?? 'slideUp', entranceMs: ad.entranceMs ?? 550, fontFamily: ad.fontFamily ?? 'Montserrat' })),
+    goals: s.goals.map((goal) => ({ ...defaultGoal('en'), ...goal, id: goal.id })),
+    banners: s.banners.map((banner) => ({ ...banner, tickerWidth: banner.tickerWidth ?? 100 })),
+    customOverlays: Array.isArray(s.customOverlays) ? s.customOverlays.filter((o) => o && typeof o.id === 'string' && Array.isArray(o.elements)) : [],
+    overlayVariants: Array.isArray(s.overlayVariants) ? s.overlayVariants.filter((v) => v && typeof v.id === 'string' && v.overrides && typeof v.overrides === 'object') : [],
   };
 }
 

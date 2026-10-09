@@ -31,6 +31,8 @@ interface Client {
   ws: WebSocket;
   kind: OverlayKind;
   id: string | null;
+  /** Per-scene settings variant (`?v=`). */
+  variant: string | null;
   /** The app's own preview iframe: gets every message but isn't counted as "in OBS". */
   preview: boolean;
   alive: boolean;
@@ -42,6 +44,8 @@ export interface OverlayServerOptions {
   mediaDir: string;
   /** Messages a freshly connected overlay needs to render its current state. */
   initialMessages: (kind: OverlayKind, id: string | null) => OverlayMessage[];
+  /** Adjust a message for a client bound to a per-scene variant. */
+  transform?: (kind: OverlayKind, variant: string, msg: OverlayMessage) => OverlayMessage;
   onClientsChanged: (count: number, perKind: Partial<Record<OverlayKind, number>>) => void;
   /** Extra routes (OAuth callbacks). Return true if handled. */
   extraRoute?: (req: IncomingMessage, res: ServerResponse, url: URL) => boolean | Promise<boolean>;
@@ -132,12 +136,17 @@ export class OverlayServer {
   /** Send to every overlay of a kind (optionally only the one bound to `id`, e.g. a specific goal). */
   broadcast(kind: OverlayKind | OverlayKind[], msg: OverlayMessage, id?: string): void {
     const kinds = Array.isArray(kind) ? kind : [kind];
-    let data: string | undefined;
+    // Serialized once per variant: most clients share the plain message.
+    const data = new Map<string, string>();
     for (const c of this.clients) {
       if (!kinds.includes(c.kind)) continue;
       if (id !== undefined && c.id !== id) continue;
       if (c.ws.bufferedAmount > 1024 * 1024) { c.ws.terminate(); continue; }
-      if (c.ws.readyState === c.ws.OPEN) c.ws.send(data ??= JSON.stringify(msg));
+      if (c.ws.readyState !== c.ws.OPEN) continue;
+      const key = `${c.kind}:${c.variant ?? ''}`;
+      let json = data.get(key);
+      if (json === undefined) { json = JSON.stringify(this.adjust(c, msg)); data.set(key, json); }
+      c.ws.send(json);
     }
   }
 
@@ -146,17 +155,21 @@ export class OverlayServer {
     for (const c of this.clients) {
       if (c.kind !== kind || c.ws.readyState !== c.ws.OPEN) continue;
       const msg = fn(c.id);
-      if (msg) c.ws.send(JSON.stringify(msg));
+      if (msg) c.ws.send(JSON.stringify(this.adjust(c, msg)));
     }
+  }
+
+  private adjust(c: Client, msg: OverlayMessage): OverlayMessage {
+    return c.variant && this.opts.transform ? this.opts.transform(c.kind, c.variant, msg) : msg;
   }
 
   private onConnection(ws: WebSocket, url: URL): void {
     const kind = url.searchParams.get('kind') as OverlayKind;
     if (!OVERLAY_KINDS.includes(kind)) return ws.close(1008, 'unknown overlay kind');
-    const client: Client = { ws, kind, id: url.searchParams.get('id'), preview: url.searchParams.has('preview'), alive: true };
+    const client: Client = { ws, kind, id: url.searchParams.get('id'), variant: url.searchParams.get('v'), preview: url.searchParams.has('preview'), alive: true };
     this.clients.add(client);
     this.notifyClients();
-    for (const m of this.opts.initialMessages(kind, client.id)) ws.send(JSON.stringify(m));
+    for (const m of this.opts.initialMessages(kind, client.id)) ws.send(JSON.stringify(this.adjust(client, m)));
     // Keep NAT-less localhost connections alive and detect dead browser sources.
     ws.on('pong', () => { client.alive = true; });
     ws.on('close', () => {

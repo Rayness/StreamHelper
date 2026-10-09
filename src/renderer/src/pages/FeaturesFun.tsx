@@ -4,6 +4,7 @@ import type { Curse, CurseSettings, CurseStep, DuelSettings, MarketSettings, Mel
 import { OverlayBar, OverlayPreview } from '../components/overlay';
 import { Button, Card, ColorInput, Empty, Field, IconButton, LinesInput, NumberInput, Select, StatusText, TextArea, TextInput, Toggle } from '../components/ui';
 import { useClock, useNow } from '../hooks';
+import { FontPicker } from '../components/FontPicker';
 import { useT, type TFn } from '../i18n';
 import { call, callOk, saveSettings, useApp } from '../store';
 
@@ -29,7 +30,7 @@ function LookFields({ accent, font, onAccent, onFont }: { accent: string; font: 
   return (
     <>
       <Field label={t('common.accent')}><ColorInput value={accent} onChange={onAccent} /></Field>
-      <Field label={t('common.font')} hint={t('common.fontHint')}><TextInput value={font} onChange={onFont} /></Field>
+      <Field label={t('common.font')} hint={t('common.fontHint')}><FontPicker value={font} onChange={onFont} /></Field>
     </>
   );
 }

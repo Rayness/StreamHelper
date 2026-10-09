@@ -120,6 +120,7 @@
       if (message.type !== 'music') return;
       track = message.track;
       config = message.config;
+      SH.useFont(document.body, config.fontFamily || 'Segoe UI');
       lang = message.lang;
       render();
     });

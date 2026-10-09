@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react';
 import type { ChatMessage, IpcInvoke, IpcPush, RuntimeState, Settings, SettingsKey, StreamEvent } from '@shared/types';
 import { reconcile } from '@shared/reconcile';
+import { variantDiff, withVariant } from '@shared/variants';
 import { resolveModuleAccess, workspaceTarget, isWorkspaceModule } from '@shared/workspace';
 import type { WorkspaceCard } from '@shared/types';
 
@@ -34,10 +35,42 @@ function set(patch: Partial<AppData>): void {
   listeners.forEach((l) => l());
 }
 
+// ---------- per-scene variant editing ----------
+
+/**
+ * While a module editor edits the settings of one OBS scene, every form reads that scene's
+ * version of the section and `saveSettings` stores only the differences in `overlayVariants`.
+ * The forms themselves don't know about scenes.
+ */
+export interface VariantScope { key: SettingsKey; variantId: string }
+let scope: VariantScope | null = null;
+const scopeListeners = new Set<() => void>();
+let viewCache: { data: AppData; scope: VariantScope | null; view: AppData } | null = null;
+
+function view(): AppData {
+  if (!scope || !data.settings) return data;
+  if (viewCache && viewCache.data === data && viewCache.scope === scope) return viewCache.view;
+  const variant = data.settings.overlayVariants?.find((v) => v.id === scope!.variantId);
+  const settings = variant ? { ...data.settings, [scope.key]: withVariant(data.settings[scope.key], variant.overrides) } as Settings : data.settings;
+  viewCache = { data, scope, view: { ...data, settings } };
+  return viewCache.view;
+}
+
+export function setVariantScope(next: VariantScope | null): void {
+  if (scope?.key === next?.key && scope?.variantId === next?.variantId) return;
+  scope = next;
+  scopeListeners.forEach((l) => l());
+  listeners.forEach((l) => l());
+}
+
+export function useVariantScope(): VariantScope | null {
+  return useSyncExternalStore((l) => { scopeListeners.add(l); return () => scopeListeners.delete(l); }, () => scope);
+}
+
 export function useApp<T>(select: (d: AppData) => T): T {
   return useSyncExternalStore(
     subscribe,
-    () => select(data),
+    () => select(view()),
   );
 }
 
@@ -114,6 +147,14 @@ function flushSaves(): void {
 /** Optimistically update a settings section and persist it. */
 export function saveSettings<K extends SettingsKey>(key: K, value: Settings[K]): void {
   if (!data.settings) return;
+  if (scope && scope.key === key) {
+    const id = scope.variantId;
+    const variants = data.settings.overlayVariants ?? [];
+    if (!variants.some((v) => v.id === id)) return;
+    const overrides = variantDiff(data.settings[key], value);
+    saveSettings('overlayVariants', variants.map((v) => (v.id === id ? { ...v, overrides } : v)));
+    return;
+  }
   const profileId = data.settings.activeProfileId;
   const base = confirmed?.activeProfileId === profileId ? confirmed[key] : undefined;
   set({ settings: { ...data.settings, [key]: value } });
@@ -152,10 +193,12 @@ export async function profileAction<K extends 'profiles:create' | 'profiles:rena
 
 // ---------- navigation ----------
 
-export type Page = 'workspace' | 'dashboard' | 'interactive' | 'alerts' | 'overlays' | 'profiles' | 'bot' | 'obs' | 'kawaki' | 'connections' | 'settings';
+export type Page = 'workspace' | 'dashboard' | 'interactive' | 'alerts' | 'overlays' | 'profiles' | 'bot' | 'obs' | 'kawaki' | 'connections' | 'settings' | 'variables' | 'designer';
+type TopPage = 'workspace' | 'dashboard' | 'connections' | 'variables' | 'designer';
+const TOP_PAGES: readonly TopPage[] = ['connections', 'variables', 'designer'];
 
 interface NavState {
-  page: 'workspace' | 'dashboard' | 'connections';
+  page: TopPage;
   module?: WorkspaceCard;
   catalog?: true | WorkspaceCard;
   dialog?: 'profiles' | 'settings';
@@ -169,7 +212,8 @@ function readNav(): NavState {
     if (raw && typeof raw.page === 'string') {
       const sub = raw.sub && typeof raw.sub === 'object' ? raw.sub : {};
       if (['twitch','donationalerts','streamlabs','streamelements','streamerbot','discord','subforstream'].includes(raw.module)) return { page:'connections',sub:{...sub,connections:raw.module} };
-      return { page: raw.page === 'connections' ? 'connections' : raw.version === 2 && raw.page === 'dashboard' ? 'dashboard' : 'workspace', sub,
+      if (TOP_PAGES.includes(raw.page)) return { page: raw.page, sub };
+      return { page: raw.version === 2 && raw.page === 'dashboard' ? 'dashboard' : 'workspace', sub,
         module: isWorkspaceModule(raw.module) ? raw.module : workspaceTarget(raw.page, sub[raw.page]) };
     }
   } catch {
@@ -195,7 +239,7 @@ export function navigate(page: Page, sub?: string): void {
   flushSaves();
   const remembered = sub === undefined ? nav.sub : { ...nav.sub, [page]: sub };
   if (page === 'profiles' || page === 'settings') { setNav({ ...nav, dialog: page, sub: remembered }); return; }
-  if (page === 'connections') { setNav({ page: 'connections', sub: remembered }); return; }
+  if (page === 'connections' || page === 'variables' || page === 'designer') { setNav({ page, sub: remembered }); return; }
   const target = workspaceTarget(page, sub ?? remembered[page]);
   setNav({ page: page === 'dashboard' ? 'dashboard' : 'workspace', sub: remembered,
     ...resolveModuleAccess(target, data.settings?.workspace.cards) });

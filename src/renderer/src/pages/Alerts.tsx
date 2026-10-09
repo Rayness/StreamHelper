@@ -7,6 +7,7 @@ import { Icon } from '../components/icons';
 import { MediaPicker } from '../components/MediaPicker';
 import { OverlayBar, ScaledFrame } from '../components/overlay';
 import { Button, Card, ColorInput, CopyField, Field, IconButton, NumberInput, PageHeader, Select, TextInput, Toggle } from '../components/ui';
+import { FontPicker } from '../components/FontPicker';
 import { useT } from '../i18n';
 import { call, saveSettings, useApp, useSub } from '../store';
 
@@ -144,7 +145,7 @@ export function Alerts() {
             <p className="muted small">{t(tier ? 'alerts.tierStyleHint' : 'alerts.sharedStyleHint')}</p>
             <div className="form">
               <Field label={t('common.font')} hint={t('common.fontHint')}>
-                <TextInput value={style.fontFamily} onChange={(fontFamily) => setStyle({ fontFamily })} />
+                <FontPicker value={style.fontFamily} onChange={(fontFamily) => setStyle({ fontFamily })} />
               </Field>
               <Field label={t('common.fontSize')}>
                 <NumberInput value={style.fontSize} min={12} max={160} onChange={(fontSize) => setStyle({ fontSize })} />

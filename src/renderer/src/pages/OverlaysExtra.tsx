@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { defaultCounterOverlay } from '@shared/defaults';
-import type { CounterOverlay, HypeSettings, LeadersOverlaySettings } from '@shared/types';
+import type { CounterOverlay, DonationsOverlaySettings, DonationsPage, HypeSettings, LeadersOverlaySettings } from '@shared/types';
 import { InstancePicker, OverlayBar, OverlayPreview, pickInstance } from '../components/overlay';
 import { Button, Card, ColorInput, Field, LinesInput, NumberInput, Select, TextInput, Toggle } from '../components/ui';
+import { FontPicker } from '../components/FontPicker';
 import { useT } from '../i18n';
 import { call, saveSettings, useApp } from '../store';
 import { DeleteInstance, Split } from './Overlays';
@@ -58,7 +59,7 @@ export function CounterDetail() {
                     <Field label={t('common.fontSize')}><NumberInput value={c.fontSize} min={12} max={200} onChange={(fontSize) => update({ fontSize })} /></Field>
                     <Field label={t('common.textColor')}><ColorInput value={c.textColor} onChange={(textColor) => update({ textColor })} /></Field>
                     <Field label={t('common.accent')}><ColorInput value={c.accentColor} onChange={(accentColor) => update({ accentColor })} /></Field>
-                    <Field label={t('common.font')} hint={t('common.fontHint')}><TextInput value={c.fontFamily} onChange={(fontFamily) => update({ fontFamily })} /></Field>
+                    <Field label={t('common.font')} hint={t('common.fontHint')}><FontPicker value={c.fontFamily} onChange={(fontFamily) => update({ fontFamily })} /></Field>
                   </div>
                 </Card>
                 <DeleteInstance onDelete={() => saveSettings('counterOverlays', list.filter((x) => x.id !== c.id))} />
@@ -117,7 +118,7 @@ export function HypeDetail() {
                 <Field label={t('hype.decay')} hint={t('hype.decayHint')}><NumberInput value={cfg.decayPerMin} min={0} max={100} onChange={(decayPerMin) => set({ decayPerMin })} /></Field>
                 <Field label={t('overlays.options')} wide><Toggle checked={cfg.hideWhenEmpty} onChange={(hideWhenEmpty) => set({ hideWhenEmpty })} label={t('hype.hideWhenEmpty')} /></Field>
                 <Field label={t('common.accent')}><ColorInput value={cfg.accentColor} onChange={(accentColor) => set({ accentColor })} /></Field>
-                <Field label={t('common.font')} hint={t('common.fontHint')}><TextInput value={cfg.fontFamily} onChange={(fontFamily) => set({ fontFamily })} /></Field>
+                <Field label={t('common.font')} hint={t('common.fontHint')}><FontPicker value={cfg.fontFamily} onChange={(fontFamily) => set({ fontFamily })} /></Field>
               </div>
             </Card>
           </>
@@ -159,12 +160,82 @@ export function LeadersDetail() {
                 <Field label={t('leaders.exclude')} hint={t('leaders.excludeHint')} wide><LinesInput value={cfg.exclude} onChange={(exclude) => set({ exclude })} rows={3} /></Field>
                 <Field label={t('overlays.options')} wide><Toggle checked={cfg.showCounts} onChange={(showCounts) => set({ showCounts })} label={t('leaders.showCounts')} /></Field>
                 <Field label={t('common.accent')}><ColorInput value={cfg.accentColor} onChange={(accentColor) => set({ accentColor })} /></Field>
-                <Field label={t('common.font')} hint={t('common.fontHint')}><TextInput value={cfg.fontFamily} onChange={(fontFamily) => set({ fontFamily })} /></Field>
+                <Field label={t('common.font')} hint={t('common.fontHint')}><FontPicker value={cfg.fontFamily} onChange={(fontFamily) => set({ fontFamily })} /></Field>
               </div>
             </Card>
           </>
         }
         preview={<OverlayPreview kind="leaders" maxHeight={380} />}
+      />
+    </>
+  );
+}
+
+// ---------- donation board ----------
+
+const DONATION_PAGES: DonationsPage[] = ['latest', 'top', 'all', 'total'];
+
+export function DonationsDetail() {
+  const t = useT();
+  const cfg = useApp((d) => d.settings!.donationsOverlay);
+  const log = useApp((d) => d.settings!.donationLog);
+  const since = useApp((d) => d.settings!.stats.since);
+  const currency = useApp((d) => d.settings!.currency);
+  const set = (patch: Partial<DonationsOverlaySettings>) => saveSettings('donationsOverlay', { ...cfg, ...patch });
+  const togglePage = (page: DonationsPage, on: boolean) => set({ pages: on ? DONATION_PAGES.filter((p) => p === page || cfg.pages.includes(p)) : cfg.pages.filter((p) => p !== page) });
+  const session = log.filter((d) => d.at >= since);
+  return (
+    <>
+      <OverlayBar kind="donations" name={t('ov.donations')} />
+      <Split
+        stacked
+        settings={<>
+          <Card title={t('donations.pages')}>
+            <p className="muted small">{t('donations.pagesHint')}</p>
+            <div className="donation-pages">
+              {DONATION_PAGES.map((page) => (
+                <div key={page} className={`donation-page ${cfg.pages.includes(page) ? 'on' : ''}`}>
+                  <Toggle checked={cfg.pages.includes(page)} onChange={(on) => togglePage(page, on)} label={t(`donations.page_${page}`)} />
+                  <TextInput value={cfg.titles[page]} onChange={(title) => set({ titles: { ...cfg.titles, [page]: title } })} placeholder={t('donations.pageTitle')} />
+                </div>
+              ))}
+            </div>
+            <div className="form">
+              <Field label={t('donations.layout')}>
+                <Select value={cfg.layout} onChange={(layout) => set({ layout })} options={(['list', 'single', 'ticker'] as const).map((v) => ({ value: v, label: t(`donations.layout_${v}`) }))} />
+              </Field>
+              <Field label={t('donations.period')}>
+                <Select value={cfg.period} onChange={(period) => set({ period })} options={(['session', 'all'] as const).map((v) => ({ value: v, label: t(`donations.period_${v}`) }))} />
+              </Field>
+              <Field label={t('donations.count')}><NumberInput value={cfg.count} min={1} max={50} onChange={(count) => set({ count })} /></Field>
+              {cfg.layout !== 'ticker' && <Field label={t('donations.pageSec')}><NumberInput value={cfg.pageSec} min={3} max={600} onChange={(pageSec) => set({ pageSec })} /></Field>}
+              {cfg.layout === 'single' && <Field label={t('donations.itemSec')}><NumberInput value={cfg.itemSec} min={2} max={120} onChange={(itemSec) => set({ itemSec })} /></Field>}
+              {cfg.layout === 'ticker' && <Field label={t('banners.speed')}><NumberInput value={cfg.tickerSpeed} min={10} max={600} step={10} onChange={(tickerSpeed) => set({ tickerSpeed })} /></Field>}
+              <Field label={t('overlays.options')} wide><div className="stack">
+                <Toggle checked={cfg.showTitle} onChange={(showTitle) => set({ showTitle })} label={t('donations.showTitle')} />
+                <Toggle checked={cfg.showMessage} onChange={(showMessage) => set({ showMessage })} label={t('donations.showMessage')} />
+              </div></Field>
+            </div>
+          </Card>
+          <Card title={t('banners.look')}>
+            <div className="form">
+              <Field label={t('common.font')} hint={t('common.fontHint')}><FontPicker value={cfg.fontFamily} onChange={(fontFamily) => set({ fontFamily })} /></Field>
+              <Field label={t('common.fontSize')}><NumberInput value={cfg.fontSize} min={10} max={120} onChange={(fontSize) => set({ fontSize })} /></Field>
+              <Field label={t('common.textColor')}><ColorInput value={cfg.textColor} onChange={(textColor) => set({ textColor })} /></Field>
+              <Field label={t('common.accent')}><ColorInput value={cfg.accentColor} onChange={(accentColor) => set({ accentColor })} /></Field>
+              <Field label={t('common.background')} hint={t('overlays.chatBgHint')}><TextInput value={cfg.background} onChange={(background) => set({ background })} mono /></Field>
+              <Field label={t('banners.align')}><Select value={cfg.align} onChange={(align) => set({ align })} options={(['left', 'center', 'right'] as const).map((a) => ({ value: a, label: t(`align.${a}`) }))} /></Field>
+            </div>
+          </Card>
+          <Card title={t('donations.history')} actions={<Button size="sm" icon="trash" disabled={!log.length} onClick={() => confirm(t('donations.clearConfirm')) && void call('donations:clear')}>{t('donations.clear')}</Button>}>
+            <p className="muted small">{t('donations.historyHint', { session: session.length, all: log.length })}</p>
+            {log.length > 0 && <ol className="donation-log">
+              {log.slice(0, 8).map((d) => <li key={d.id}><b>{d.name}</b><span>{d.amount} {d.currency}</span>{d.amountMain === null && <span className="muted small" title={t('donations.noConversion', { currency })}>≠ {currency}</span>}</li>)}
+            </ol>}
+            <p className="muted small">{t('donations.varsHint')}</p>
+          </Card>
+        </>}
+        preview={<OverlayPreview kind="donations" maxHeight={360} />}
       />
     </>
   );

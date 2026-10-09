@@ -100,7 +100,7 @@
       if(SH.preview&&mode==='queue'&&!queue.length){const li=document.createElement('li');li.textContent=label('Здесь появятся заказы зрителей','Viewer requests will appear here');list.appendChild(li)}
     }
     function load(msg){
-      pending=msg;config={...defaults,...msg.config};lang=msg.lang||'ru';
+      pending=msg;config={...defaults,...msg.config};lang=msg.lang||'ru';SH.useFont(document.body,config.fontFamily||'Segoe UI');
       if(config.videoLayout==='queue'){
         active=null;reported=false;videoTitle='';stopPlayer();render();return;
       }

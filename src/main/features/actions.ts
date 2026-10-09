@@ -22,6 +22,7 @@ export interface ActionTargets {
   clipMoment(): Promise<unknown>;
   shieldToggle(): Promise<void>;
   curseVote(): void;
+  setVariable(name: string, value: string): void;
 }
 
 /** Runs dashboard buttons / global hotkeys. Each step is independent: one failing step doesn't stop the rest. */
@@ -101,6 +102,8 @@ export class ActionRunner {
         return t.shieldToggle();
       case 'curseVote':
         return t.curseVote();
+      case 'variable':
+        return t.setVariable(s.name, s.value);
       case 'wait':
         return new Promise((r) => setTimeout(r, Math.max(0, Math.min(60_000, s.ms))));
     }

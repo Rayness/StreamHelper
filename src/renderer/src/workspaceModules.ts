@@ -17,6 +17,8 @@ export const MODULES: ModuleDef[] = [
   { id:'shield', title:'tool.shield', description:'toolDesc.shield', icon:'shield', group:'automation' },
   { id:'ducking', title:'tool.ducking', description:'toolDesc.ducking', icon:'volume', group:'automation' },
   { id:'report', title:'tool.report', description:'toolDesc.report', icon:'report', group:'channel' },
-  ...OVERLAYS.map((o): ModuleDef => ({ id:o.kind, title:`ov.${o.kind}`, description:`ovDesc.${o.kind}`, icon:o.icon, group:o.group === 'fun' ? 'fun' : 'display' })),
+  ...OVERLAYS.filter((o) => o.kind !== 'custom').map((o): ModuleDef => ({ id:o.kind, title:`ov.${o.kind}`, description:`ovDesc.${o.kind}`, icon:o.icon, group:o.group === 'fun' ? 'fun' : 'display' })),
 ];
 export const moduleDef = (id: WorkspaceCard) => MODULES.find((m) => m.id === id)!;
+/** Display name of a module (connections use brand names, the rest are translated). */
+export const moduleName = (id: WorkspaceCard, t: (key: TKey) => string) => { const m = moduleDef(id); return m.title ? t(m.title) : m.name!; };

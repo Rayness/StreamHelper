@@ -5,6 +5,9 @@ import { app, BrowserWindow, clipboard, ClipboardItem, dialog, Menu, nativeImage
 import { ALERT_TYPES, type AlertType, type IpcPush, type Language, type MediaFile } from '@shared/types';
 import { release } from 'node:os';
 import { normalizeAppearance } from '@shared/defaults';
+import { renderTemplate } from '@shared/template';
+import { nextVariableValue, resolveStreamVar, VARIABLE_NAME } from '@shared/vars';
+import { systemFonts } from './core/systemFonts';
 
 /** Mica / Acrylic window backdrops exist from Windows 11 22H2 (build 22621). */
 const WINDOW_MATERIAL = process.platform === 'win32' && Number(release().split('.')[2] ?? 0) >= 22621;
@@ -158,6 +161,7 @@ async function bootstrap(): Promise<void> {
     overlaysDir: join(resourcesDir(), 'overlays'),
     mediaDir,
     initialMessages: (kind, id) => hub.initialMessages(kind, id),
+    transform: (kind, variant, msg) => hub.transform(kind, variant, msg),
     onClientsChanged: (count, perKind) => {
       state.patch('overlayClients', count);
       state.replace('overlayKinds', perKind);
@@ -166,6 +170,12 @@ async function bootstrap(): Promise<void> {
     extraRoute: async (req, res, url) => {
       if (await authRoute(req, res, url)) return true;
       if (await dockRoute(req, res, url)) return true;
+      if (url.pathname === '/overlay/fonts/system.json' && req.method === 'GET') {
+        // Overlays only fetch web fonts for families that aren't installed.
+        res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+        res.end(JSON.stringify(await systemFonts()));
+        return true;
+      }
       const card = /^\/reports\/([\w-]+)\.png$/.exec(url.pathname);
       if (card && (req.method === 'GET' || req.method === 'HEAD')) {
         const file = report.pngPath(card[1]);
@@ -326,6 +336,14 @@ async function bootstrap(): Promise<void> {
     clipMoment: () => clipper.clipNow(),
     shieldToggle: () => shield.toggle(),
     curseVote: () => curses.startVote(),
+    setVariable: (name, value) => {
+      const key = name.trim().toLowerCase();
+      if (!VARIABLE_NAME.test(key)) return;
+      const all = settings.get('variables');
+      const existing = all.find((v) => v.name.toLowerCase() === key);
+      const next = nextVariableValue(existing?.value ?? '', renderTemplate(value, (n, arg) => resolveStreamVar(n, arg, settings.all, state.current)));
+      settings.set('variables', existing ? all.map((v) => v === existing ? { ...v, value: next } : v) : [...all, { id: `var_${Date.now().toString(36)}`, name: name.trim(), value: next, description: '' }]);
+    },
   });
   dockRoute = createDockRoutes({
     token: dockToken,
@@ -573,10 +591,16 @@ async function bootstrap(): Promise<void> {
     'kawaki:logout': () => kawaki.logout(),
     'kawaki:cancelLogin': () => kawaki.cancelLogin(),
     'kawaki:refresh': () => kawaki.refresh(),
-    'obs:addBrowserSource': async (name, url, width, height) => {
-      const result = await obs.addBrowserSource(name, url, width, height);
-      ctx.toast(result === 'exists' ? 'info' : 'success', `toast.obsSource_${result}`, { name, scene: state.current.obs.currentScene });
+    'obs:addBrowserSource': async (name, url, width, height, scene) => {
+      const result = await obs.addBrowserSource(name, url, width, height, scene);
+      ctx.toast(result === 'exists' ? 'info' : 'success', `toast.obsSource_${result}`, { name, scene: scene || state.current.obs.currentScene });
     },
+    'obs:refreshAppSources': async () => { await obs.refreshAppSources(); },
+    'obs:setItemEnabled': (scene, id, enabled) => obs.setItemEnabled(scene, id, enabled),
+    'obs:removeItem': (scene, id) => obs.removeItem(scene, id),
+    'obs:tidyScene': (scene) => obs.tidyScene(scene),
+    'fonts:system': () => systemFonts(),
+    'donations:clear': () => progress.clearDonations(),
     'media:import': async () => {
       const res = await dialog.showOpenDialog(mainWindow!, {
         properties: ['openFile'],

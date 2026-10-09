@@ -46,12 +46,15 @@ export const OVERLAYS: OverlayDef[] = [
   { kind: 'melody', icon: 'disc', group: 'fun', size: [900, 290] },
   { kind: 'stocks', icon: 'trend', group: 'fun', size: [1920, 80] },
   { kind: 'portal', icon: 'portal', group: 'screen', size: [1280, 720] },
+  { kind: 'donations', icon: 'coin', group: 'main', size: [560, 380] },
+  // Made in the Designer tab; its size comes from the overlay itself.
+  { kind: 'custom', icon: 'designer', group: 'screen', size: [1920, 1080] },
 ];
 
 export const overlayDef = (kind: OverlayKind): OverlayDef => OVERLAYS.find((o) => o.kind === kind)!;
 
-export function overlayPath(kind: OverlayKind, id?: string): string {
+export function overlayPath(kind: OverlayKind, id?: string, variant?: string): string {
   const def = overlayDef(kind);
-  const q = [id ? `id=${encodeURIComponent(id)}` : '', def.query ?? ''].filter(Boolean).join('&');
+  const q = [id ? `id=${encodeURIComponent(id)}` : '', variant ? `v=${encodeURIComponent(variant)}` : '', def.query ?? ''].filter(Boolean).join('&');
   return `/overlay/${kind}${q ? `?${q}` : ''}`;
 }

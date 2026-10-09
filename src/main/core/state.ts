@@ -14,7 +14,7 @@ export function initialRuntimeState(): RuntimeState {
     streamerbot: { ...disconnected, actions: [] },
     discord: { ...disconnected },
     subForStream: { ...disconnected, overlayUrl: '' },
-    obs: { ...disconnected, scenes: [], currentScene: '', sceneItems: [], inputs: [], streaming: false, recording: false },
+    obs: { ...disconnected, scenes: [], currentScene: '', sceneItems: [], inputs: [], streaming: false, recording: false, appSources: [], containers: [] },
     stream: { live: false, title: '', categoryId: '', categoryName: '', tags: [], viewers: 0, startedAt: null },
     alerts: { paused: false, queueLength: 0, current: null },
     overlayUrl: '',

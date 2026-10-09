@@ -19,6 +19,7 @@ class FakeObs {
   salt = 'salt123';
   challenge = 'challenge456';
   browsers = new Map<string, Record<string, unknown>>();
+  createdScenes: string[] = [];
   items = new Map<string, { sceneItemId: number; sourceName: string; sceneItemEnabled: boolean }[]>();
 
   constructor(private password?: string) {
@@ -56,7 +57,8 @@ class FakeObs {
     const fail = () => ws.send(JSON.stringify({ op: 7, d: { requestType, requestId, requestStatus: { result: false, code: 604, comment: 'no audio' } } }));
     switch (requestType) {
       case 'GetSceneList':
-        return ok({ currentProgramSceneName: this.scene, scenes: [{ sceneName: 'BRB' }, { sceneName: 'Game' }, { sceneName: 'Start' }] });
+        return ok({ currentProgramSceneName: this.scene, scenes: [...this.createdScenes.map((sceneName) => ({ sceneName })), { sceneName: 'BRB' }, { sceneName: 'Game' }, { sceneName: 'Start' }] });
+      case 'CreateScene': this.createdScenes.push(requestData.sceneName); this.items.set(requestData.sceneName, []); return ok({});
       case 'GetSceneItemList':
         return ok({ sceneItems: this.items.get(requestData.sceneName) ?? [{ sceneItemId: 1, sourceName: 'Camera', sceneItemEnabled: true }, { sceneItemId: 2, sourceName: 'Alerts', sceneItemEnabled: false }] });
       case 'GetInputList':
@@ -101,7 +103,7 @@ class FakeObs {
   }
 }
 
-function makeCtx(port: number, password?: string, songRequests?: { listen: string }) {
+function makeCtx(port: number, password?: string, songRequests?: { listen: string }, group?: string) {
   const bus = new EventBus();
   const state = new StateHub(bus);
   const secrets: Record<string, unknown> = { obsPassword: password };
@@ -109,7 +111,7 @@ function makeCtx(port: number, password?: string, songRequests?: { listen: strin
   const ctx = {
     bus,
     state,
-    settings: { get: (k: string) => (k === 'obs' ? { host: '127.0.0.1', port, autoConnect: false } : k === 'songRequests' ? songRequests : undefined) },
+    settings: { get: (k: string) => (k === 'obs' ? { host: '127.0.0.1', port, autoConnect: false, group } : k === 'songRequests' ? songRequests : undefined) },
     secrets: { get: (k: string) => secrets[k], set: (k: string, v: unknown) => (secrets[k] = v) },
     toast,
     openExternal: vi.fn(),
@@ -264,5 +266,22 @@ describe('ObsService', () => {
     await obs.connect();
     expect(state.current.obs.status).toBe('error');
     expect(toast).toHaveBeenCalledWith('error', 'toast.obsAuthFailed');
+  });
+
+  it('puts new overlays into the StreamHelper group of the scene and finds them there', async () => {
+    const fake = new FakeObs(); fake.items.set('Game', [{ sceneItemId: 1, sourceName: 'Camera', sceneItemEnabled: true }]);
+    const { ctx, state } = makeCtx(fake.port, undefined, undefined, 'perScene');
+    const obs = new ObsService(ctx);
+    cleanup.push(() => obs.disconnect(), () => fake.close());
+    await obs.connect();
+    expect(await obs.addBrowserSource('Chat', 'http://127.0.0.1:8145/overlay/chat', 400, 600)).toBe('created');
+    expect(fake.requests.some((r) => r.type === 'CreateScene' && r.data.sceneName === 'StreamHelper · Game')).toBe(true);
+    expect(fake.items.get('Game')!.map((i) => i.sourceName)).toEqual(['Camera', 'StreamHelper · Game']);
+    expect(fake.requests.find((r) => r.type === 'CreateInput')!.data.sceneName).toBe('StreamHelper · Game');
+    // Second click: the source is found inside the group instead of being added again.
+    expect(await obs.addBrowserSource('Chat', 'http://127.0.0.1:8145/overlay/chat', 400, 600)).toBe('exists');
+    const found = await obs.refreshAppSources();
+    expect(found.filter((a) => a.scene === 'Game')).toEqual([expect.objectContaining({ kind: 'chat', parent: 'StreamHelper · Game', parentType: 'container', sourceName: 'Chat' })]);
+    expect(state.current.obs.appSources.length).toBeGreaterThan(0);
   });
 });

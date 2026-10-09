@@ -1,5 +1,7 @@
 import type { ChatMessage, ChatOverlaySettings, OverlayKind, OverlayMessage, Settings } from '@shared/types';
 import { ALL_OVERLAY_KINDS } from '@shared/profiles';
+import { boardFor } from '@shared/donations';
+import { applyVariant, findVariant } from '@shared/variants';
 import type { AppContext } from '../core/context';
 import type { AlertQueue } from '../features/alerts';
 import type { TextOverlays } from '../features/banners';
@@ -55,7 +57,7 @@ export class OverlayHub {
       if (event.type === 'redemption') server.broadcast('rewards', { type: 'reward', event });
       if (event.type === 'raid') server.broadcast('collab', { type: 'collabRaid', event });
     });
-    bus.on('stream:update', (stream) => server.broadcast('live', { type: 'live', stream, lang: this.settings.language }));
+    bus.on('stream:update', () => server.broadcast('live', this.liveMessage()));
     bus.on('kawaki:now', () => server.broadcast('kawaki', this.kawakiMessage()));
     bus.on('music:changed', () => server.broadcast('music', this.musicMessage()));
     bus.on('settings:changed', (key) => {
@@ -66,6 +68,13 @@ export class OverlayHub {
       if (key === 'chatOverlay') server.broadcast('chat', { type: 'chatConfig', config: this.settings.chatOverlay });
       if (key === 'spotlightOverlay') server.broadcast('spotlight', { type: 'spotlightConfig', config: this.settings.spotlightOverlay });
       if (key === 'rewardsOverlay') server.broadcast('rewards', this.rewardsMessage());
+      if (key === 'eventsOverlay') server.broadcast('events', this.eventsMessage());
+      if (key === 'liveOverlay') server.broadcast('live', this.liveMessage());
+      if (['donationsOverlay', 'donationLog', 'stats', 'currency', 'language'].includes(key)) server.broadcast('donations', this.donationsMessage());
+      // A changed per-scene variant: resend the current state so those sources pick it up.
+      if (key === 'overlayVariants') for (const kind of new Set(this.settings.overlayVariants.map((v) => v.kind))) {
+        server.forEachClient(kind, (id) => this.kindMessages(kind, id).find((m) => 'config' in m || 'style' in m) ?? null);
+      }
       if (key === 'collabOverlay') server.broadcast('collab', this.collabMessage());
       if (key === 'musicOverlay') server.broadcast('music', this.musicMessage());
       if (key === 'songRequests' || key === 'songQueue') server.broadcast('song', this.sources.song());
@@ -77,7 +86,7 @@ export class OverlayHub {
       if (key === 'kawaki') server.broadcast('kawaki', this.kawakiMessage());
       if (key === 'ads') server.forEachClient('ad', (id) => this.sources.ad(id));
       if (key === 'language') {
-        server.broadcast('live', { type: 'live', stream: this.ctx.state.current.stream, lang: this.settings.language });
+        server.broadcast('live', this.liveMessage());
         server.broadcast('collab', this.collabMessage());
         server.broadcast('music', this.musicMessage());
         server.broadcast('song', this.sources.song());
@@ -87,6 +96,24 @@ export class OverlayHub {
 
   private get settings(): Settings {
     return this.ctx.settings.all;
+  }
+
+  /** What a browser source bound to a per-scene variant receives. */
+  transform(kind: OverlayKind, variantId: string, msg: OverlayMessage): OverlayMessage {
+    return applyVariant(msg, findVariant(this.settings, variantId, kind));
+  }
+
+  private liveMessage(): OverlayMessage {
+    return { type: 'live', stream: this.ctx.state.current.stream, lang: this.settings.language, style: this.settings.liveOverlay };
+  }
+
+  private eventsMessage(): OverlayMessage {
+    return { type: 'events', events: this.sources.alerts().recentEvents.slice(0, 20), style: this.settings.eventsOverlay };
+  }
+
+  private donationsMessage(): OverlayMessage {
+    const style = this.settings.donationsOverlay;
+    return { type: 'donations', board: boardFor(this.settings, style), style, lang: this.settings.language };
   }
 
   private goalMessage(id: string | null): OverlayMessage {
@@ -143,7 +170,7 @@ export class OverlayHub {
     return [{ type: 'profileVisibility', visible: enabled ? enabled.includes(kind) : true }, ...this.kindMessages(kind, id)];
   }
 
-  private kindMessages(kind: OverlayKind, id: string | null): OverlayMessage[] {
+  kindMessages(kind: OverlayKind, id: string | null): OverlayMessage[] {
     switch (kind) {
       case 'chat': {
         const cfg = this.settings.chatOverlay;
@@ -158,7 +185,7 @@ export class OverlayHub {
       case 'timer':
         return [this.timerMessage(id)];
       case 'events':
-        return [{ type: 'events', events: this.sources.alerts().recentEvents.slice(0, 20) }];
+        return [this.eventsMessage()];
       case 'rewards':
         return [this.rewardsMessage()];
       case 'collab':
@@ -173,6 +200,7 @@ export class OverlayHub {
       }
       case 'banner':
       case 'label':
+      case 'custom':
         return [this.sources.text().initial(kind, id)];
       case 'emotes':
         return [{ type: 'emoteConfig', config: this.settings.emoteRain }];
@@ -191,7 +219,9 @@ export class OverlayHub {
       case 'spotlight':
         return [{ type: 'spotlightConfig', config: this.settings.spotlightOverlay }, this.sources.spotlight()];
       case 'live':
-        return [{ type: 'live', stream: this.ctx.state.current.stream, lang: this.settings.language }];
+        return [this.liveMessage()];
+      case 'donations':
+        return [this.donationsMessage()];
       case 'kawaki':
         return [this.kawakiMessage()];
       case 'counter':
