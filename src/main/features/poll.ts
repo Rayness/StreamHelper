@@ -1,6 +1,7 @@
 import type { ChatMessage, PollSettings, PollState } from '@shared/types';
 import type { AppContext } from '../core/context';
 import { normalizeText, type StageDeps } from './stage';
+import { assertNoOtherNumberVote } from './chatVotes';
 
 const PUSH_THROTTLE_MS = 250;
 
@@ -54,6 +55,7 @@ export class PollService {
     const cfg = this.cfg;
     const options = cfg.options.map((o) => o.trim()).filter(Boolean);
     if (options.length < 2) throw new Error('a poll needs at least two options');
+    assertNoOtherNumberVote(this.ctx.state.current, 'poll', this.ctx.settings.get('language') === 'ru');
     this.clearTimers();
     this.votes.clear();
     const durationMs = Math.max(0, cfg.durationSec) * 1000;

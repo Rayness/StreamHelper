@@ -74,6 +74,22 @@ export function ircFragments(text: string, emotesTag: string | undefined): ChatF
   return out;
 }
 
+/** Command names a portal message may use: ours, plus both defaults (the partner may run the app in the other language). */
+const DEFAULT_COMMANDS = ['портал', 'portal'];
+
+/**
+ * "!портал hello" from the partner's chat → the prefix used, the command and its text. The partner's
+ * StreamHelper may have another prefix or language, so "!" and both default names are accepted too.
+ */
+export function parsePortalCommand(text: string, prefix: string, command: string): { prefix: string; name: string; args: string[] } | null {
+  const names = new Set([command.trim().toLowerCase().replace(/^[!/]+/, ''), ...DEFAULT_COMMANDS].filter(Boolean));
+  for (const p of new Set([prefix, '!'].filter(Boolean))) {
+    const parsed = parseCommand(text, p);
+    if (parsed && names.has(parsed.name) && parsed.args.length) return { prefix: p, name: parsed.name, args: parsed.args };
+  }
+  return null;
+}
+
 /** Links never travel through the portal. */
 export function stripLinks(text: string): string {
   return text.replace(/\bhttps?:\/\/\S+|\bwww\.\S+/gi, '🔗').replace(/\s+/g, ' ').trim();
@@ -206,14 +222,13 @@ export class PortalService {
     let body = text;
     let fragments = ircFragments(text, line.tags.emotes);
     if (cfg.mode === 'command') {
-      const parsed = parseCommand(text, prefix);
-      const cmd = cfg.command.trim().toLowerCase().replace(/^[!/]+/, '');
-      if (!parsed || parsed.name !== cmd || !parsed.args.length) return;
+      const parsed = parsePortalCommand(text, prefix, cfg.command);
+      if (!parsed) return;
       body = parsed.args.join(' ');
       // Emote positions refer to the full text: keep emotes, re-split the rest.
-      const skip = [...text].length - [...text.trimStart()].length + prefix.length + parsed.name.length;
+      const skip = [...text].length - [...text.trimStart()].length + parsed.prefix.length + parsed.name.length;
       fragments = trimFragments(fragments, skip);
-    } else if (text.trim().startsWith(prefix)) return;
+    } else if (text.trim().startsWith(prefix) || text.trim().startsWith('!')) return;
     if (!this.allow()) return;
     this.emit({
       id: `in:${line.tags.id ?? Date.now().toString(36)}`,

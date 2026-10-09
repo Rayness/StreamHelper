@@ -72,6 +72,26 @@ export function priceAfterTrade(price: number, qty: number, impactPct: number, s
   return Math.max(1, round2(side === 'buy' ? price * (1 + move) : price / (1 + move)));
 }
 
+/**
+ * What a trade actually pays per share: the average between the price before and after its own impact.
+ * Filling at the old price would let a viewer buy (lifting the price) and sell straight back for a profit.
+ */
+export function fillPrice(price: number, qty: number, impactPct: number, side: 'buy' | 'sell'): number {
+  return round2((price + priceAfterTrade(price, qty, impactPct, side)) / 2);
+}
+
+/** Most shares a balance can pay for, impact included. */
+export function maxAffordable(price: number, balance: number, impactPct: number): number {
+  let lo = 0;
+  let hi = Math.max(0, Math.floor(balance / price));
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2);
+    if (round2(fillPrice(price, mid, impactPct, 'buy') * mid) <= balance) lo = mid;
+    else hi = mid - 1;
+  }
+  return lo;
+}
+
 /** "5", "все", "all", "max" → number of shares (null = not understood). */
 export function parseQty(raw: string | undefined, max: number): number | null {
   if (raw === undefined) return 1;
@@ -304,11 +324,11 @@ export class MarketService {
     const w = this.data.wallets[userId];
     if (!w) return ru ? 'сначала напишите что-нибудь в чат' : 'say something in chat first';
     if (stock.userId === userId) return ru ? 'покупать свои акции нельзя — это инсайдерская торговля 😏' : 'buying your own stock is insider trading 😏';
-    const qty = parseQty(rawQty, w.balance / stock.price);
+    const qty = parseQty(rawQty, maxAffordable(stock.price, w.balance, this.cfg.impactPct));
     if (qty === null || qty <= 0) return ru ? 'не хватает монет даже на одну акцию' : 'not enough coins for a single share';
-    const cost = round2(stock.price * qty);
+    const price = fillPrice(stock.price, qty, this.cfg.impactPct, 'buy');
+    const cost = round2(price * qty);
     if (cost > w.balance) return ru ? `нужно ${Math.ceil(cost)} ${this.cfg.currencyName}, на счету ${Math.floor(w.balance)}` : `that costs ${Math.ceil(cost)} ${this.cfg.currencyName}, you have ${Math.floor(w.balance)}`;
-    const price = stock.price;
     w.balance = round2(w.balance - cost);
     const h = w.holdings[stock.userId] ?? (w.holdings[stock.userId] = { qty: 0, cost: 0 });
     h.qty += qty;
@@ -325,7 +345,7 @@ export class MarketService {
     if (!w || !h?.qty) return ru ? `у вас нет акций $${stock.login}` : `you own no $${stock.login}`;
     const qty = Math.min(h.qty, parseQty(rawQty, h.qty) ?? 0);
     if (qty <= 0) return ru ? 'сколько продать? Число или «все»' : 'how many? A number or "all"';
-    const price = stock.price;
+    const price = fillPrice(stock.price, qty, this.cfg.impactPct, 'sell');
     const proceeds = round2(price * qty);
     const costPart = round2((h.cost * qty) / h.qty);
     h.qty -= qty;

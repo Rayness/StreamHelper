@@ -56,6 +56,8 @@ export class DuckingService {
   private lastLevelPush = 0;
   private lastLevel = -100;
   private applying: Promise<void> = Promise.resolve();
+  /** Quitting: no more fades, the original volumes are back. */
+  private stopped = false;
 
   constructor(private ctx: AppContext, private obs: DuckingObs, private now: () => number = Date.now) {
     ctx.bus.on('settings:changed', (key) => { if (key === 'ducking') this.sync(); });
@@ -136,6 +138,7 @@ export class DuckingService {
   }
 
   private async fadeTo(down: boolean): Promise<void> {
+    if (this.stopped) return;
     const generation = ++this.fadeGeneration;
     const cfg = this.cfg;
     const targets = down ? cfg.targets : [...this.originals.keys()];
@@ -159,10 +162,24 @@ export class DuckingService {
     if (!down && generation === this.fadeGeneration) for (const p of plan) this.originals.delete(p.input);
   }
 
+  /** Some inputs are turned down right now: quitting has to bring them back first. */
+  get needsShutdown(): boolean {
+    return this.originals.size > 0 && this.obs.connected;
+  }
+
+  /** Leave the mix as we found it, while OBS is still connected. */
+  async shutdown(): Promise<void> {
+    this.stopped = true;
+    this.unsubscribe?.();
+    this.unsubscribe = null;
+    this.fadeGeneration++;
+    const restore = [...this.originals];
+    this.originals.clear();
+    await Promise.all(restore.map(([input, volume]) => this.obs.setVolume(input, volume).catch(() => undefined)));
+  }
+
   dispose(): void {
     this.unsubscribe?.();
     this.unsubscribe = null;
-    // Leave the mix as we found it.
-    for (const [input, volume] of this.originals) void this.obs.setVolume(input, volume).catch(() => undefined);
   }
 }

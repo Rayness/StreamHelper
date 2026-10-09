@@ -622,7 +622,7 @@ async function bootstrap(): Promise<void> {
     'report:copy': (id) => clipboard.write([new ClipboardItem({ 'image/png': new Blob([new Uint8Array(readFileSync(report.pngPath(id)))], { type: 'image/png' }) })]),
     'report:discord': (id) => report.resend(id),
     'shield:activate': () => shield.activate(),
-    'shield:release': () => shield.release(),
+    'shield:release': async () => { await shield.release(); },
     'shell:openExternal': (url) => {
       if (/^https?:\/\//.test(url)) void shell.openExternal(url);
     },
@@ -656,8 +656,19 @@ async function bootstrap(): Promise<void> {
   report.start();
   shield.start();
 
-  app.on('before-quit', () => {
+  // OBS and chat changes that must be undone before quitting (curse, ducked music, locked chat).
+  // Their requests need OBS and Twitch still connected, so quitting waits for them (a few seconds at most).
+  let undoneBeforeQuit = false;
+  app.on('before-quit', (event) => {
     quitting = true;
+    if (!undoneBeforeQuit && (curses.needsShutdown || ducking.needsShutdown || shield.needsShutdown)) {
+      undoneBeforeQuit = true;
+      event.preventDefault();
+      const done = Promise.allSettled([curses.shutdown(), ducking.shutdown(), shield.shutdown()]);
+      void Promise.race([done, new Promise((r) => setTimeout(r, 4000))]).finally(() => app.quit());
+      return;
+    }
+    undoneBeforeQuit = true;
     settings.flush();
     alerts.dispose();
     actions.dispose();

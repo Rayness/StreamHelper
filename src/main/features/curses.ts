@@ -1,6 +1,7 @@
 import type { ChatMessage, Curse, CurseSettings, CurseState, CurseStep, OverlayMessage } from '@shared/types';
 import { errorMessage, type AppContext } from '../core/context';
 import type { StageDeps } from './stage';
+import { assertNoOtherNumberVote } from './chatVotes';
 
 /** What a curse can change in OBS. Each call returns the previous value so it can be undone. */
 export interface CurseObs {
@@ -90,6 +91,7 @@ export class CurseService {
   startVote(): void {
     if (this.state.status === 'active') throw new Error(this.ru ? 'Сначала закончится текущее проклятие' : 'Wait for the current curse to end');
     if (this.state.status === 'voting') return;
+    assertNoOtherNumberVote(this.ctx.state.current, 'curse', this.ru);
     const pool = this.cfg.curses.filter((c) => c.enabled && c.name.trim());
     if (!pool.length) throw new Error(this.ru ? 'Включите хотя бы одно проклятие' : 'Enable at least one curse');
     const picked = shuffled(pool, this.rand).slice(0, Math.max(1, Math.min(5, this.cfg.choices)));
@@ -227,12 +229,20 @@ export class CurseService {
     this.deps.broadcast('curse', this.overlayMessage());
   }
 
+  /** A curse changed OBS: quitting has to undo it first. */
+  get needsShutdown(): boolean {
+    return this.state.status === 'active' && this.undo.length > 0;
+  }
+
+  /** Quitting mid-curse must not leave the game muted: undo while OBS is still connected. */
+  async shutdown(): Promise<void> {
+    if (this.state.status === 'active') await this.lift();
+  }
+
   dispose(): void {
     this.clear('vote');
+    this.clear('lift');
     if (this.autoTimer) clearInterval(this.autoTimer);
     if (this.pushTimer) clearTimeout(this.pushTimer);
-    // Quitting mid-curse must not leave the game muted.
-    if (this.state.status === 'active') void this.lift();
-    this.clear('lift');
   }
 }

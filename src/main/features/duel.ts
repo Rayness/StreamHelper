@@ -1,6 +1,7 @@
 import type { ChatMessage, DuelSettings, DuelSide, DuelState, OverlayMessage, SongRequest } from '@shared/types';
 import type { AppContext } from '../core/context';
 import type { StageDeps } from './stage';
+import { assertNoOtherNumberVote } from './chatVotes';
 
 /** What the duel needs from the song request queue. */
 export interface DuelSongs {
@@ -68,6 +69,7 @@ export class DuelService {
 
   start(aId?: string, bId?: string): void {
     if (this.state.status !== 'idle' && this.state.status !== 'done') throw new Error(this.ru ? 'Дуэль уже идёт' : 'A duel is already running');
+    assertNoOtherNumberVote(this.ctx.state.current, 'duel', this.ru);
     if (!(this.ctx.state.current.overlayKinds.duel ?? 0)) throw new Error(this.ru ? 'Добавьте оверлей «Музыкальная дуэль» в OBS — он проигрывает треки' : 'Add the Music duel overlay to OBS — it plays the tracks');
     const queue = this.songs.upcoming();
     const pick = (id?: string) => (id ? queue.find((r) => r.id === id) : undefined);
