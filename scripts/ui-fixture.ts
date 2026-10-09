@@ -10,6 +10,7 @@ import { OverlayTests } from '../src/main/features/overlayTests';
 import { EmoteRain } from '../src/main/features/emotes';
 import { SongRequestService } from '../src/main/features/songRequests';
 import { OverlayServer } from '../src/main/overlay/server';
+import { version } from '../package.json';
 
 export async function createFixture(root: string, dataDir: string, push: (channel: string, value: unknown) => void) {
   const bus = new EventBus();
@@ -52,7 +53,7 @@ export async function createFixture(root: string, dataDir: string, push: (channe
     async invoke(channel: string, ...args: any[]) {
       calls.push({ channel, args });
       switch (channel as keyof IpcInvoke) {
-        case 'app:init': return { settings: settings.all, state: state.current, chat: [chat], events: [], version: '0.10.1 QA' };
+        case 'app:init': return { settings: settings.all, state: state.current, chat: [chat], events: [], version: `${version} QA` };
         case 'settings:reset': settings.reset(args[0]); return settings.all;
         case 'settings:set': settings.setForProfile(args[0], args[1], args[2], args[3]); return settings.all;
         case 'profiles:create': return settings.createProfile(args[0],args[1]);
