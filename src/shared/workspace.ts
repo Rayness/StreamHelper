@@ -1,5 +1,6 @@
 import { ALL_OVERLAY_KINDS } from './profiles';
 import type { MonitorLayout, WorkspaceCard } from './types';
+import { clampRect } from './monitorGrid';
 
 export const INTERACTIVE_MODULES = ['wheel', 'poll', 'giveaway', 'queue', 'guess', 'quiz', 'boss'] as const;
 export const CONNECTION_MODULES = ['twitch', 'donationalerts', 'streamlabs', 'streamelements', 'streamerbot', 'discord'] as const;
@@ -18,7 +19,12 @@ export function normalizeMonitorLayout(value: unknown): MonitorLayout {
       height: ['compact','normal','tall'].includes(size.height) ? size.height : 'compact',
     };
   }
-  return { order: workspaceCards(raw.order), hidden: workspaceCards(raw.hidden), sizes };
+  const positions: MonitorLayout['positions'] = {};
+  for (const id of WORKSPACE_CARDS) {
+    const rect = raw.positions?.[id];
+    if (rect && typeof rect === 'object' && [rect.x, rect.y, rect.w, rect.h].every(Number.isFinite)) positions[id] = clampRect(rect);
+  }
+  return { order: workspaceCards(raw.order), hidden: workspaceCards(raw.hidden), sizes, positions };
 }
 
 export function monitorCards(cards: unknown, layout: unknown): WorkspaceCard[] {

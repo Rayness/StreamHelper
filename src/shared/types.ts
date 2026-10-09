@@ -501,12 +501,22 @@ export interface SongRequest {
   userName: string;
   source: 'redemption' | 'donation' | 'chat' | 'manual';
   requestedAt: number;
+  /** Video title from YouTube, when it could be looked up. */
+  title?: string;
+  /** Channel-points redemption to fulfil or refund (Twitch `redemption.id` / `reward.id`). */
+  redemption?: { id: string; rewardId: string };
 }
 
 export interface SongRequestSettings {
   enabled: boolean;
   rewardTitle: string;
   rewardId: string;
+  /** Answer viewers in chat: queued with position, or why the link was rejected. */
+  replyInChat: boolean;
+  /** Return channel points when a request is rejected, cannot play or is removed. */
+  refundRejected: boolean;
+  /** Who hears the song player: OBS audio monitoring of the Song Request source. */
+  listen: SongListen;
   chatEnabled: boolean;
   chatCommand: string;
   chatPermission: Permission;
@@ -528,11 +538,20 @@ export interface SongRequestSettings {
   backgroundOpacity: number;
 }
 
+/** viewers = stream only, both = stream + streamer's headphones, me = headphones only. */
+export type SongListen = 'viewers' | 'both' | 'me';
+
 export interface SongRequestState {
   queue: SongRequest[];
   current: SongRequest | null;
+  /** The playing track is paused by the streamer. */
+  paused: boolean;
+  /** Result of applying `listen` to the Song Request sources in OBS. */
+  obsAudio: { sources: number; error: string | null } | null;
   playerConnected: boolean;
   lastError: string | null;
+  /** Last viewer request that was turned down, shown to the streamer. */
+  lastRejected?: { userName: string; reason: string; at: number } | null;
 }
 
 export interface MusicOverlaySettings {
@@ -962,16 +981,41 @@ export interface Settings {
   /** Main currency for donation totals (goals, subathon). */
   currency: string;
   minimizeToTray: boolean;
+  /** App look; shared by all profiles. */
+  appearance: AppearanceSettings;
   profiles: StreamProfile[];
   activeProfileId: string;
   workspace: { cards: WorkspaceCard[]; monitor?: MonitorLayout };
+}
+
+export type ThemeId = 'midnight' | 'graphite' | 'ocean' | 'oled' | 'light';
+/** Windows 11 system backdrop behind the window (needs the glass effect). */
+export type WindowMaterial = 'none' | 'mica' | 'acrylic';
+export interface AppearanceSettings {
+  theme: ThemeId;
+  /** #rrggbb */
+  accent: string;
+  glass: boolean;
+  /** 0 = almost opaque panels, 100 = most transparent. */
+  glassStrength: number;
+  windowMaterial: WindowMaterial;
+  density: 'comfortable' | 'compact';
+  corners: 'sharp' | 'normal' | 'round';
+  /** Percent, applied as the window zoom factor. */
+  scale: number;
+  animations: boolean;
 }
 
 export interface MonitorLayout {
   order: WorkspaceCard[];
   hidden: WorkspaceCard[];
   sizes: Partial<Record<WorkspaceCard, { width: 1 | 2 | 3; height: 'compact' | 'normal' | 'tall' }>>;
+  /** Free placement on the dashboard grid. Cards without one are auto-placed from `sizes`. */
+  positions: Partial<Record<WorkspaceCard, MonitorRect>>;
 }
+
+/** Grid cells: `x`/`w` in columns (of MONITOR_COLS), `y`/`h` in rows. */
+export interface MonitorRect { x: number; y: number; w: number; h: number }
 
 export type WorkspaceCard = 'stream' | 'obs' | 'actions' | 'bot' | 'twitch' | 'donationalerts' | 'streamlabs' | 'streamelements' | 'streamerbot' | 'discord' | 'subforstream' | OverlayKind;
 
@@ -1032,7 +1076,7 @@ export type OverlayMessage =
   | { type: 'collab'; config: CollabOverlaySettings; raids: StreamEventOf<'raid'>[]; lang: Language }
   | { type: 'collabRaid'; event: StreamEventOf<'raid'> }
   | { type: 'music'; track: MusicTrack | null; config: MusicOverlaySettings; lang: Language }
-  | { type: 'song'; request: SongRequest | null; nonce: string | null; config: SongRequestSettings; queue: SongRequest[]; lang: Language }
+  | { type: 'song'; request: SongRequest | null; nonce: string | null; paused: boolean; config: SongRequestSettings; queue: SongRequest[]; lang: Language }
   | { type: 'banner'; banner: RenderedBanner | null }
   | { type: 'ad'; campaign: AdCampaign | null; endsAt: number | null }
   | { type: 'boss'; boss: BossState; style: BossSettings; lang: Language; prefix: string }
@@ -1067,7 +1111,7 @@ export interface MediaFile {
 
 /** Request/response calls from renderer to main. */
 export interface IpcInvoke {
-  'app:init': () => { settings: Settings; state: RuntimeState; chat: ChatMessage[]; events: StreamEvent[]; version: string };
+  'app:init': () => { settings: Settings; state: RuntimeState; chat: ChatMessage[]; events: StreamEvent[]; version: string; windowMaterial: boolean };
   /** `base` is the value the editor started from, so changes made by the app meanwhile survive the save. */
   'settings:set': <K extends SettingsKey>(key: K, value: Settings[K], profileId?: string, base?: Settings[K]) => Settings;
   'settings:reset': (key: SettingsKey) => Settings;
@@ -1081,7 +1125,8 @@ export interface IpcInvoke {
   'twitch:cancelLogin': (account: 'broadcaster' | 'bot') => void;
   'twitch:updateStream': (patch: { title?: string; categoryId?: string; tags?: string[] }) => void;
   'twitch:searchCategories': (query: string) => Category[];
-  'twitch:rewards': () => { id: string; title: string; inputRequired: boolean; enabled: boolean }[];
+  'twitch:rewards': () => { id: string; title: string; inputRequired: boolean; enabled: boolean; manageable: boolean }[];
+  'twitch:createSongReward': (title: string, cost: number) => { id: string; title: string };
   'chat:send': (text: string, replyTo?: string) => void;
   'chat:delete': (messageId: string) => void;
   'chat:timeout': (userId: string, seconds: number) => void;
@@ -1119,6 +1164,9 @@ export interface IpcInvoke {
   'song:play': (id?: string) => void;
   'song:skip': () => void;
   'song:remove': (id: string) => void;
+  'song:pause': (paused: boolean) => void;
+  /** Move a queued (not playing) request to `index` among the upcoming ones. */
+  'song:move': (id: string, index: number) => void;
   'music:control': (source: MusicSourceKind, action: 'play' | 'pause' | 'next') => void;
   'subs:check': () => void;
   'subs:clear': () => void;

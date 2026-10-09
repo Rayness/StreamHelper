@@ -1,5 +1,7 @@
 import { normalizeWorkspaceCards, normalizeMonitorLayout } from './workspace';
 import type {
+  AppearanceSettings,
+  ThemeId,
   AlertSettings,
   AlertType,
   CounterOverlay,
@@ -535,7 +537,7 @@ export function defaultSettings(lang: Language): Settings {
     rewardsOverlay: { maxItems: 5, showInput: true, accentColor: '#9b6bff' },
     collabOverlay: { title: lang === 'ru' ? 'Коллаборация' : 'Collaboration', guests: [], showRaids: true, accentColor: '#9b6bff' },
     musicOverlay: { source: 'auto', style: 'card', showArtwork: true, showAlbum: true, showProgress: true, hideWhenPaused: true, accentColor: '#1db954', layout: 'horizontal', coverSize: 130, fontSize: 25, backgroundOpacity: 90, showSource: true },
-    songRequests: { enabled: false, rewardTitle: '', rewardId: '', chatEnabled: true, chatCommand: 'sr', chatPermission: 'everyone', chatCooldownSec: 10, minDonation: 100, autoPlay: true, pauseWindowsMusic: true, resumeWindowsMusic: true, maxQueue: 30, videoLayout: 'full', videoPosition: 'left', videoWidth: 45, showRequester: true, showTitle: true, showQueueCount: true, showControls: true, volume: 100, accentColor: '#9146ff', backgroundOpacity: 88 },
+    songRequests: { enabled: false, rewardTitle: '', rewardId: '', replyInChat: true, refundRejected: true, listen: 'viewers', chatEnabled: true, chatCommand: 'sr', chatPermission: 'everyone', chatCooldownSec: 10, minDonation: 100, autoPlay: true, pauseWindowsMusic: true, resumeWindowsMusic: true, maxQueue: 30, videoLayout: 'full', videoPosition: 'left', videoWidth: 45, showRequester: true, showTitle: true, showQueueCount: true, showControls: true, volume: 100, accentColor: '#9146ff', backgroundOpacity: 88 },
     songQueue: [],
     goals: [defaultGoal(lang)],
     timers: [defaultTimer(lang)],
@@ -561,9 +563,34 @@ export function defaultSettings(lang: Language): Settings {
     leadersOverlay: defaultLeaders(lang),
     currency: lang === 'ru' ? 'RUB' : 'USD',
     minimizeToTray: true,
+    appearance: defaultAppearance(),
     profiles: [],
     activeProfileId: '',
     workspace: { cards: [] },
+  };
+}
+
+export function defaultAppearance(): AppearanceSettings {
+  return { theme: 'midnight', accent: '#9b6bff', glass: false, glassStrength: 55, windowMaterial: 'none', density: 'comfortable', corners: 'normal', scale: 100, animations: true };
+}
+
+const THEMES: readonly ThemeId[] = ['midnight', 'graphite', 'ocean', 'oled', 'light'];
+/** Stored appearance with every field checked: a bad value must never break the UI. */
+export function normalizeAppearance(value: unknown): AppearanceSettings {
+  const d = defaultAppearance();
+  const v = value && typeof value === 'object' ? value as Partial<AppearanceSettings> : {};
+  const pick = <T,>(x: unknown, allowed: readonly T[], fallback: T): T => allowed.includes(x as T) ? x as T : fallback;
+  const num = (x: unknown, min: number, max: number, fallback: number) => typeof x === 'number' && Number.isFinite(x) ? Math.min(max, Math.max(min, Math.round(x))) : fallback;
+  return {
+    theme: pick(v.theme, THEMES, d.theme),
+    accent: typeof v.accent === 'string' && /^#[0-9a-f]{6}$/i.test(v.accent) ? v.accent : d.accent,
+    glass: typeof v.glass === 'boolean' ? v.glass : d.glass,
+    glassStrength: num(v.glassStrength, 0, 100, d.glassStrength),
+    windowMaterial: pick(v.windowMaterial, ['none', 'mica', 'acrylic'] as const, d.windowMaterial),
+    density: pick(v.density, ['comfortable', 'compact'] as const, d.density),
+    corners: pick(v.corners, ['sharp', 'normal', 'round'] as const, d.corners),
+    scale: num(v.scale, 80, 130, d.scale),
+    animations: typeof v.animations === 'boolean' ? v.animations : d.animations,
   };
 }
 
@@ -582,6 +609,7 @@ export function migrateSettings(s: Settings): Settings {
   return {
     ...s,
     workspace: { ...s.workspace, cards: normalizeWorkspaceCards(s.workspace.cards), monitor: normalizeMonitorLayout(s.workspace.monitor) },
+    appearance: normalizeAppearance(s.appearance),
     alerts: {
       ...s.alerts,
       donationTiers: s.alerts.donationTiers.map((tier) => ({

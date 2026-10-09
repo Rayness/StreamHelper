@@ -16,6 +16,18 @@
   --danger-soft: #ff5d6c1c;
   --success: #37d399;
   --warning: #f5b544;
+  --text-strong: #fff;
+  --accent-text: #b99bff;
+  --input-bg: #101017;
+  --border-hover: #3a3a4c;
+  --track: #2d2d3b;
+  --thumb: #cfcfe0;
+  --faint: #5c5c72;
+  --scrollbar: #2c2c3a;
+  --checker-a: #1a1a22;
+  --checker-b: #22222c;
+  --overlay: #05050acc;
+  --radius-lg: 18px;
   --radius: 12px;
   --radius-sm: 8px;
   --font: 'Segoe UI Variable Text', 'Segoe UI', Inter, system-ui, sans-serif;
@@ -48,6 +60,15 @@ body {
   overflow: hidden;
 }
 
+/* `overflow: hidden` still allows programmatic scrolling: focusing an element
+   outside the viewport scrolled the whole window, shifting the sidebar and
+   content with no way to scroll back. `clip` forbids any scrolling here. */
+html,
+body,
+#root {
+  overflow: clip;
+}
+
 ::selection {
   background: var(--accent-soft);
 }
@@ -57,17 +78,17 @@ body {
   height: 10px;
 }
 ::-webkit-scrollbar-thumb {
-  background: #2c2c3a;
+  background: var(--scrollbar);
   border-radius: 10px;
   border: 3px solid transparent;
   background-clip: padding-box;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background-color: #3a3a4c;
+  background-color: var(--border-hover);
 }
 
 a {
-  color: #b99bff;
+  color: var(--accent-text);
 }
 
 h1,
@@ -141,8 +162,8 @@ p {
   display: grid;
   place-items: center;
   color: #fff;
-  background: linear-gradient(135deg, #b18cff, #6f3cff);
-  box-shadow: 0 4px 14px #7c4dff55;
+  background: linear-gradient(135deg, var(--accent-text), var(--accent-strong));
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--accent) 33%, transparent);
 }
 .logo-text {
   font-weight: 700;
@@ -198,7 +219,7 @@ p {
 }
 .sidebar li button.active {
   background: var(--accent-soft);
-  color: #fff;
+  color: var(--text-strong);
 }
 .sidebar li button.active svg {
   color: var(--accent);
@@ -435,8 +456,8 @@ p {
   color: var(--text);
 }
 .btn-secondary:hover:not(:disabled) {
-  border-color: #3d3d50;
-  background: #282836;
+  border-color: var(--border-hover);
+  background: var(--panel-3);
 }
 .btn-ghost {
   background: transparent;
@@ -449,10 +470,10 @@ p {
 .btn-danger {
   background: var(--danger-soft);
   color: var(--danger);
-  border-color: #ff5d6c33;
+  border-color: color-mix(in srgb, var(--danger) 20%, transparent);
 }
 .btn-danger:hover:not(:disabled) {
-  background: #ff5d6c2e;
+  background: color-mix(in srgb, var(--danger) 18%, transparent);
 }
 
 .icon-btn {
@@ -488,7 +509,7 @@ p {
   width: 100%;
   height: 34px;
   padding: 0 11px;
-  background: #101017;
+  background: var(--input-bg);
   color: var(--text);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -499,11 +520,11 @@ p {
     box-shadow 0.15s;
 }
 .input:hover {
-  border-color: #33334a;
+  border-color: var(--border-hover);
 }
 .input:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px #9b6bff26;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent);
 }
 .input:disabled {
   opacity: 0.5;
@@ -512,7 +533,7 @@ p {
   border-color: var(--danger);
 }
 .input::placeholder {
-  color: #5c5c70;
+  color: var(--faint);
 }
 .textarea {
   height: auto;
@@ -572,6 +593,7 @@ input[type='range'] {
 }
 
 .toggle {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 10px;
@@ -583,7 +605,14 @@ input[type='range'] {
   cursor: default;
 }
 .toggle input {
+  /* Anchored to the toggle: unanchored, the focused checkbox sat far from the
+     switch and clicking it scrolled the page to an arbitrary place. */
   position: absolute;
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: 1px;
+  margin: 0;
   opacity: 0;
   pointer-events: none;
 }
@@ -591,7 +620,7 @@ input[type='range'] {
   width: 36px;
   height: 20px;
   border-radius: 20px;
-  background: #2d2d3b;
+  background: var(--track);
   position: relative;
   transition: background 0.2s;
   flex: none;
@@ -603,7 +632,7 @@ input[type='range'] {
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  background: #cfcfe0;
+  background: var(--thumb);
   transition:
     transform 0.2s,
     background 0.2s;
@@ -616,7 +645,7 @@ input[type='range'] {
   background: #fff;
 }
 .toggle input:focus-visible + .toggle-track {
-  box-shadow: 0 0 0 3px #9b6bff40;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent);
 }
 .toggle-label {
   color: var(--text-2);
@@ -632,7 +661,7 @@ input[type='range'] {
   padding: 3px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  background: #101017;
+  background: var(--input-bg);
   cursor: pointer;
   flex: none;
 }
@@ -678,11 +707,11 @@ input[type='range'] {
   border-radius: 50%;
   display: inline-block;
   flex: none;
-  background: #4a4a5c;
+  background: var(--track);
 }
 .status-dot.status-connected {
   background: var(--success);
-  box-shadow: 0 0 0 3px #37d39922;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--success) 13%, transparent);
 }
 .status-dot.status-connecting {
   background: var(--warning);
@@ -773,8 +802,9 @@ kbd {
   font-size: 10.5px;
   padding: 1px 5px;
   border-radius: 4px;
-  background: #0006;
-  border: 1px solid #fff2;
+  background: var(--input-bg);
+  border: 1px solid var(--border-hover);
+  color: var(--text-2);
 }
 
 /* ---------- toasts ---------- */
@@ -795,7 +825,7 @@ kbd {
   gap: 10px;
   padding: 11px 14px;
   border-radius: 10px;
-  background: #1f1f2b;
+  background: var(--panel-2);
   border: 1px solid var(--border);
   box-shadow: 0 10px 30px #0008;
   cursor: pointer;
@@ -957,13 +987,13 @@ kbd {
   cursor: pointer;
 }
 .strip-out:hover {
-  border-color: #3a3a4c;
+  border-color: var(--border-hover);
   color: var(--text);
 }
 .strip-out.on {
-  border-color: #ff5d6c66;
+  border-color: color-mix(in srgb, var(--danger) 40%, transparent);
   background: var(--danger-soft);
-  color: #fff;
+  color: var(--text-strong);
 }
 .strip-out.on svg {
   color: var(--danger);
@@ -988,11 +1018,11 @@ kbd {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: #555;
+  background: var(--track);
 }
 .live-badge.on {
   color: #fff;
-  background: #ff5d6c26;
+  background: color-mix(in srgb, var(--danger) 15%, transparent);
 }
 .live-badge.on .live-dot {
   background: var(--danger);
@@ -1134,13 +1164,13 @@ kbd {
   padding: 16px 12px;
 }
 .scene-btn:hover {
-  border-color: #3a3a4c;
+  border-color: var(--border-hover);
   color: var(--text);
 }
 .scene-btn.active {
   border-color: var(--accent);
   background: var(--accent-soft);
-  color: #fff;
+  color: var(--text-strong);
   box-shadow: inset 0 0 0 1px var(--accent);
 }
 
@@ -1170,7 +1200,7 @@ kbd {
   background: var(--panel-2);
 }
 .chat-msg.highlighted {
-  background: #9b6bff14;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
   box-shadow: inset 3px 0 0 var(--accent);
 }
 .chat-msg.deleted .chat-text {
@@ -1184,7 +1214,7 @@ kbd {
   color: var(--accent);
 }
 .chat-time {
-  color: #5c5c72;
+  color: var(--faint);
   font-size: 11.5px;
   margin-right: 7px;
   font-variant-numeric: tabular-nums;
@@ -1208,14 +1238,14 @@ kbd {
 }
 .chat-mention {
   font-weight: 650;
-  background: #ffffff10;
+  background: color-mix(in srgb, var(--text) 7%, transparent);
   border-radius: 4px;
   padding: 0 3px;
 }
 .chat-bits {
   margin-left: 6px;
   font-size: 12px;
-  color: #c79bff;
+  color: var(--accent-text);
   font-weight: 650;
 }
 .chat-reply {
@@ -1332,8 +1362,8 @@ kbd {
 }
 .feed-sub .feed-icon,
 .feed-resub .feed-icon {
-  color: #b99bff;
-  background: #9b6bff1f;
+  color: var(--accent-text);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 .feed-giftsub .feed-icon {
   color: #5ad1ff;
@@ -1349,7 +1379,7 @@ kbd {
 }
 .feed-donation .feed-icon {
   color: var(--success);
-  background: #37d3991a;
+  background: color-mix(in srgb, var(--success) 10%, transparent);
 }
 .feed-redemption .feed-icon {
   color: #ffd65a;
@@ -1374,7 +1404,7 @@ kbd {
   overflow-wrap: anywhere;
 }
 .feed-time {
-  color: #5c5c72;
+  color: var(--faint);
   font-size: 11.5px;
   font-variant-numeric: tabular-nums;
   padding-top: 6px;
@@ -1424,7 +1454,7 @@ kbd {
   text-align: left;
 }
 .type-list li.active .type-main {
-  color: #fff;
+  color: var(--text-strong);
 }
 .alert-editor {
   display: flex;
@@ -1466,10 +1496,10 @@ kbd {
   transform: none;
 }
 .checker {
-  background-color: #1a1a22;
+  background-color: var(--checker-a);
   background-image:
-    linear-gradient(45deg, #22222c 25%, transparent 25%), linear-gradient(-45deg, #22222c 25%, transparent 25%),
-    linear-gradient(45deg, transparent 75%, #22222c 75%), linear-gradient(-45deg, transparent 75%, #22222c 75%);
+    linear-gradient(45deg, var(--checker-b) 25%, transparent 25%), linear-gradient(-45deg, var(--checker-b) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--checker-b) 75%), linear-gradient(-45deg, transparent 75%, var(--checker-b) 75%);
   background-size: 20px 20px;
   background-position:
     0 0,
@@ -1544,7 +1574,7 @@ kbd {
   position: relative;
   height: 30px;
   border-radius: 15px;
-  background: #0c0c12;
+  background: var(--input-bg);
   border: 1px solid var(--border);
   overflow: hidden;
   margin-bottom: 16px;
@@ -1800,7 +1830,7 @@ kbd {
   padding: 16px;
   border-radius: var(--radius-sm);
   background: var(--panel-2);
-  border: 1px dashed #9b6bff66;
+  border: 1px dashed color-mix(in srgb, var(--accent) 40%, transparent);
 }
 .device-code .code {
   font-family: var(--mono);

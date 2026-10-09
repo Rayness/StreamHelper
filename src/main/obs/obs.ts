@@ -4,6 +4,13 @@ import { ALL_OVERLAY_KINDS } from '@shared/profiles';
 
 const RETRY_MS = 10_000;
 
+/** OBS "Audio Monitoring" per listener choice: what goes to the stream vs. the streamer's headphones. */
+const MONITOR_TYPE = {
+  viewers: 'OBS_MONITORING_TYPE_NONE',
+  both: 'OBS_MONITORING_TYPE_MONITOR_AND_OUTPUT',
+  me: 'OBS_MONITORING_TYPE_MONITOR_ONLY',
+} as const;
+
 /** Only local StreamHelper overlay URLs may be repaired automatically. */
 export function overlayIdentity(raw: string): string | null {
   try {
@@ -50,7 +57,11 @@ export class ObsService {
       this.ctx.state.patch('obs', { inputs });
     });
     const refreshInputs = () => void this.refreshInputs().catch((err) => console.warn('[obs] inputs', errorMessage(err)));
-    this.obs.on('InputCreated', refreshInputs);
+    this.obs.on('InputCreated', (input) => {
+      refreshInputs();
+      // A Song Request source added by hand in OBS gets the chosen listening mode too.
+      if ((input as { inputKind?: string }).inputKind === 'browser_source') this.scheduleSongAudio();
+    });
     this.obs.on('InputRemoved', refreshInputs);
     this.obs.on('InputNameChanged', refreshInputs);
     this.obs.on('StreamStateChanged', ({ outputActive }) => this.ctx.state.patch('obs', { streaming: outputActive }));
@@ -90,6 +101,8 @@ export class ObsService {
       if (generation !== this.generation || !this.connected) return;
       await this.repairBrowserSources().catch((err) => console.warn('[obs] repair sources', errorMessage(err)));
       if (generation !== this.generation || !this.connected) return;
+      await this.applySongAudio();
+      if (generation !== this.generation || !this.connected) return;
       if (!silent) this.ctx.toast('success', 'toast.obsConnected');
     } catch (err) {
       if (generation !== this.generation || this.manualDisconnect) return;
@@ -111,6 +124,39 @@ export class ObsService {
     this.retryTimer = null;
     await this.obs.disconnect().catch(() => undefined);
     this.ctx.state.patch('obs', { status: 'disconnected', error: undefined, sceneItems: [], inputs: [] });
+  }
+
+  private songAudioTimer: NodeJS.Timeout | null = null;
+  private scheduleSongAudio(): void {
+    if (this.songAudioTimer) clearTimeout(this.songAudioTimer);
+    // OBS fills a new source's settings right after InputCreated.
+    this.songAudioTimer = setTimeout(() => { this.songAudioTimer = null; void this.applySongAudio(); }, 500);
+  }
+
+  /**
+   * Applies the "who hears the music" choice to every Song Request browser source:
+   * the source stays routed through OBS and its monitoring decides stream vs. headphones.
+   */
+  async applySongAudio(): Promise<void> {
+    if (!this.connected) { this.ctx.state.patch('songRequests', { obsAudio: null }); return; }
+    const monitorType = MONITOR_TYPE[this.ctx.settings.get('songRequests')?.listen as keyof typeof MONITOR_TYPE] ?? MONITOR_TYPE.viewers;
+    const generation = this.generation;
+    let sources = 0;
+    try {
+      const { inputs } = await this.obs.call('GetInputList', { inputKind: 'browser_source' });
+      for (const input of inputs as { inputName: string }[]) {
+        const { inputSettings } = await this.obs.call('GetInputSettings', { inputName: input.inputName });
+        const settings = inputSettings as { url?: string; reroute_audio?: boolean };
+        if (!overlayIdentity(settings.url ?? '')?.startsWith('/overlay/song?')) continue;
+        // Without "Control audio via OBS" the browser plays straight to the speakers and OBS cannot route it.
+        if (!settings.reroute_audio) await this.obs.call('SetInputSettings', { inputName: input.inputName, inputSettings: { reroute_audio: true }, overlay: true });
+        await this.obs.call('SetInputAudioMonitorType', { inputName: input.inputName, monitorType });
+        sources++;
+      }
+      if (generation === this.generation) this.ctx.state.patch('songRequests', { obsAudio: { sources, error: null } });
+    } catch (err) {
+      if (generation === this.generation) this.ctx.state.patch('songRequests', { obsAudio: { sources, error: errorMessage(err) } });
+    }
   }
 
   private scheduleRetry(): void {
@@ -240,6 +286,7 @@ export class ObsService {
       const existingUrl = (inputSettings as { url?: string }).url ?? '';
       if (existingUrl !== url && (!overlayIdentity(url) || overlayIdentity(existingUrl) !== overlayIdentity(url))) continue;
       await this.repairInput(input.inputName, url);
+      if (overlayIdentity(url)?.startsWith('/overlay/song?')) await this.applySongAudio();
       const { sceneItems } = await this.obs.call('GetSceneItemList', { sceneName });
       const existing = (sceneItems as { sourceName: string; sceneItemId: number }[]).find((i) => i.sourceName === input.inputName);
       if (existing) {
@@ -263,6 +310,7 @@ export class ObsService {
       sceneItemEnabled: true,
     });
     await this.refreshSceneItems();
+    if (overlayIdentity(url)?.startsWith('/overlay/song?')) await this.applySongAudio();
     return 'created';
   }
 

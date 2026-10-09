@@ -49,9 +49,21 @@ export function Toggle({ checked, onChange, label, disabled }: { checked: boolea
   );
 }
 
+/**
+ * A click on a <label> activates its first control. For fields holding several controls
+ * (a list of toggles, color + hex, media picker) a click on empty space or the caption
+ * flipped an unrelated setting, so only a lone control is activated from the caption.
+ */
+function guardFieldClick(e: React.MouseEvent<HTMLLabelElement>) {
+  const target = e.target as Element;
+  if (target.closest('input, select, textarea, button, a, summary, .toggle')) return;
+  const controls = e.currentTarget.querySelectorAll('input, select, textarea, button');
+  if (!target.closest('.field-label') || controls.length !== 1) e.preventDefault();
+}
+
 export function Field({ label, hint, children, wide }: { label: ReactNode; hint?: ReactNode; children: ReactNode; wide?: boolean }) {
   return (
-    <label className={`field ${wide ? 'field-wide' : ''}`}>
+    <label className={`field ${wide ? 'field-wide' : ''}`} onClick={guardFieldClick}>
       <span className="field-label">{label}</span>
       {children}
       {hint && <span className="field-hint">{hint}</span>}

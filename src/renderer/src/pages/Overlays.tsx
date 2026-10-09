@@ -2,14 +2,16 @@ import { useState, type ReactNode } from 'react';
 import { defaultAd, defaultBanner, defaultGoal, defaultLabel, defaultTimer, uid } from '@shared/defaults';
 import { timerValue } from '@shared/timer';
 import { formatClock } from '@shared/template';
+import type { SongListen as SongListenMode } from '@shared/types';
 import type { AdCampaign, AdEntrance, AlertType, Banner, BannerLayout, ChatBackgroundStyle, ChatEnterAnimation, ChatExitAnimation, EmoteRainStyle, Goal, GoalKind, Label, MusicSourceKind, OverlayKind, OverlayTimer } from '@shared/types';
+import { Icon } from '../components/icons';
 import { MediaPicker } from '../components/MediaPicker';
 import { InstancePicker, OverlayBar, OverlayPreview, pickInstance } from '../components/overlay';
 import { Button, Card, ColorInput, Field, IconButton, LinesInput, NumberInput, Select, Tabs, TextInput, Toggle } from '../components/ui';
 import { useNow } from '../hooks';
 import { useT } from '../i18n';
 import { CounterDetail, HypeDetail, LeadersDetail } from './OverlaysExtra';
-import { call, callOk, navigate, saveSettings, useApp } from '../store';
+import { call, callOk, navigate, saveSettings, toast, useApp } from '../store';
 
 /** Settings on the left, the live preview on the right. */
 export function Split({ settings, preview, stacked }: { settings: ReactNode; preview: ReactNode; stacked?: boolean }) {
@@ -167,9 +169,7 @@ function MusicDetail() {
 function SongDetail() {
   const t = useT();
   const cfg = useApp((d) => d.settings!.songRequests);
-  const state = useApp((d) => d.state!.songRequests);
-  const [link, setLink] = useState('');
-  const [rewards, setRewards] = useState<{ id: string; title: string; inputRequired: boolean; enabled: boolean }[]>([]);
+  const [rewards, setRewards] = useState<{ id: string; title: string; inputRequired: boolean; enabled: boolean; manageable: boolean }[]>([]);
   const [loadingRewards, setLoadingRewards] = useState(false);
   const twitch = useApp((d) => d.state!.twitch);
   const bot = useApp((d) => d.settings!.bot);
@@ -178,14 +178,9 @@ function SongDetail() {
   return <>
     <OverlayBar kind="song" name={t('ov.song')} />
     <Split settings={<>
-      <Card title={t('song.queue')}>
-        <p className="muted small">{state.playerConnected ? t('song.playerReady') : t('song.playerMissing')}</p>
-        {state.lastError && <p className="error small">{state.lastError}</p>}
-        <div className="row-gap wrap"><TextInput value={link} onChange={setLink} placeholder="https://www.youtube.com/watch?v=…" /><Button onClick={async () => { if (await callOk('song:add', link)) setLink(''); }}>{t('common.add')}</Button></div>
-        {state.current && <div className="card"><strong>{t('song.now')}</strong><p>{state.current.userName} · {state.current.url}</p><Button size="sm" onClick={() => void call('song:skip')}>{t('song.skip')}</Button></div>}
-        {state.queue.length === 0 && !state.current && <p className="muted">{t('song.empty')}</p>}
-        <ul className="source-list">{state.queue.map((item) => <li key={item.id}><span>{item.userName} · {item.url}</span><div className="row-gap"><Button size="sm" disabled={!state.playerConnected || cfg.videoLayout === 'queue'} onClick={() => void call('song:play', item.id)}>{t('song.play')}</Button><IconButton icon="x" label={t('common.delete')} onClick={() => void call('song:remove', item.id)} /></div></li>)}</ul>
-      </Card>
+      <SongSetup onRewards={setRewards} />
+      <SongListen />
+      <SongQueue />
       <Card title={t('song.settings')}><div className="form">
         <Field label={t('song.enabled')} wide><Toggle checked={cfg.enabled} onChange={(enabled) => set({ enabled })} /></Field>
         <Field label={t('song.reward')} hint={t('song.rewardHint')} wide><TextInput value={cfg.rewardTitle} onChange={(rewardTitle) => set({ rewardTitle, rewardId: '' })} /></Field>
@@ -193,10 +188,13 @@ function SongDetail() {
           <Button size="sm" disabled={twitch.status !== 'connected' || loadingRewards} onClick={async () => {
             setLoadingRewards(true); const result = await call('twitch:rewards'); setLoadingRewards(false); if (result) setRewards(result);
           }}>{t('song.loadRewards')}</Button>
-          {rewards.length > 0 && <Select value={cfg.rewardId} onChange={(rewardId) => { const reward = rewards.find((r) => r.id === rewardId); set({ rewardId, rewardTitle: reward?.title ?? cfg.rewardTitle }); }} options={[{ value: '', label: t('song.manualReward') }, ...rewards.map((r) => ({ value: r.id, label: r.title + (!r.inputRequired || !r.enabled ? ' ⚠' : '') }))]} />}
+          {rewards.length > 0 && <Select value={cfg.rewardId} onChange={(rewardId) => { const reward = rewards.find((r) => r.id === rewardId); set({ rewardId, rewardTitle: reward?.title ?? cfg.rewardTitle }); }} options={[{ value: '', label: t('song.manualReward') },...rewards.map((r) => ({ value: r.id, label: r.title + (!r.inputRequired || !r.enabled ? ' ⚠' : '') + (r.manageable ? ` · ${t('song.refundable')}` : '') }))]} />}
           {rewards.some((r) => r.id === cfg.rewardId && (!r.inputRequired || !r.enabled)) && <p className="error small">{t('song.rewardNeedsInput')}</p>}
+          {rewards.some((r) => r.id === cfg.rewardId && !r.manageable) && <p className="muted small">{t('song.notRefundable')}</p>}
           {twitch.subscriptionErrors?.['channel.channel_points_custom_reward_redemption.add'] && <p className="error small">{t('song.redemptionUnavailable')} <Button size="sm" onClick={() => navigate('connections')}>{t('nav.connections')}</Button></p>}
         </div>
+        <Field label={t('song.replyInChat')} hint={t('song.replyInChatHint')} wide><Toggle checked={cfg.replyInChat} onChange={(replyInChat) => set({ replyInChat })} /></Field>
+        <Field label={t('song.refundRejected')} hint={t('song.refundRejectedHint')} wide><Toggle checked={cfg.refundRejected} onChange={(refundRejected) => set({ refundRejected })} /></Field>
         <Field label={t('song.chatEnabled')} wide><Toggle checked={cfg.chatEnabled} onChange={(chatEnabled) => set({ chatEnabled })} /></Field>
         {cfg.chatEnabled && <>
           <Field label={t('song.chatCommand')} hint={`${prefix}${cfg.chatCommand} https://youtu.be/…`}><TextInput value={cfg.chatCommand} onChange={(chatCommand) => set({ chatCommand })} /></Field>
@@ -235,6 +233,170 @@ function SongDetail() {
       </div></Card>
     </>} preview={<OverlayPreview kind="song" maxHeight={360} />} />
   </>;
+}
+
+const thumb = (videoId: string) => `https://i.ytimg.com/vi/${videoId}/mqdefault.jpg`;
+/** Offline or blocked cover: keep the empty frame instead of a broken-image icon. */
+const hideBroken = (e: React.SyntheticEvent<HTMLImageElement>) => { e.currentTarget.style.visibility = 'hidden'; };
+type SongSource = 'redemption' | 'donation' | 'chat' | 'manual';
+
+/** Who hears the music: maps to OBS audio monitoring of the Song Request source. */
+function SongListen() {
+  const t = useT();
+  const cfg = useApp((d) => d.settings!.songRequests);
+  const obsStatus = useApp((d) => d.state!.obs.status);
+  const audio = useApp((d) => d.state!.songRequests.obsAudio);
+  const options: { id: SongListenMode; stream: boolean; me: boolean }[] = [
+    { id: 'viewers', stream: true, me: false },
+    { id: 'both', stream: true, me: true },
+    { id: 'me', stream: false, me: true },
+  ];
+  const status = obsStatus !== 'connected'
+    ? <p className="song-listen-status warn"><Icon name="alert" size={14} />{t('song.listen.noObs')} <Button size="sm" onClick={() => navigate('connections', 'obs')}>{t('nav.connections')}</Button></p>
+    : audio?.error ? <p className="song-listen-status error"><Icon name="x" size={14} />{t('song.listen.failed', { error: audio.error })}</p>
+    : !audio?.sources ? <p className="song-listen-status warn"><Icon name="alert" size={14} />{t('song.listen.noSource')}</p>
+    : <p className="song-listen-status ok"><Icon name="check" size={14} />{t('song.listen.applied', { n: audio.sources })}</p>;
+  return (
+    <Card title={t('song.listen.title')} icon="headphones">
+      <p className="muted small">{t('song.listen.hint')}</p>
+      <div className="song-listen" role="radiogroup" aria-label={t('song.listen.title')}>
+        {options.map((o) => (
+          <button key={o.id} type="button" role="radio" aria-checked={cfg.listen === o.id} data-listen={o.id} className={`song-listen-option ${cfg.listen === o.id ? 'active' : ''}`} onClick={() => saveSettings('songRequests', { ...cfg, listen: o.id })}>
+            <strong>{t(`song.listen.${o.id}`)}</strong>
+            <span className={`song-listen-who ${o.stream ? 'on' : ''}`}><Icon name="broadcast" size={14} />{t(o.stream ? 'song.listen.streamOn' : 'song.listen.streamOff')}</span>
+            <span className={`song-listen-who ${o.me ? 'on' : ''}`}><Icon name="headphones" size={14} />{t(o.me ? 'song.listen.meOn' : 'song.listen.meOff')}</span>
+          </button>
+        ))}
+      </div>
+      {status}
+      <p className="muted small">{t('song.listen.note')}</p>
+    </Card>
+  );
+}
+
+/** Now playing + the queue: covers, drag to reorder, play now / play next in one click. */
+function SongQueue() {
+  const t = useT();
+  const cfg = useApp((d) => d.settings!.songRequests);
+  const state = useApp((d) => d.state!.songRequests);
+  const [link, setLink] = useState('');
+  const [adding, setAdding] = useState(false);
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [overIndex, setOverIndex] = useState<number | null>(null);
+  const canPlay = state.playerConnected && cfg.videoLayout !== 'queue';
+  const current = state.current;
+  const source = (s: SongSource) => t(`song.src.${s}`);
+  const add = async () => {
+    if (!link.trim() || adding) return;
+    setAdding(true);
+    if (await callOk('song:add', link)) setLink('');
+    setAdding(false);
+  };
+  const drop = (index: number) => {
+    if (dragId) void call('song:move', dragId, index);
+    setDragId(null);
+    setOverIndex(null);
+  };
+  return (
+    <Card title={t('song.queue')} icon="music" actions={<span className="pill">{t('song.queueCount', { n: state.queue.length })}</span>}>
+      {!state.playerConnected && !state.queue.length && <p className="muted small">{t('song.playerMissing')}</p>}
+      {state.lastError && <p className="error small">{state.lastError}</p>}
+      {state.lastRejected && <p className="muted small">{t('song.lastRejected', { user: state.lastRejected.userName, reason: state.lastRejected.reason })}</p>}
+      {current ? (
+        <div className={`song-now-card ${state.paused ? 'paused' : ''}`}>
+          <img src={thumb(current.videoId)} alt="" onError={hideBroken} />
+          <div className="song-now-info">
+            <span className="song-eyebrow">{state.paused ? t('song.pausedNow') : t('song.now')}</span>
+            <strong title={current.url}>{current.title ?? current.url}</strong>
+            <span className="muted small">{current.userName} · {source(current.source)}</span>
+          </div>
+          <div className="song-now-actions">
+            <Button variant="primary" icon={state.paused ? 'play' : 'pause'} onClick={() => void call('song:pause', !state.paused)}>{state.paused ? t('song.resume') : t('song.pause')}</Button>
+            <Button icon="skip" onClick={() => void call('song:skip')}>{t('song.skip')}</Button>
+          </div>
+        </div>
+      ) : state.queue.length > 0 && (
+        <div className="song-idle">
+          <span className="muted small">{canPlay ? t('song.idleReady') : t('song.idleNoPlayer')}</span>
+          <Button variant="primary" icon="play" disabled={!canPlay} onClick={() => void call('song:play')}>{t('song.playFirst')}</Button>
+        </div>
+      )}
+      {state.queue.length > 0 && <p className="muted small song-queue-hint">{t('song.queueHint')}</p>}
+      <ol className="song-queue">
+        {state.queue.map((item, i) => (
+          <li key={item.id} data-song={item.id} draggable
+            className={`${dragId === item.id ? 'dragging' : ''} ${overIndex === i && dragId && dragId !== item.id ? 'drop-target' : ''}`}
+            onDragStart={(e) => { setDragId(item.id); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', item.id); }}
+            onDragOver={(e) => { if (!dragId) return; e.preventDefault(); setOverIndex(i); }}
+            onDrop={(e) => { e.preventDefault(); drop(i); }}
+            onDragEnd={() => { setDragId(null); setOverIndex(null); }}
+            onDoubleClick={() => { if (canPlay) void call('song:play', item.id); }}>
+            <span className="song-grip" aria-hidden><Icon name="grip" size={14} /></span>
+            <span className="song-pos">{i + 1}</span>
+            <img src={thumb(item.videoId)} alt="" loading="lazy" onError={hideBroken} />
+            <div className="song-item-info">
+              <strong title={item.url}>{item.title ?? item.url}</strong>
+              <span className="muted small">{item.userName} · {source(item.source)}</span>
+            </div>
+            <div className="song-item-actions">
+              <IconButton icon="play" label={t('song.playNow')} disabled={!canPlay} onClick={() => void call('song:play', item.id)} />
+              <IconButton icon="chevron" className="song-up" label={t('song.playNext')} disabled={i === 0} onClick={() => void call('song:move', item.id, 0)} />
+              <IconButton icon="external" label={t('song.openYoutube')} onClick={() => void call('shell:openExternal', item.url)} />
+              <IconButton icon="x" label={t('common.delete')} onClick={() => void call('song:remove', item.id)} />
+            </div>
+          </li>
+        ))}
+      </ol>
+      {!current && state.queue.length === 0 && <p className="muted">{t('song.empty')}</p>}
+      <div className="song-add">
+        <TextInput value={link} onChange={setLink} placeholder="https://www.youtube.com/watch?v=…" onKeyDown={(e) => { if (e.key === 'Enter') void add(); }} />
+        <Button icon="plus" disabled={adding || !link.trim()} onClick={() => void add()}>{t('common.add')}</Button>
+      </div>
+    </Card>
+  );
+}
+
+/** Step-by-step readiness for channel-point song requests, with one-click reward creation. */
+function SongSetup({ onRewards }: { onRewards: (rewards: { id: string; title: string; inputRequired: boolean; enabled: boolean; manageable: boolean }[]) => void }) {
+  const t = useT();
+  const cfg = useApp((d) => d.settings!.songRequests);
+  const twitch = useApp((d) => d.state!.twitch.status);
+  const player = useApp((d) => d.state!.songRequests.playerConnected);
+  const [title, setTitle] = useState(() => t('song.defaultReward'));
+  const [cost, setCost] = useState(1000);
+  const [creating, setCreating] = useState(false);
+  const set = (patch: Partial<typeof cfg>) => saveSettings('songRequests', { ...cfg, ...patch });
+  const hasReward = !!(cfg.rewardId || cfg.rewardTitle.trim());
+  const steps = [
+    { done: twitch === 'connected', label: t('song.step.twitch'), action: twitch !== 'connected' && <Button size="sm" onClick={() => navigate('connections', 'twitch')}>{t('nav.connections')}</Button> },
+    { done: hasReward, label: hasReward ? t('song.step.rewardSet', { name: cfg.rewardTitle || cfg.rewardId }) : t('song.step.reward'), action: null },
+    { done: player, label: t('song.step.obs'), action: null },
+    { done: cfg.enabled, label: t('song.step.enabled'), action: !cfg.enabled && <Button size="sm" variant="primary" onClick={() => set({ enabled: true })}>{t('song.turnOn')}</Button> },
+  ];
+  const ready = steps.every((step) => step.done);
+  return (
+    <Card title={t('song.setupTitle')} icon="gift" className={`song-setup ${ready ? 'ready' : ''}`}>
+      <p className={ready ? 'song-ready small' : 'muted small'}>{ready ? t('song.ready') : t('song.setupHint')}</p>
+      <ol className="song-steps">
+        {steps.map((step, i) => <li key={i} className={step.done ? 'done' : ''}><span className="song-step-mark">{step.done ? <Icon name="check" size={13} /> : i + 1}</span><span>{step.label}</span>{step.action}</li>)}
+      </ol>
+      {!hasReward && twitch === 'connected' && <div className="song-create">
+        <Field label={t('song.rewardName')}><TextInput value={title} onChange={setTitle} /></Field>
+        <Field label={t('song.rewardCost')}><NumberInput value={cost} min={1} max={1000000} onChange={setCost} /></Field>
+        <Button variant="primary" icon="plus" disabled={creating || !title.trim()} onClick={async () => {
+          setCreating(true);
+          const reward = await call('twitch:createSongReward', title, cost);
+          setCreating(false);
+          if (!reward) return;
+          set({ rewardId: reward.id, rewardTitle: reward.title, enabled: true });
+          toast('success', 'song.rewardCreated', { name: reward.title });
+          const list = await call('twitch:rewards');
+          if (list) onRewards(list);
+        }}>{t('song.createReward')}</Button>
+        <p className="muted small field-wide">{t('song.createRewardHint')}</p>
+      </div>}
+    </Card>
+  );
 }
 
 function TestAlertButtons({ types, kind }: { types: AlertType[]; kind: 'events' | 'rewards' | 'collab' }) {

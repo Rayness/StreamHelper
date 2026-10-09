@@ -17,7 +17,7 @@ interface Command {
 }
 
 /** Owners of operational shortcuts. Hidden modules cannot be invoked from search. */
-const OWNERS = { wheel:'wheel', poll:'poll', give:'giveaway', quiz:'quiz', queue:'queue', guess:'guess', boss:'boss', 'counter+':'counter', 'counter-':'counter', emotes:'emotes', banner:'banner', act:'actions', alerts:'alerts', test:'alerts', scene:'obs' } as const;
+const OWNERS = { song:'song', wheel:'wheel', poll:'poll', give:'giveaway', quiz:'quiz', queue:'queue', guess:'guess', boss:'boss', 'counter+':'counter', 'counter-':'counter', emotes:'emotes', banner:'banner', act:'actions', alerts:'alerts', test:'alerts', scene:'obs' } as const;
 function available(c: Command): boolean {
   const cards = normalizeWorkspaceCards(getData().settings?.workspace.cards);
   if (c.id.startsWith('module:')) return cards.some((id) => c.id === `module:${id}`);
@@ -75,6 +75,15 @@ function buildCommands(t: TFn): Command[] {
       },
     });
   }
+
+  const music = t('ov.song');
+  if (state.songRequests.current) {
+    out.push({ id: 'song:pause', label: `${music}: ${state.songRequests.paused ? t('song.resume') : t('song.pause')}`, group: music, icon: state.songRequests.paused ? 'play' : 'pause', keywords: 'music song pause музыка трек пауза', run: () => void call('song:pause', !state.songRequests.paused) });
+    out.push({ id: 'song:skip', label: `${music}: ${t('song.skip')}`, group: music, icon: 'skip', keywords: 'music song skip музыка трек пропустить', run: () => void call('song:skip') });
+  }
+  const listen = settings.songRequests.listen;
+  out.push({ id: 'song:listen', label: listen === 'viewers' ? t('song.listen.cmdOn') : t('song.listen.cmdOff'), group: music, icon: 'headphones', keywords: 'music headphones наушники слышать звук монитор',
+    run: () => saveSettings('songRequests', { ...getData().settings!.songRequests, listen: listen === 'viewers' ? 'both' : 'viewers' }) });
 
   const quick = t('dash.quick');
   for (const a of settings.actions) out.push({ id: `act:${a.id}`, label: a.label, group: quick, icon: 'zap', keywords: a.hotkey, run: () => void call('actions:run', a.id) });

@@ -368,10 +368,35 @@ export class TwitchService implements ChatPlatform {
     return (res.data ?? []).map((c: any) => ({ id: c.id, name: c.name, boxArtUrl: c.box_art_url }));
   }
 
-  async listRewards(): Promise<{ id: string; title: string; inputRequired: boolean; enabled: boolean }[]> {
+  async listRewards(): Promise<{ id: string; title: string; inputRequired: boolean; enabled: boolean; manageable: boolean }[]> {
     const id = this.requireBroadcaster();
     const res = await this.helix.broadcaster.get('/channel_points/custom_rewards', { broadcaster_id: id });
-    return (res.data ?? []).map((r: any) => ({ id: r.id, title: r.title, inputRequired: !!r.is_user_input_required, enabled: !!r.is_enabled }));
+    // Rewards created by this app's Client ID are the only ones whose redemptions it may refund.
+    const own = await this.helix.broadcaster.get('/channel_points/custom_rewards', { broadcaster_id: id, only_manageable_rewards: 'true' }).catch(() => ({ data: [] }));
+    const manageable = new Set((own.data ?? []).map((r: any) => r.id));
+    return (res.data ?? []).map((r: any) => ({ id: r.id, title: r.title, inputRequired: !!r.is_user_input_required, enabled: !!r.is_enabled, manageable: manageable.has(r.id) }));
+  }
+
+  /** A song-request reward owned by this app, so redemptions can be refunded automatically. */
+  async createSongReward(title: string, cost: number): Promise<{ id: string; title: string }> {
+    const id = this.requireBroadcaster();
+    const ru = this.ctx.settings.get('language') === 'ru';
+    const res = await this.helix.broadcaster.post('/channel_points/custom_rewards', {
+      title: title.trim().slice(0, 45) || (ru ? 'Заказ песни' : 'Song request'),
+      cost: Math.max(1, Math.round(cost)),
+      prompt: ru ? 'Вставьте ссылку на видео YouTube с песней' : 'Paste a YouTube link to the song',
+      is_user_input_required: true,
+      is_enabled: true,
+    }, { broadcaster_id: id });
+    const reward = res.data?.[0];
+    if (!reward) throw new Error('Twitch did not create the reward');
+    return { id: reward.id, title: reward.title };
+  }
+
+  /** FULFILLED keeps the points, CANCELED returns them. Only works for app-owned rewards. */
+  async settleRedemption(rewardId: string, redemptionId: string, status: 'FULFILLED' | 'CANCELED'): Promise<void> {
+    const id = this.requireBroadcaster();
+    await this.helix.broadcaster.patch('/channel_points/custom_rewards/redemptions', { status }, { broadcaster_id: id, reward_id: rewardId, id: redemptionId });
   }
 
   /** Exact-name lookup used by the !game command. Falls back to the first search hit. */
