@@ -4,6 +4,7 @@ export const ALL_OVERLAY_KINDS: readonly OverlayKind[] = [
   'chat', 'alerts', 'goal', 'timer', 'events', 'rewards', 'collab', 'music', 'song',
   'banner', 'ad', 'label', 'emotes', 'wheel', 'poll', 'giveaway', 'kawaki', 'quiz',
   'boss', 'live', 'spotlight', 'queue', 'guess', 'counter', 'hype', 'leaders',
+  'curse', 'duel', 'melody', 'stocks', 'portal',
 ];
 
 export const PROFILE_KEYS: readonly ProfileSettingsKey[] = [
@@ -12,6 +13,7 @@ export const PROFILE_KEYS: readonly ProfileSettingsKey[] = [
   'songRequests', 'goals', 'timers', 'actions', 'banners', 'ads', 'labels',
   'emoteRain', 'wheels', 'poll', 'giveaway', 'quiz', 'boss', 'kawaki',
   'viewerQueue', 'guess', 'counterOverlays', 'hype', 'leadersOverlay',
+  'clipper', 'curses', 'duel', 'melody', 'ducking', 'market', 'portal', 'report', 'shield',
 ];
 
 /** Profiles store independent copies; live settings remain the source used by existing services. */

@@ -1,4 +1,4 @@
-import type { ChatMessage, KawakiNowWatching, MusicTrack, SettingsKey, StreamEvent, StreamInfo } from '@shared/types';
+import type { ChatMessage, ClipMoment, KawakiNowWatching, MusicTrack, SettingsKey, StreamEvent, StreamInfo } from '@shared/types';
 import { isTrustedStreamEvent } from '@shared/events';
 
 export interface BusEvents {
@@ -15,6 +15,8 @@ export interface BusEvents {
   /** What's playing on Kawaki changed (or the account logged out). */
   'kawaki:now': KawakiNowWatching | null;
   'music:changed': MusicTrack | null;
+  /** The auto clipper saved a moment (clip and/or marker). */
+  'clip:moment': ClipMoment;
 }
 
 type Handler<T> = (payload: T) => void;

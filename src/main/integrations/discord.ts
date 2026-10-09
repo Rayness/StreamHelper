@@ -67,6 +67,24 @@ export class DiscordService {
     this.enqueue(`${prefix}: ${event.userName} — ${event.amount} ${event.currency}${event.message ? `\n${event.message}` : ''}`);
   }
 
+  /** For other features (clips, stream recap). Fails when the webhook isn't connected. */
+  notify(content: string): Promise<void> {
+    const job = this.queue.then(() => this.send(content));
+    this.queue = job.catch(() => undefined);
+    return job;
+  }
+
+  /** A message with an image attached (the stream recap card). */
+  async sendImage(content: string, png: Buffer, filename: string): Promise<void> {
+    const url = this.ctx.secrets.get('discordWebhookUrl');
+    if (!url || !this.ctx.settings.get('discord').enabled) throw new Error('Discord webhook is not connected');
+    const form = new FormData();
+    form.append('payload_json', JSON.stringify({ content: content.slice(0, 1900), allowed_mentions: { parse: [] } }));
+    form.append('files[0]', new Blob([new Uint8Array(png)], { type: 'image/png' }), filename);
+    const response = await fetch(url, { method: 'POST', body: form, signal: AbortSignal.timeout(20_000) });
+    if (!response.ok) throw new Error(`Discord HTTP ${response.status}`);
+  }
+
   private enqueue(content: string): void {
     this.queue = this.queue.then(() => this.send(content)).catch((err) => {
       if (this.ctx.settings.get('discord').enabled) this.ctx.state.patch('discord', { status: 'error', error: err instanceof Error ? err.message : String(err) });

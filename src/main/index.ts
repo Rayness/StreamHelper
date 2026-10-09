@@ -1,7 +1,7 @@
-import { copyFileSync, existsSync, mkdirSync, readdirSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync } from 'node:fs';
 import { basename, extname, join } from 'node:path';
 import { randomBytes } from 'node:crypto';
-import { app, BrowserWindow, clipboard, dialog, Menu, nativeImage, nativeTheme, shell, Tray } from 'electron';
+import { app, BrowserWindow, clipboard, ClipboardItem, dialog, Menu, nativeImage, nativeTheme, shell, Tray } from 'electron';
 import { ALERT_TYPES, type AlertType, type IpcPush, type Language, type MediaFile } from '@shared/types';
 import { release } from 'node:os';
 import { normalizeAppearance } from '@shared/defaults';
@@ -41,6 +41,16 @@ import { WheelService } from './features/wheel';
 import { ViewerQueueService } from './features/viewerQueue';
 import { GuessService } from './features/guess';
 import { HypeService } from './features/hype';
+import { ClipperService } from './features/clipper';
+import { CurseService } from './features/curses';
+import { DuelService } from './features/duel';
+import { MelodyService } from './features/melody';
+import { DuckingService } from './features/ducking';
+import { MarketService } from './features/market';
+import { PortalService } from './features/portal';
+import { ReportService } from './features/report';
+import { REPORT_HEIGHT, REPORT_WIDTH } from './features/reportCard';
+import { ShieldService } from './features/shield';
 import { KawakiService } from './integrations/kawaki/service';
 import { push, registerIpc } from './ipc';
 import { ObsService } from './obs/obs';
@@ -140,6 +150,8 @@ async function bootstrap(): Promise<void> {
   let hub!: OverlayHub;
   let dockRoute!: ReturnType<typeof createDockRoutes>;
   let songRequests!: SongRequestService;
+  let report!: ReportService;
+  const playerErrors = { duel: (_id: string, _code: number) => undefined as void, melody: (_id: string, _code: number) => undefined as void };
   const authRoute = createAuthRoutes((token, expiresIn) => donationalerts.completeLogin(token, expiresIn));
   overlay = new OverlayServer({
     port: settings.get('overlayPort'),
@@ -154,6 +166,28 @@ async function bootstrap(): Promise<void> {
     extraRoute: async (req, res, url) => {
       if (await authRoute(req, res, url)) return true;
       if (await dockRoute(req, res, url)) return true;
+      const card = /^\/reports\/([\w-]+)\.png$/.exec(url.pathname);
+      if (card && (req.method === 'GET' || req.method === 'HEAD')) {
+        const file = report.pngPath(card[1]);
+        if (!existsSync(file)) { res.writeHead(404); res.end(); return true; }
+        res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'no-cache' });
+        if (req.method === 'HEAD') res.end(); else res.end(readFileSync(file));
+        return true;
+      }
+      if (url.pathname === '/player/error' && req.method === 'POST') {
+        // Duel / melody overlays report tracks YouTube refused to play.
+        try {
+          let body = '';
+          for await (const chunk of req) { body += chunk.toString(); if (body.length > 512) throw new Error('Request too large'); }
+          const data = JSON.parse(body) as { kind?: unknown; videoId?: unknown; code?: unknown };
+          const code = Number(data.code);
+          if (typeof data.videoId !== 'string' || !Number.isFinite(code)) throw new Error('Invalid request');
+          if (data.kind === 'duel') playerErrors.duel(data.videoId, code);
+          else if (data.kind === 'melody') playerErrors.melody(data.videoId, code);
+          res.writeHead(204); res.end();
+        } catch { res.writeHead(400); res.end(); }
+        return true;
+      }
       if (url.pathname !== '/song/finished') return false;
       if (req.method !== 'POST') { res.writeHead(405); res.end(); return true; }
       try {
@@ -203,6 +237,53 @@ async function bootstrap(): Promise<void> {
   const guess = new GuessService(ctx, stage);
   const hype = new HypeService(ctx, stage);
   const text = new TextOverlays(ctx, () => overlay);
+  const clipper = new ClipperService(ctx, {
+    createClip: () => twitch.createClip(),
+    createMarker: (description) => twitch.createMarker(description),
+    say: (msg) => sendToAllChats(msg),
+    discord: (msg) => discord.notify(msg),
+  });
+  const curses = new CurseService(ctx, stage, {
+    setFilterEnabled: (source, filter, enabled) => obs.setFilterEnabled(source, filter, enabled),
+    setSourceVisible: (scene, source, visible) => obs.setSourceVisible(scene, source, visible),
+    setMute: (input, muted) => obs.setMute(input, muted),
+  });
+  const duel = new DuelService(ctx, stage, {
+    upcoming: () => state.current.songRequests.queue,
+    hasCurrent: () => !!state.current.songRequests.current,
+    isPaused: () => state.current.songRequests.paused,
+    pause: (paused) => songRequests.pause(paused),
+    move: (id, index) => songRequests.move(id, index),
+    play: (id) => songRequests.play(id),
+    remove: (id) => songRequests.remove(id),
+  });
+  const melody = new MelodyService(ctx, stage);
+  playerErrors.duel = (id, code) => duel.playerError(id, code);
+  playerErrors.melody = (id, code) => melody.playerError(id, code);
+  const ducking = new DuckingService(ctx, obs);
+  const market = new MarketService(ctx, stage, join(userData, 'market.json'));
+  const portal = new PortalService(ctx, {
+    broadcast: (msg) => overlay.broadcast('portal', msg),
+    say: (msg) => sendToAllChats(msg),
+    lookup: (login) => twitch.channelName(login),
+  });
+  report = new ReportService(ctx, {
+    dir: join(userData, 'reports'),
+    sessionFile: join(userData, 'report-session.json'),
+    render: (html) => renderHtmlToPng(html, REPORT_WIDTH, REPORT_HEIGHT),
+    imageUrl: (id) => `http://127.0.0.1:${overlay.port}/reports/${id}.png`,
+    say: (msg) => sendToAllChats(msg),
+    discord: (msg, png, filename) => discord.sendImage(msg, png, filename),
+  });
+  const shield = new ShieldService(ctx, {
+    getChatSettings: () => twitch.getChatSettings(),
+    updateChatSettings: (modes) => twitch.updateChatSettings(modes),
+    setShieldMode: (active) => twitch.setShieldMode(active),
+    deleteMessage: (id) => twitch.deleteMessage(id),
+    timeout: (userId, seconds, reason) => twitch.timeout(userId, seconds, reason),
+    accountAges: (ids) => twitch.getAccountAges(ids),
+    say: (msg) => sendToAllChats(msg),
+  }, join(userData, 'shield-known.json'));
   hub = new OverlayHub(ctx, overlay, chatHistory, {
     alerts: () => alerts,
     text: () => text,
@@ -217,6 +298,11 @@ async function bootstrap(): Promise<void> {
     guess: () => guess.overlayMessage(),
     hype: () => hype.hypeMessage(),
     leaders: () => hype.leadersMessage(),
+    curse: () => curses.overlayMessage(),
+    duel: () => duel.overlayMessage(),
+    melody: () => melody.overlayMessage(),
+    stocks: () => market.overlayMessage(),
+    portal: () => portal.configMessage(),
   });
 
   const bot = new BotService(ctx, platforms, twitch, songRequests);
@@ -237,6 +323,9 @@ async function bootstrap(): Promise<void> {
     bannerToggle: (id) => text.toggle(id),
     emoteBurst: () => emotes.burst(),
     streamerbotAction: (id) => streamerbot.run(id),
+    clipMoment: () => clipper.clipNow(),
+    shieldToggle: () => shield.toggle(),
+    curseVote: () => curses.startVote(),
   });
   dockRoute = createDockRoutes({
     token: dockToken,
@@ -347,7 +436,8 @@ async function bootstrap(): Promise<void> {
     try {
       if (restart) await overlay.restart(port);
       else await overlay.start();
-      state.patch('overlayUrl', `http://127.0.0.1:${port}`);
+      // "localhost", not the IP: YouTube refuses label/music videos embedded on an IP address (error 150).
+      state.patch('overlayUrl', `http://localhost:${port}`);
       state.patch('dockUrl', `http://127.0.0.1:${port}/dock?token=${dockToken}`);
     } catch (err) {
       console.error('[overlay] cannot listen', err);
@@ -502,6 +592,37 @@ async function bootstrap(): Promise<void> {
       return mediaInfo(name, overlay.port);
     },
     'media:list': () => listMedia(),
+    'obs:sources': () => obs.listSources(),
+    'obs:filters': (source) => obs.listFilters(source),
+    'clipper:clip': async () => { await clipper.clipNow(); },
+    'curse:vote': () => curses.startVote(),
+    'curse:apply': (id) => curses.apply(id),
+    'curse:lift': () => curses.lift(),
+    'curse:cancel': () => curses.cancel(),
+    'duel:start': (a, b) => duel.start(a, b),
+    'duel:stop': () => duel.stop(),
+    'melody:start': () => melody.start(),
+    'melody:skip': () => melody.skip(),
+    'melody:stop': () => melody.stop(),
+    'melody:add': (urls) => melody.add(urls),
+    'melody:fromSongs': () => {
+      const sr = state.current.songRequests;
+      return melody.addFromSongs([...(sr.current ? [sr.current] : []), ...sr.queue]);
+    },
+    'market:reset': () => market.reset(),
+    'market:grant': (login, amount) => market.grant(login, amount),
+    'portal:test': () => portal.test(),
+    'report:generate': async () => { await report.generate(); },
+    'report:reset': () => report.reset(),
+    'report:delete': (id) => report.remove(id),
+    'report:open': (id) => {
+      if (id) shell.showItemInFolder(report.pngPath(id));
+      else void shell.openPath(join(userData, 'reports'));
+    },
+    'report:copy': (id) => clipboard.write([new ClipboardItem({ 'image/png': new Blob([new Uint8Array(readFileSync(report.pngPath(id)))], { type: 'image/png' }) })]),
+    'report:discord': (id) => report.resend(id),
+    'shield:activate': () => shield.activate(),
+    'shield:release': async () => { await shield.release(); },
     'shell:openExternal': (url) => {
       if (/^https?:\/\//.test(url)) void shell.openExternal(url);
     },
@@ -530,9 +651,24 @@ async function bootstrap(): Promise<void> {
   discord.start();
   subForStream.start();
   void kawaki.start();
+  ducking.start();
+  portal.start();
+  report.start();
+  shield.start();
 
-  app.on('before-quit', () => {
+  // OBS and chat changes that must be undone before quitting (curse, ducked music, locked chat).
+  // Their requests need OBS and Twitch still connected, so quitting waits for them (a few seconds at most).
+  let undoneBeforeQuit = false;
+  app.on('before-quit', (event) => {
     quitting = true;
+    if (!undoneBeforeQuit && (curses.needsShutdown || ducking.needsShutdown || shield.needsShutdown)) {
+      undoneBeforeQuit = true;
+      event.preventDefault();
+      const done = Promise.allSettled([curses.shutdown(), ducking.shutdown(), shield.shutdown()]);
+      void Promise.race([done, new Promise((r) => setTimeout(r, 4000))]).finally(() => app.quit());
+      return;
+    }
+    undoneBeforeQuit = true;
     settings.flush();
     alerts.dispose();
     actions.dispose();
@@ -555,6 +691,15 @@ async function bootstrap(): Promise<void> {
     poll.dispose();
     giveaway.dispose();
     quiz.dispose();
+    clipper.dispose();
+    curses.dispose();
+    duel.dispose();
+    melody.dispose();
+    ducking.dispose();
+    market.dispose();
+    portal.stop();
+    report.dispose();
+    shield.dispose();
     bot.stop();
     void obs.disconnect();
     void overlay.stop();
@@ -640,6 +785,33 @@ async function bootstrap(): Promise<void> {
       ]),
     );
     tray.on('click', () => showWindow());
+  }
+}
+
+/** Render a self-contained HTML page to PNG in an invisible window (the stream recap card). */
+async function renderHtmlToPng(html: string, width: number, height: number): Promise<Buffer> {
+  const win = new BrowserWindow({
+    show: false,
+    width,
+    height,
+    useContentSize: true,
+    webPreferences: { offscreen: true, javascript: false, sandbox: true, zoomFactor: 1 },
+  });
+  try {
+    let frame: Electron.NativeImage | null = null;
+    win.webContents.on('paint', (_event, _dirty, image) => { frame = image; });
+    win.webContents.setFrameRate(15);
+    await win.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html));
+    // Emote images load from Twitch's CDN; give them a moment, then force a fresh frame.
+    await new Promise((r) => setTimeout(r, 900));
+    win.webContents.invalidate();
+    await new Promise((r) => setTimeout(r, 250));
+    const painted = frame as Electron.NativeImage | null;
+    const image = painted && !painted.isEmpty() ? painted : await win.webContents.capturePage();
+    const size = image.getSize();
+    return (size.width !== width ? image.resize({ width, height }) : image).toPNG();
+  } finally {
+    win.destroy();
   }
 }
 

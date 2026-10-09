@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <title>StreamHelper — Curse</title>
+    <style>
+      :root { --accent: #c26bff; }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; background: transparent; overflow: hidden; color: #fff; }
+      #curse {
+        position: relative;
+        margin: 14px;
+        padding: 20px 24px 22px;
+        border-radius: 20px;
+        background: radial-gradient(120% 140% at 0% 0%, color-mix(in srgb, var(--accent) 34%, transparent), transparent 60%), rgba(14, 9, 22, 0.9);
+        box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent), 0 18px 50px rgba(0, 0, 0, 0.45), 0 0 60px color-mix(in srgb, var(--accent) 30%, transparent);
+        opacity: 0;
+        transform: translateY(18px) scale(0.98);
+        transition: opacity 0.45s ease, transform 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+        overflow: hidden;
+      }
+      #curse.on { opacity: 1; transform: none; }
+      #curse::before {
+        content: '';
+        position: absolute;
+        inset: -40%;
+        background: conic-gradient(from 0deg, transparent, color-mix(in srgb, var(--accent) 22%, transparent), transparent 30%);
+        animation: spin 9s linear infinite;
+        pointer-events: none;
+      }
+      #curse > * { position: relative; }
+      .head { display: flex; align-items: center; gap: 14px; }
+      .title { flex: 1; font-size: 26px; font-weight: 900; letter-spacing: 0.01em; }
+      .title small { display: block; font-size: 14px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent); }
+      .timer {
+        min-width: 70px; padding: 6px 12px; border-radius: 999px; text-align: center;
+        background: color-mix(in srgb, var(--accent) 28%, transparent);
+        font-weight: 900; font-size: 20px; font-variant-numeric: tabular-nums;
+      }
+      .options { display: grid; gap: 10px; margin-top: 16px; }
+      .opt { position: relative; display: grid; grid-template-columns: 38px 1fr auto; align-items: center; gap: 12px; padding: 10px 14px; border-radius: 12px; background: rgba(255, 255, 255, 0.07); overflow: hidden; }
+      .opt .fill { position: absolute; inset: 0 auto 0 0; background: color-mix(in srgb, var(--accent) 38%, transparent); transition: width 0.6s cubic-bezier(0.22, 1, 0.36, 1); }
+      .opt > :not(.fill) { position: relative; }
+      .opt .n { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 10px; background: var(--accent); font-weight: 900; font-size: 19px; }
+      .opt .name { font-size: 20px; font-weight: 800; }
+      .opt .desc { font-size: 14px; opacity: 0.75; font-weight: 600; }
+      .opt .votes { font-size: 18px; font-weight: 900; font-variant-numeric: tabular-nums; }
+      .opt.lead { box-shadow: inset 0 0 0 2px var(--accent); }
+      .hint { margin-top: 12px; font-size: 16px; font-weight: 700; opacity: 0.8; }
+      .active { display: none; align-items: center; gap: 20px; margin-top: 10px; }
+      #curse.is-active .active { display: flex; }
+      #curse.is-active .options, #curse.is-active .hint { display: none; }
+      .ring { flex: none; width: 104px; height: 104px; }
+      .ring circle { fill: none; stroke-width: 9; }
+      .ring .track { stroke: rgba(255, 255, 255, 0.12); }
+      .ring .bar { stroke: var(--accent); stroke-linecap: round; transform: rotate(-90deg); transform-origin: 50% 50%; transition: stroke-dashoffset 0.5s linear; }
+      .ring text { fill: #fff; font-size: 22px; font-weight: 900; text-anchor: middle; dominant-baseline: central; }
+      .big { font-size: 34px; font-weight: 900; line-height: 1.1; text-shadow: 0 0 22px color-mix(in srgb, var(--accent) 70%, transparent); animation: pulse 2.4s ease-in-out infinite; }
+      .bigdesc { margin-top: 6px; font-size: 19px; font-weight: 600; opacity: 0.85; }
+      @keyframes spin { to { transform: rotate(360deg); } }
+      @keyframes pulse { 50% { text-shadow: 0 0 36px var(--accent); } }
+      body.reduced #curse::before, body.reduced .big { animation: none; }
+    </style>
+  </head>
+  <body>
+    <div id="curse">
+      <div class="head"><div class="title"><small></small><span class="main"></span></div><div class="timer"></div></div>
+      <div class="options"></div>
+      <div class="hint"></div>
+      <div class="active">
+        <svg class="ring" viewBox="0 0 104 104"><circle class="track" cx="52" cy="52" r="44" /><circle class="bar" cx="52" cy="52" r="44" /><text x="52" y="52"></text></svg>
+        <div><div class="big"></div><div class="bigdesc"></div></div>
+      </div>
+    </div>
+    <script src="/overlay/assets/common.js"></script>
+    <script>
+      const root = document.getElementById('curse');
+      const timerEl = root.querySelector('.timer');
+      const bar = root.querySelector('.ring .bar');
+      const CIRC = 2 * Math.PI * 44;
+      bar.style.strokeDasharray = CIRC;
+      if (SH.reducedMotion) document.body.classList.add('reduced');
+      let c = null, lang = 'ru', skew = 0;
+
+      function left() { return c && c.endsAt ? c.endsAt - (Date.now() + skew) : 0; }
+      function tick() {
+        if (!c) return;
+        const ms = left();
+        timerEl.textContent = c.endsAt ? SH.formatClock(ms) : '';
+        if (c.status === 'active' && c.active) {
+          const total = c.active.endsAt - c.active.startedAt;
+          bar.style.strokeDashoffset = String(CIRC * (1 - Math.max(0, Math.min(1, ms / total))));
+          root.querySelector('.ring text').textContent = SH.formatClock(ms);
+        }
+      }
+
+      SH.connect('curse', (msg) => {
+        if (msg.type !== 'curse') return;
+        c = msg.curse; lang = msg.lang; skew = msg.now - Date.now();
+        const style = msg.style;
+        if (SH.preview && c.status === 'idle') {
+          const sample = style.curses.filter((x) => x.enabled).slice(0, style.choices);
+          c = { status: 'voting', endsAt: Date.now() + 23000, total: 17, active: null, options: sample.map((x, i) => ({ id: x.id, name: x.name, description: x.description, durationSec: x.durationSec, votes: [9, 5, 3, 1, 0][i] || 0 })) };
+          skew = 0;
+        }
+        SH.useFont(root, style.fontFamily);
+        root.style.setProperty('--accent', style.accentColor);
+        root.classList.toggle('on', c.status !== 'idle');
+        root.classList.toggle('is-active', c.status === 'active');
+        root.querySelector('.title small').textContent = c.status === 'active' ? SH.tr(lang, 'Действует проклятие', 'Curse active') : SH.tr(lang, 'Голосование', 'Vote');
+        root.querySelector('.title .main').textContent = c.status === 'active' ? '😈' : SH.tr(lang, '😈 Проклятие для стримера', '😈 Curse the streamer');
+        const box = root.querySelector('.options');
+        box.replaceChildren();
+        const best = Math.max(0, ...c.options.map((o) => o.votes));
+        c.options.forEach((o, i) => {
+          const row = SH.el('div', 'opt' + (best > 0 && o.votes === best ? ' lead' : ''));
+          const fill = SH.el('div', 'fill');
+          fill.style.width = (c.total ? (o.votes / c.total) * 100 : 0) + '%';
+          const text = SH.el('div');
+          text.append(SH.el('div', 'name', o.name), SH.el('div', 'desc', o.description || SH.tr(lang, `на ${Math.round(o.durationSec / 60 * 10) / 10} мин`, `for ${Math.round(o.durationSec / 60 * 10) / 10} min`)));
+          row.append(fill, SH.el('div', 'n', String(i + 1)), text, SH.el('div', 'votes', String(o.votes)));
+          box.appendChild(row);
+        });
+        root.querySelector('.hint').textContent = SH.tr(lang, `Пишите номер в чат · голосов: ${c.total}`, `Type a number in chat · votes: ${c.total}`);
+        if (c.active) {
+          root.querySelector('.big').textContent = c.active.name;
+          root.querySelector('.bigdesc').textContent = c.active.description;
+        }
+        tick();
+      });
+      setInterval(tick, 250);
+    </script>
+  </body>
+</html>

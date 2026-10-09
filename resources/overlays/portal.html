@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <title>StreamHelper — Portal</title>
+    <style>
+      :root { --accent: #3fa7ff; --x: 210px; }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; width: 100%; height: 100%; background: transparent; overflow: hidden; color: #fff; }
+      #stage { position: absolute; inset: 0; opacity: 0; transition: opacity 0.6s; }
+      #stage.on { opacity: 1; }
+      .portal { position: absolute; top: 50%; left: var(--x); width: 300px; height: 300px; margin: -150px 0 0 -150px; border-radius: 50%; }
+      #stage.right .portal { left: auto; right: var(--x); margin: -150px -150px 0 0; }
+      .swirl, .swirl2, .core { position: absolute; inset: 0; border-radius: 50%; }
+      .swirl { background: conic-gradient(from 0deg, transparent, var(--accent), transparent 35%, color-mix(in srgb, var(--accent) 60%, #fff) 50%, transparent 70%, var(--accent)); filter: blur(6px); animation: spin 3.2s linear infinite; mask: radial-gradient(circle, transparent 38%, #000 40%, #000 70%, transparent 72%); }
+      .swirl2 { inset: 30px; background: conic-gradient(from 90deg, transparent, color-mix(in srgb, var(--accent) 70%, #a0f), transparent 45%, var(--accent), transparent); filter: blur(4px); animation: spin 2.1s linear infinite reverse; mask: radial-gradient(circle, transparent 30%, #000 34%, #000 66%, transparent 70%); }
+      .core { inset: 70px; background: radial-gradient(circle, #fff 0%, color-mix(in srgb, var(--accent) 80%, #fff) 25%, color-mix(in srgb, var(--accent) 40%, #000) 60%, transparent 72%); animation: breathe 2.6s ease-in-out infinite; }
+      .glow { position: absolute; inset: -40px; border-radius: 50%; background: radial-gradient(circle, color-mix(in srgb, var(--accent) 45%, transparent), transparent 65%); animation: breathe 2.6s ease-in-out infinite; }
+      .portal.burst .core { animation: burst 0.6s ease-out; }
+      .tag { position: absolute; left: 50%; top: calc(100% + 14px); transform: translateX(-50%); white-space: nowrap; padding: 6px 14px; border-radius: 999px; background: rgba(8, 12, 22, 0.88); box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 60%, transparent); font-size: 18px; font-weight: 800; }
+      .tag small { color: var(--accent); font-weight: 700; margin-right: 6px; }
+      .msg { position: absolute; top: 0; left: 0; max-width: 560px; padding: 12px 18px; border-radius: 16px; background: rgba(10, 14, 24, 0.9); box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 50%, transparent), 0 10px 30px rgba(0, 0, 0, 0.45), 0 0 26px color-mix(in srgb, var(--accent) 35%, transparent); font-size: 24px; font-weight: 600; line-height: 1.3; overflow-wrap: anywhere; will-change: transform, opacity; }
+      .msg .who { display: block; font-size: 17px; font-weight: 800; margin-bottom: 2px; }
+      .msg .where { font-size: 13px; opacity: 0.7; font-weight: 700; margin-left: 6px; }
+      .msg img { height: 1.4em; vertical-align: -0.35em; }
+      @keyframes spin { to { transform: rotate(360deg); } }
+      @keyframes breathe { 50% { transform: scale(1.07); opacity: 0.85; } }
+      @keyframes burst { 40% { transform: scale(1.35); filter: brightness(1.6); } }
+      body.reduced .swirl, body.reduced .swirl2, body.reduced .core, body.reduced .glow { animation: none; }
+    </style>
+  </head>
+  <body>
+    <div id="stage"><div class="portal"><div class="glow"></div><div class="swirl"></div><div class="swirl2"></div><div class="core"></div><div class="tag"><small>🌀</small><span class="chan"></span></div></div></div>
+    <script src="/overlay/assets/common.js"></script>
+    <script>
+      const stage = document.getElementById('stage');
+      const portal = stage.querySelector('.portal');
+      if (SH.reducedMotion) document.body.classList.add('reduced');
+      let cfg = null, lang = 'ru', lane = 0;
+      const live = new Map();
+
+      function body(m) {
+        const el = SH.el('div', 'msg');
+        const who = SH.el('span', 'who', m.userName);
+        if (m.color && /^#[0-9a-f]{6}$/i.test(m.color)) who.style.color = m.color;
+        who.appendChild(SH.el('span', 'where', m.direction === 'in' ? SH.tr(lang, `из чата ${m.channel}`, `from ${m.channel}'s chat`) : SH.tr(lang, `→ в чат ${m.channel}`, `→ to ${m.channel}'s chat`)));
+        el.appendChild(who);
+        for (const f of m.fragments) {
+          if (f.type === 'emote' && /^https:\/\/static-cdn\.jtvnw\.net\//.test(f.url)) { const img = document.createElement('img'); img.src = f.url; img.alt = f.text; el.appendChild(img); }
+          else el.appendChild(document.createTextNode(f.text));
+        }
+        return el;
+      }
+
+      /** Incoming: born in the portal, flies out into the screen. Outgoing: flies into the portal and vanishes. */
+      function show(m) {
+        if (!cfg) return;
+        const el = body(m);
+        stage.appendChild(el);
+        const right = cfg.side === 'right';
+        const W = innerWidth, H = innerHeight;
+        const px = right ? W - 210 : 210, py = H / 2;
+        const lanes = [-0.3, 0.05, -0.12, 0.25, -0.22, 0.15];
+        const ty = py + lanes[lane++ % lanes.length] * H - el.offsetHeight / 2;
+        const tx = right ? W - 210 - 260 - el.offsetWidth : 210 + 260;
+        const from = { x: px - el.offsetWidth / 2, y: py - el.offsetHeight / 2 };
+        const dur = Math.max(3, cfg.durationSec) * 1000;
+        const keyframes = m.direction === 'in'
+          ? [
+              { transform: `translate(${from.x}px, ${from.y}px) scale(0.05) rotate(${right ? 200 : -200}deg)`, opacity: 0 },
+              { transform: `translate(${tx}px, ${ty}px) scale(1.06) rotate(0deg)`, opacity: 1, offset: 0.12 },
+              { transform: `translate(${tx}px, ${ty}px) scale(1)`, opacity: 1, offset: 0.2 },
+              { transform: `translate(${tx + (right ? -30 : 30)}px, ${ty - 10}px) scale(1)`, opacity: 1, offset: 0.88 },
+              { transform: `translate(${tx + (right ? -60 : 60)}px, ${ty - 20}px) scale(0.96)`, opacity: 0 },
+            ]
+          : [
+              { transform: `translate(${tx}px, ${ty}px) scale(0.9)`, opacity: 0 },
+              { transform: `translate(${tx}px, ${ty}px) scale(1)`, opacity: 1, offset: 0.12 },
+              { transform: `translate(${tx}px, ${ty}px) scale(1)`, opacity: 1, offset: 0.7 },
+              { transform: `translate(${from.x}px, ${from.y}px) scale(0.04) rotate(${right ? -260 : 260}deg)`, opacity: 0.2 },
+            ];
+        const anim = el.animate(keyframes, { duration: SH.reducedMotion ? 400 : dur, easing: 'cubic-bezier(0.22, 1, 0.36, 1)', fill: 'forwards' });
+        if (SH.reducedMotion) { el.style.transform = `translate(${tx}px, ${ty}px)`; setTimeout(() => remove(m.id), dur); }
+        portal.classList.remove('burst'); void portal.offsetWidth; portal.classList.add('burst');
+        live.set(m.id, el);
+        anim.onfinish = () => { if (!SH.reducedMotion) remove(m.id); };
+        if (live.size > 8) remove(live.keys().next().value);
+      }
+      function remove(id) { const el = live.get(id); if (el) { el.remove(); live.delete(id); } }
+
+      SH.connect('portal', (msg) => {
+        if (msg.type === 'portalConfig') {
+          cfg = msg.config; lang = msg.lang;
+          SH.useFont(stage, cfg.fontFamily);
+          stage.style.setProperty('--accent', cfg.accentColor);
+          stage.classList.toggle('right', cfg.side === 'right');
+          stage.classList.toggle('on', !!(cfg.enabled && cfg.partner) || SH.preview);
+          stage.querySelector('.chan').textContent = msg.channel || cfg.partner || SH.tr(lang, 'канал-партнёр', 'partner channel');
+          if (SH.preview && !live.size) setTimeout(() => show({ id: 'preview', direction: 'in', userName: 'Гость_портала', color: '#3fa7ff', text: '', fragments: [{ type: 'text', text: SH.tr(lang, 'Привет из соседнего чата! 👋', 'Hello from the other chat! 👋') }], channel: cfg.partner || 'partner', at: Date.now() }), 400);
+        }
+        if (msg.type === 'portal') show(msg.message);
+        if (msg.type === 'portalDelete') remove(msg.id);
+      });
+    </script>
+  </body>
+</html>

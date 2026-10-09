@@ -152,7 +152,8 @@ export interface ObsState extends ConnectionState {
 }
 
 export interface RuntimeState {
-  twitch: ConnectionState & { deviceCode?: DeviceCodePrompt; subscriptionErrors?: Record<string, string> };
+  /** `missingScopes`: permissions added in newer versions that the saved login lacks (reconnect to grant). */
+  twitch: ConnectionState & { deviceCode?: DeviceCodePrompt; subscriptionErrors?: Record<string, string>; missingScopes?: string[] };
   kawaki: KawakiState;
   twitchBot: ConnectionState & { deviceCode?: DeviceCodePrompt };
   donationalerts: ConnectionState;
@@ -186,6 +187,15 @@ export interface RuntimeState {
   hype: HypeState;
   /** Most active chatters since the app started (or the last reset). */
   chatLeaders: ChatLeader[];
+  clipper: ClipperState;
+  curse: CurseState;
+  duel: DuelState;
+  melody: MelodyState;
+  ducking: DuckingState;
+  market: MarketState;
+  portal: PortalState;
+  report: ReportState;
+  shield: ShieldState;
 }
 
 // ---------- Settings ----------
@@ -410,6 +420,9 @@ export type ActionStep =
   | { type: 'bannerToggle'; bannerId: string }
   | { type: 'emoteBurst' }
   | { type: 'streamerbotAction'; actionId: string }
+  | { type: 'clipMoment' }
+  | { type: 'shieldToggle' }
+  | { type: 'curseVote' }
   | { type: 'wait'; ms: number };
 
 export interface QuickAction {
@@ -894,6 +907,399 @@ export interface ChatLeader {
   messages: number;
 }
 
+// ---------- Auto clipper ("Moment!") ----------
+
+export type ClipReason = 'burst' | 'keywords' | 'vote' | 'manual';
+
+export interface ClipperSettings {
+  enabled: boolean;
+  /** Rolling window the chat burst is measured in. */
+  windowSec: number;
+  /** A burst = this many times the usual chat speed. */
+  sensitivity: number;
+  /** Fewer messages than this in the window never count as a burst (quiet chats). */
+  minMessages: number;
+  /** Reaction words ("KEKW", "ахах"): this many messages with them in the window is a moment too. */
+  keywords: string[];
+  keywordHits: number;
+  /** Viewers vote with a command; this many different viewers in the window make a clip. 0 = off. */
+  voteCommand: string;
+  voteThreshold: number;
+  cooldownSec: number;
+  createClip: boolean;
+  createMarker: boolean;
+  onlyWhenLive: boolean;
+  /** Post the clip link to chat. {url}, {reason}. Empty = silent. */
+  announce: string;
+  sendToDiscord: boolean;
+}
+
+export interface ClipMoment {
+  id: string;
+  at: number;
+  reason: ClipReason;
+  /** How strong the reaction was: messages in the window divided by the usual speed. */
+  score: number;
+  messages: number;
+  sample: { user: string; text: string }[];
+  clipId?: string;
+  clipUrl?: string;
+  editUrl?: string;
+  /** Stream time of the marker, seconds. */
+  markerSec?: number;
+  error?: string;
+}
+
+export interface ClipperState {
+  moments: ClipMoment[];
+  /** Chat speed in the current window and the usual speed, messages per window. */
+  rate: number;
+  baseline: number;
+  busy: boolean;
+  lastError: string | null;
+}
+
+// ---------- Curses (chat votes a handicap for the streamer) ----------
+
+export type CurseStep =
+  | { type: 'filter'; source: string; filter: string }
+  | { type: 'source'; scene: string; source: string; show: boolean }
+  | { type: 'mute'; input: string };
+
+export interface Curse {
+  id: string;
+  enabled: boolean;
+  name: string;
+  description: string;
+  durationSec: number;
+  /** OBS changes while the curse lasts; all of them are undone at the end. Empty = a challenge for the streamer. */
+  steps: CurseStep[];
+}
+
+export interface CurseSettings {
+  curses: Curse[];
+  /** Curses offered per vote. */
+  choices: number;
+  voteSec: number;
+  /** Start a vote automatically every N minutes while live. 0 = off. */
+  autoEveryMin: number;
+  /** Channel-points reward that starts a vote. */
+  redemptionTitle: string;
+  announce: boolean;
+  accentColor: string;
+  fontFamily: string;
+}
+
+export interface CurseOption {
+  id: string;
+  name: string;
+  description: string;
+  durationSec: number;
+  votes: number;
+}
+
+export interface CurseState {
+  status: 'idle' | 'voting' | 'active';
+  options: CurseOption[];
+  total: number;
+  endsAt: number | null;
+  active: { id: string; name: string; description: string; startedAt: number; endsAt: number } | null;
+  lastError: string | null;
+}
+
+// ---------- Music duel ----------
+
+export interface DuelSettings {
+  /** Seconds of each track. */
+  snippetSec: number;
+  /** Skip intros: start this many seconds into the video. */
+  startOffsetSec: number;
+  voteSec: number;
+  winnerAction: 'playNext' | 'playNow' | 'none';
+  loserAction: 'remove' | 'keep';
+  volume: number;
+  announce: boolean;
+  accentColor: string;
+  fontFamily: string;
+}
+
+export interface DuelSide {
+  requestId: string;
+  videoId: string;
+  title: string;
+  userName: string;
+  votes: number;
+}
+
+export interface DuelState {
+  status: 'idle' | 'playingA' | 'playingB' | 'voting' | 'done';
+  a: DuelSide | null;
+  b: DuelSide | null;
+  endsAt: number | null;
+  winner: 'a' | 'b' | 'tie' | null;
+  /** YouTube refused a track (removed, embedding blocked); shown to the streamer. */
+  error: string | null;
+}
+
+// ---------- Guess the melody ----------
+
+export interface MelodyTrack {
+  id: string;
+  videoId: string;
+  title: string;
+  /** Accepted answers (song names). */
+  answers: string[];
+  artist: string;
+}
+
+export interface MelodySettings {
+  playlist: MelodyTrack[];
+  rounds: number;
+  /** First snippet length; the hint replays a longer one. */
+  snippetSec: number;
+  roundSec: number;
+  /** Replay a longer snippet and open first letters after N seconds. 0 = no hint. */
+  hintAfterSec: number;
+  revealSec: number;
+  /** Naming the artist counts too. */
+  acceptArtist: boolean;
+  volume: number;
+  announce: boolean;
+  accentColor: string;
+  fontFamily: string;
+}
+
+export interface MelodyState {
+  status: 'idle' | 'playing' | 'reveal' | 'finished';
+  round: number;
+  rounds: number;
+  endsAt: number | null;
+  /** Changes every time the overlay should (re)play a snippet. */
+  playId: string | null;
+  videoId: string | null;
+  /** Where the snippet starts, as a share of the video length. */
+  startFraction: number;
+  snippetSec: number;
+  hint: string;
+  answer: { title: string; videoId: string } | null;
+  winner: string | null;
+  leaderboard: { userName: string; points: number }[];
+  /** YouTube refused the last track; the round was skipped. */
+  error: string | null;
+}
+
+// ---------- Audio ducking ----------
+
+export interface DuckingSettings {
+  enabled: boolean;
+  /** OBS input of the streamer's microphone. */
+  micInput: string;
+  thresholdDb: number;
+  /** OBS inputs turned down while the streamer talks. */
+  targets: string[];
+  /** Target volume while ducked, percent of the normal volume. */
+  duckPercent: number;
+  /** Voice must last this long before ducking (ignores clicks). */
+  attackMs: number;
+  /** Silence this long before the music comes back. */
+  releaseMs: number;
+  fadeMs: number;
+  duckOnAlerts: boolean;
+}
+
+export interface DuckingState {
+  /** OBS sends audio levels. */
+  listening: boolean;
+  ducked: boolean;
+  levelDb: number;
+  reason: 'voice' | 'alert' | null;
+  error: string | null;
+}
+
+// ---------- Viewer stock exchange ----------
+
+export interface MarketSettings {
+  enabled: boolean;
+  currencyName: string;
+  startBalance: number;
+  earnPerMessage: number;
+  earnCooldownSec: number;
+  /** Paid every tick to everyone who chatted recently. */
+  activeIncome: number;
+  /** Messages a viewer needs before their stock is listed. */
+  listMinMessages: number;
+  ipoPrice: number;
+  tickSec: number;
+  /** Max share of the price an activity tick can move it, percent. */
+  volatility: number;
+  /** Percent lost per tick while the viewer is silent on a live stream. */
+  decayPct: number;
+  /** Price move per trade, percent (grows with the square root of the shares). */
+  impactPct: number;
+  /** Paid to shareholders when the viewer chats, percent of the price per share (once per tick). */
+  dividendPct: number;
+  commands: { market: string; buy: string; sell: string; portfolio: string; balance: string; price: string };
+  exclude: string[];
+  tickerCount: number;
+  /** Market news in chat: IPOs, crashes and rallies. */
+  announceNews: boolean;
+  accentColor: string;
+  fontFamily: string;
+}
+
+export interface StockQuote {
+  userId: string;
+  name: string;
+  price: number;
+  /** Change since the session open, percent. */
+  change: number;
+  history: number[];
+  holders: number;
+}
+
+export interface MarketState {
+  quotes: StockQuote[];
+  richest: { name: string; worth: number }[];
+  traders: number;
+  lastTrade: { user: string; stock: string; qty: number; price: number; side: 'buy' | 'sell'; at: number } | null;
+}
+
+// ---------- Portal (chat bridge with a partner channel) ----------
+
+export interface PortalSettings {
+  enabled: boolean;
+  /** Twitch login of the partner channel. */
+  partner: string;
+  /** command = only "!портал text"; all = every message (rate limited). */
+  mode: 'command' | 'all';
+  command: string;
+  maxPerMinute: number;
+  /** Also show our viewers' portal messages flying into the portal. */
+  showOutgoing: boolean;
+  /** Repeat partner messages in our chat via the bot. */
+  relayToChat: boolean;
+  durationSec: number;
+  side: 'left' | 'right';
+  accentColor: string;
+  fontFamily: string;
+}
+
+export interface PortalMessage {
+  id: string;
+  direction: 'in' | 'out';
+  userName: string;
+  color?: string;
+  text: string;
+  fragments: ChatFragment[];
+  channel: string;
+  at: number;
+}
+
+export interface PortalState {
+  status: ConnectionStatus;
+  channel: string;
+  error?: string;
+  messages: PortalMessage[];
+}
+
+// ---------- Stream report ----------
+
+export interface ReportSettings {
+  autoGenerate: boolean;
+  postToChat: boolean;
+  sendToDiscord: boolean;
+  accentColor: string;
+  /** Words never counted as "word of the stream". */
+  stopWords: string[];
+}
+
+export interface ReportSummary {
+  startedAt: number;
+  endedAt: number | null;
+  title: string;
+  category: string;
+  peakViewers: number;
+  avgViewers: number;
+  messages: number;
+  chatters: number;
+  mvp: { name: string; messages: number; color?: string }[];
+  topWord: { word: string; count: number } | null;
+  topEmote: { name: string; url: string; count: number } | null;
+  follows: number;
+  subs: number;
+  gifts: number;
+  bits: number;
+  donations: number;
+  currency: string;
+  topDonation: { name: string; amount: number; currency: string } | null;
+  raids: { name: string; viewers: number }[];
+  /** Busiest minute of chat: the drama of the evening. */
+  drama: { at: number; messages: number; quote: { user: string; text: string } | null } | null;
+  bestClip: { url: string; reason: ClipReason; at: number } | null;
+  clips: number;
+}
+
+export interface SavedReport {
+  id: string;
+  createdAt: number;
+  summary: ReportSummary;
+  imageUrl: string;
+}
+
+export interface ReportState {
+  live: ReportSummary;
+  reports: SavedReport[];
+  busy: boolean;
+}
+
+// ---------- Raid shield ----------
+
+export interface ShieldSettings {
+  enabled: boolean;
+  windowSec: number;
+  /** Chatters never seen on this channel before, inside the window. */
+  newChatters: number;
+  /** Different viewers posting the same text inside the window. */
+  similar: number;
+  /** Accounts younger than `youngDays` among the new chatters. 0 = off. */
+  youngDays: number;
+  young: number;
+  /** After a real raid new chatters are expected: thresholds are multiplied for this long. */
+  raidGraceSec: number;
+  exempt: Permission;
+  followersOnly: boolean;
+  followersMinutes: number;
+  slowMode: boolean;
+  slowSec: number;
+  emoteOnly: boolean;
+  shieldMode: boolean;
+  deleteMessages: boolean;
+  /** Time out the suspects, seconds. 0 = off. */
+  timeoutSec: number;
+  /** Lift the protection automatically. 0 = only by hand. */
+  autoReleaseMin: number;
+  announce: string;
+}
+
+export interface ShieldSuspect {
+  userId: string;
+  userName: string;
+  text: string;
+  at: number;
+}
+
+export interface ShieldState {
+  status: 'off' | 'watching' | 'active';
+  /** Current readings inside the window. */
+  readings: { newChatters: number; similar: number; young: number };
+  reason: string | null;
+  activatedAt: number | null;
+  releaseAt: number | null;
+  suspects: ShieldSuspect[];
+  history: { at: number; reason: string; suspects: number; manual: boolean }[];
+  error: string | null;
+}
+
 // ---------- Kawaki ----------
 
 export interface KawakiNowWatching {
@@ -978,6 +1384,15 @@ export interface Settings {
   counterOverlays: CounterOverlay[];
   hype: HypeSettings;
   leadersOverlay: LeadersOverlaySettings;
+  clipper: ClipperSettings;
+  curses: CurseSettings;
+  duel: DuelSettings;
+  melody: MelodySettings;
+  ducking: DuckingSettings;
+  market: MarketSettings;
+  portal: PortalSettings;
+  report: ReportSettings;
+  shield: ShieldSettings;
   /** Main currency for donation totals (goals, subathon). */
   currency: string;
   minimizeToTray: boolean;
@@ -1017,9 +1432,13 @@ export interface MonitorLayout {
 /** Grid cells: `x`/`w` in columns (of MONITOR_COLS), `y`/`h` in rows. */
 export interface MonitorRect { x: number; y: number; w: number; h: number }
 
-export type WorkspaceCard = 'stream' | 'obs' | 'actions' | 'bot' | 'twitch' | 'donationalerts' | 'streamlabs' | 'streamelements' | 'streamerbot' | 'discord' | 'subforstream' | OverlayKind;
+/** Modules without an overlay of their own. */
+export type ToolModule = 'clipper' | 'ducking' | 'shield' | 'report';
 
-export type ProfileSettingsKey = 'workspace' | 'bot' | 'alerts' | 'chatOverlay' | 'spotlightOverlay' | 'rewardsOverlay' | 'collabOverlay' | 'musicOverlay' | 'songRequests' | 'goals' | 'timers' | 'actions' | 'banners' | 'ads' | 'labels' | 'emoteRain' | 'wheels' | 'poll' | 'giveaway' | 'quiz' | 'boss' | 'kawaki' | 'viewerQueue' | 'guess' | 'counterOverlays' | 'hype' | 'leadersOverlay';
+export type WorkspaceCard = 'stream' | 'obs' | 'actions' | 'bot' | 'twitch' | 'donationalerts' | 'streamlabs' | 'streamelements' | 'streamerbot' | 'discord' | 'subforstream' | ToolModule | OverlayKind;
+
+export type ProfileSettingsKey = 'workspace' | 'bot' | 'alerts' | 'chatOverlay' | 'spotlightOverlay' | 'rewardsOverlay' | 'collabOverlay' | 'musicOverlay' | 'songRequests' | 'goals' | 'timers' | 'actions' | 'banners' | 'ads' | 'labels' | 'emoteRain' | 'wheels' | 'poll' | 'giveaway' | 'quiz' | 'boss' | 'kawaki' | 'viewerQueue' | 'guess' | 'counterOverlays' | 'hype' | 'leadersOverlay'
+  | 'clipper' | 'curses' | 'duel' | 'melody' | 'ducking' | 'market' | 'portal' | 'report' | 'shield';
 export type ProfileConfig = Pick<Settings, ProfileSettingsKey>;
 export interface StreamProfile { id: string; name: string; config: ProfileConfig; overlays: OverlayKind[] }
 
@@ -1027,7 +1446,8 @@ export type SettingsKey = keyof Settings;
 
 // ---------- Overlay wire protocol ----------
 
-export type OverlayKind = 'chat' | 'alerts' | 'goal' | 'timer' | 'events' | 'rewards' | 'collab' | 'music' | 'song' | 'banner' | 'ad' | 'label' | 'emotes' | 'wheel' | 'poll' | 'giveaway' | 'kawaki' | 'quiz' | 'boss' | 'live' | 'spotlight' | 'queue' | 'guess' | 'counter' | 'hype' | 'leaders';
+export type OverlayKind = 'chat' | 'alerts' | 'goal' | 'timer' | 'events' | 'rewards' | 'collab' | 'music' | 'song' | 'banner' | 'ad' | 'label' | 'emotes' | 'wheel' | 'poll' | 'giveaway' | 'kawaki' | 'quiz' | 'boss' | 'live' | 'spotlight' | 'queue' | 'guess' | 'counter' | 'hype' | 'leaders'
+  | 'curse' | 'duel' | 'melody' | 'stocks' | 'portal';
 
 export interface RenderedBanner extends Omit<Banner, 'slides'> {
   slides: { id: string; text: string; image: string | null }[];
@@ -1099,6 +1519,13 @@ export type OverlayMessage =
   | { type: 'counter'; counter: (CounterOverlay & { value: number }) | null }
   | { type: 'hype'; hype: HypeState; style: HypeSettings; lang: Language }
   | { type: 'leaders'; leaders: ChatLeader[]; style: LeadersOverlaySettings; lang: Language }
+  | { type: 'curse'; curse: CurseState; style: CurseSettings; now: number; lang: Language }
+  | { type: 'duel'; duel: DuelState; style: DuelSettings; now: number; lang: Language }
+  | { type: 'melody'; melody: MelodyState; style: MelodySettings; now: number; lang: Language }
+  | { type: 'stocks'; quotes: StockQuote[]; lastTrade: MarketState['lastTrade']; style: MarketSettings; lang: Language }
+  | { type: 'portalConfig'; config: PortalSettings; channel: string; lang: Language }
+  | { type: 'portal'; message: PortalMessage }
+  | { type: 'portalDelete'; id: string }
   | { type: 'reload' };
 
 // ---------- IPC ----------
@@ -1209,6 +1636,34 @@ export interface IpcInvoke {
   'kawaki:refresh': () => void;
   /** Create a browser source in the current OBS scene. */
   'obs:addBrowserSource': (name: string, url: string, width: number, height: number) => void;
+  /** Every OBS input and scene name (filters can sit on both). */
+  'obs:sources': () => string[];
+  'obs:filters': (source: string) => string[];
+  'clipper:clip': () => void;
+  'curse:vote': () => void;
+  'curse:apply': (curseId: string) => void;
+  'curse:lift': () => void;
+  'curse:cancel': () => void;
+  /** Without ids: the next two requests in the song queue. */
+  'duel:start': (aId?: string, bId?: string) => void;
+  'duel:stop': () => void;
+  'melody:start': () => void;
+  'melody:skip': () => void;
+  'melody:stop': () => void;
+  /** Add YouTube links to the playlist; returns how many were added. */
+  'melody:add': (urls: string[]) => number;
+  'melody:fromSongs': () => number;
+  'market:reset': () => void;
+  'market:grant': (login: string, amount: number) => void;
+  'portal:test': () => void;
+  'report:generate': () => void;
+  'report:reset': () => void;
+  'report:delete': (id: string) => void;
+  'report:open': (id?: string) => void;
+  'report:copy': (id: string) => void;
+  'report:discord': (id: string) => void;
+  'shield:activate': () => void;
+  'shield:release': () => void;
   'media:import': () => MediaFile | null;
   'media:list': () => MediaFile[];
   'shell:openExternal': (url: string) => void;

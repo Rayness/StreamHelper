@@ -1,4 +1,5 @@
 import type { RuntimeState } from '@shared/types';
+import { emptyReportSummary } from '@shared/report';
 import type { EventBus } from './eventBus';
 
 export function initialRuntimeState(): RuntimeState {
@@ -35,6 +36,15 @@ export function initialRuntimeState(): RuntimeState {
     guess: { status: 'idle', min: 1, max: 100, low: 1, high: 100, attempts: 0, endsAt: null, winner: null, answer: null, lastGuess: null },
     hype: { points: 0, level: 0, progress: 0, lastBumpAt: 0 },
     chatLeaders: [],
+    clipper: { moments: [], rate: 0, baseline: 0, busy: false, lastError: null },
+    curse: { status: 'idle', options: [], total: 0, endsAt: null, active: null, lastError: null },
+    duel: { status: 'idle', a: null, b: null, endsAt: null, winner: null, error: null },
+    melody: { status: 'idle', round: 0, rounds: 0, endsAt: null, playId: null, videoId: null, startFraction: 0.3, snippetSec: 8, hint: '', answer: null, winner: null, leaderboard: [], error: null },
+    ducking: { listening: false, ducked: false, levelDb: -100, reason: null, error: null },
+    market: { quotes: [], richest: [], traders: 0, lastTrade: null },
+    portal: { status: 'disconnected', channel: '', messages: [] },
+    report: { live: emptyReportSummary(Date.now()), reports: [], busy: false },
+    shield: { status: 'off', readings: { newChatters: 0, similar: 0, young: 0 }, reason: null, activatedAt: null, releaseAt: null, suspects: [], history: [], error: null },
   };
 }
 

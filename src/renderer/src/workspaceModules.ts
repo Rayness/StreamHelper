@@ -13,6 +13,10 @@ export const MODULES: ModuleDef[] = [
   { id:'stream', title:'dash.stream', description:'workspace.desc.stream', icon:'broadcast', group:'channel' },
   { id:'bot', title:'nav.bot', description:'workspace.desc.bot', icon:'bot', group:'automation' },
   { id:'actions', title:'dash.quick', description:'workspace.desc.actions', icon:'zap', group:'automation' },
+  { id:'clipper', title:'tool.clipper', description:'toolDesc.clipper', icon:'scissors', group:'automation' },
+  { id:'shield', title:'tool.shield', description:'toolDesc.shield', icon:'shield', group:'automation' },
+  { id:'ducking', title:'tool.ducking', description:'toolDesc.ducking', icon:'volume', group:'automation' },
+  { id:'report', title:'tool.report', description:'toolDesc.report', icon:'report', group:'channel' },
   ...OVERLAYS.map((o): ModuleDef => ({ id:o.kind, title:`ov.${o.kind}`, description:`ovDesc.${o.kind}`, icon:o.icon, group:o.group === 'fun' ? 'fun' : 'display' })),
 ];
 export const moduleDef = (id: WorkspaceCard) => MODULES.find((m) => m.id === id)!;

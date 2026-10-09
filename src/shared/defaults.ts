@@ -1,6 +1,17 @@
 import { normalizeWorkspaceCards, normalizeMonitorLayout } from './workspace';
 import type {
   AppearanceSettings,
+  ClipperSettings,
+  Curse,
+  CurseSettings,
+  CurseStep,
+  DuckingSettings,
+  DuelSettings,
+  MarketSettings,
+  MelodySettings,
+  PortalSettings,
+  ReportSettings,
+  ShieldSettings,
   ThemeId,
   AlertSettings,
   AlertType,
@@ -500,6 +511,134 @@ export function defaultLeaders(lang: Language): LeadersOverlaySettings {
   };
 }
 
+export function defaultClipper(lang: Language): ClipperSettings {
+  const ru = lang === 'ru';
+  return {
+    enabled: false,
+    windowSec: 15,
+    sensitivity: 3,
+    minMessages: 10,
+    keywords: ['KEKW', 'LUL', 'OMEGALUL', 'LMAO', 'Pog', 'PogChamp', 'POGGERS', 'WTF', 'ахах', 'хаха', 'АХАХ', 'клип', 'clip', '+++'],
+    keywordHits: 6,
+    voteCommand: ru ? 'клип' : 'clip',
+    voteThreshold: 3,
+    cooldownSec: 90,
+    createClip: true,
+    createMarker: true,
+    onlyWhenLive: true,
+    announce: ru ? '🎬 Момент сохранён: {url}' : '🎬 Moment saved: {url}',
+    sendToDiscord: false,
+  };
+}
+
+export function defaultCurse(lang: Language, name?: string, description?: string, steps: CurseStep[] = [], durationSec = 180): Curse {
+  return { id: uid('curse_'), enabled: true, name: name ?? (lang === 'ru' ? 'Новое проклятие' : 'New curse'), description: description ?? '', durationSec, steps };
+}
+
+export function defaultCurses(lang: Language): CurseSettings {
+  const ru = lang === 'ru';
+  return {
+    curses: ru
+      ? [
+          defaultCurse(lang, 'Без звука игры', 'Звук игры выключен — играем на слух интуиции', [{ type: 'mute', input: '' }], 180),
+          defaultCurse(lang, 'Чёрно-белый мир', 'Экран теряет цвета (фильтр OBS «Коррекция цвета»)', [{ type: 'filter', source: '', filter: '' }], 240),
+          defaultCurse(lang, 'Только одна рука', 'Играть одной рукой, вторая — за спиной', [], 120),
+          defaultCurse(lang, 'Говорим с акцентом', 'Всё, что говорит стример, — с акцентом на выбор чата', [], 300),
+          defaultCurse(lang, 'Без камеры', 'Камера уходит в отпуск', [{ type: 'source', scene: '', source: '', show: false }], 180),
+        ]
+      : [
+          defaultCurse(lang, 'No game audio', 'The game is muted — play by instinct', [{ type: 'mute', input: '' }], 180),
+          defaultCurse(lang, 'Black and white', 'The screen loses its colors (an OBS "Color Correction" filter)', [{ type: 'filter', source: '', filter: '' }], 240),
+          defaultCurse(lang, 'One hand only', 'Play with one hand, the other behind your back', [], 120),
+          defaultCurse(lang, 'Talk with an accent', 'Everything the streamer says — with an accent chat picks', [], 300),
+          defaultCurse(lang, 'No camera', 'The camera takes a break', [{ type: 'source', scene: '', source: '', show: false }], 180),
+        ],
+    choices: 3,
+    voteSec: 30,
+    autoEveryMin: 0,
+    redemptionTitle: '',
+    announce: true,
+    accentColor: '#c26bff',
+    fontFamily: 'Montserrat',
+  };
+}
+
+export function defaultDuel(): DuelSettings {
+  return { snippetSec: 25, startOffsetSec: 40, voteSec: 30, winnerAction: 'playNext', loserAction: 'remove', volume: 80, announce: true, accentColor: '#ff5d8f', fontFamily: 'Montserrat' };
+}
+
+export function defaultMelody(): MelodySettings {
+  return { playlist: [], rounds: 5, snippetSec: 8, roundSec: 40, hintAfterSec: 20, revealSec: 8, acceptArtist: false, volume: 80, announce: true, accentColor: '#37d399', fontFamily: 'Montserrat' };
+}
+
+export function defaultDucking(): DuckingSettings {
+  return { enabled: false, micInput: '', thresholdDb: -35, targets: [], duckPercent: 30, attackMs: 80, releaseMs: 900, fadeMs: 250, duckOnAlerts: false };
+}
+
+export function defaultMarket(lang: Language): MarketSettings {
+  const ru = lang === 'ru';
+  return {
+    enabled: false,
+    currencyName: ru ? 'монет' : 'coins',
+    startBalance: 1000,
+    earnPerMessage: 2,
+    earnCooldownSec: 30,
+    activeIncome: 5,
+    listMinMessages: 10,
+    ipoPrice: 100,
+    tickSec: 60,
+    volatility: 8,
+    decayPct: 3,
+    impactPct: 1.5,
+    dividendPct: 1,
+    commands: ru
+      ? { market: 'биржа', buy: 'купить', sell: 'продать', portfolio: 'портфель', balance: 'баланс', price: 'акция' }
+      : { market: 'market', buy: 'buy', sell: 'sell', portfolio: 'portfolio', balance: 'balance', price: 'stock' },
+    exclude: ['nightbot', 'streamelements', 'moobot', 'wizebot', 'streamlabs'],
+    tickerCount: 12,
+    announceNews: true,
+    accentColor: '#37d399',
+    fontFamily: 'Montserrat',
+  };
+}
+
+export function defaultPortal(lang: Language): PortalSettings {
+  return { enabled: false, partner: '', mode: 'command', command: lang === 'ru' ? 'портал' : 'portal', maxPerMinute: 20, showOutgoing: true, relayToChat: false, durationSec: 9, side: 'left', accentColor: '#3fa7ff', fontFamily: 'Montserrat' };
+}
+
+export function defaultReport(lang: Language): ReportSettings {
+  return {
+    autoGenerate: true,
+    postToChat: false,
+    sendToDiscord: false,
+    accentColor: '#9b6bff',
+    stopWords: lang === 'ru' ? ['стрим', 'чат'] : ['stream', 'chat'],
+  };
+}
+
+export function defaultShield(lang: Language): ShieldSettings {
+  return {
+    enabled: false,
+    windowSec: 20,
+    newChatters: 15,
+    similar: 6,
+    youngDays: 7,
+    young: 6,
+    raidGraceSec: 180,
+    exempt: 'subscriber',
+    followersOnly: true,
+    followersMinutes: 10,
+    slowMode: true,
+    slowSec: 10,
+    emoteOnly: false,
+    shieldMode: false,
+    deleteMessages: true,
+    timeoutSec: 0,
+    autoReleaseMin: 10,
+    announce: lang === 'ru' ? '🛡️ Включена защита чата от рейда. Скоро всё вернётся.' : '🛡️ Chat raid protection is on. Back to normal soon.',
+  };
+}
+
 export const DEFAULT_KAWAKI_URL = 'https://kawaki.ru';
 
 export function defaultKawaki(lang: Language): KawakiSettings {
@@ -561,6 +700,15 @@ export function defaultSettings(lang: Language): Settings {
     counterOverlays: [defaultCounterOverlay(lang)],
     hype: defaultHype(lang),
     leadersOverlay: defaultLeaders(lang),
+    clipper: defaultClipper(lang),
+    curses: defaultCurses(lang),
+    duel: defaultDuel(),
+    melody: defaultMelody(),
+    ducking: defaultDucking(),
+    market: defaultMarket(lang),
+    portal: defaultPortal(lang),
+    report: defaultReport(lang),
+    shield: defaultShield(lang),
     currency: lang === 'ru' ? 'RUB' : 'USD',
     minimizeToTray: true,
     appearance: defaultAppearance(),

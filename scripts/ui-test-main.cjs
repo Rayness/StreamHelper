@@ -56,7 +56,7 @@ app.whenReady().then(async () => {
   console.log('UI QA: creating fixture');
   fixture = await require(join(output,'fixture.cjs')).createFixture(root,dataDir,(channel,value)=>{ if(window&&!window.isDestroyed())window.webContents.send('qa:push:'+channel,value); });
   console.log('UI QA: creating renderer');
-  session.defaultSession.webRequest.onBeforeRequest((details, done) => { const allowed=/^(file:|data:|blob:|https?:\/\/127\.0\.0\.1:|ws:\/\/127\.0\.0\.1:)/.test(details.url); done({cancel:!allowed}); });
+  session.defaultSession.webRequest.onBeforeRequest((details, done) => { const allowed=/^(file:|data:|blob:|https?:\/\/127\.0\.0\.1:|ws:\/\/127\.0\.0\.1:|https?:\/\/localhost:|ws:\/\/localhost:)/.test(details.url); done({cancel:!allowed}); });
   ipcMain.handle('qa:invoke', (_,channel,...args)=>fixture.invoke(channel,...args));
   window = new BrowserWindow({ show:false, width:1360, height:900, webPreferences:{ preload:join(__dirname,'ui-test-preload.cjs'), contextIsolation:true, nodeIntegration:false, sandbox:false, offscreen:true, backgroundThrottling:false } });
   console.log('UI QA: loading app');
@@ -195,7 +195,8 @@ app.whenReady().then(async () => {
   await click('Добавить модуль');
   const remaining = await js(`[...document.querySelectorAll('[data-add-module]:not(:disabled)')].map(b=>b.dataset.addModule)`);
   await click('Отмена');
-  for (const id of remaining) { await add(id); assert.equal(await js(`document.querySelectorAll('[data-editor-module]').length`),1,'more than one editor mounted'); }
+  const toolPack = ['clipper','curse','duel','melody','ducking','stocks','portal','report','shield'];
+  for (const id of remaining) { await add(id); assert.equal(await js(`document.querySelectorAll('[data-editor-module]').length`),1,'more than one editor mounted'); if (toolPack.includes(id)) { await delay(400); await capture('module-'+id); } }
   await click('Рабочая область'); await capture('workspace-modules');
   const tiles = await js(`[...document.querySelectorAll('.workspace-installed')].map((tile)=>tile.getBoundingClientRect().height)`);
   assert(tiles.every((height)=>height<145),'module tiles are too tall');
@@ -209,7 +210,7 @@ app.whenReady().then(async () => {
   }
   await js(`document.querySelector('[data-connection="twitch"]').click()`); await capture('connections');
   await click('Панель'); await until(`!!document.querySelector('.monitor-grid')`,'full monitor missing'); await capture('monitor-modules');
-  assert.equal(await js(`document.querySelectorAll('.monitor-card').length`),30);
+  assert.equal(await js(`document.querySelectorAll('.monitor-card').length`),39);
   assert.equal(await js(`document.querySelectorAll('.content input,.content textarea,.content select').length`),0,'monitor renders mutable settings');
   await js(`document.querySelector('[data-monitor-edit]').click()`); await delay(150);
   // Free grid: drag by header and resize by corner with real pointer events; nothing may overlap.
@@ -300,6 +301,6 @@ app.whenReady().then(async () => {
   assert.equal(await js(`document.documentElement.lang`),'en');
   const alertGeometryCases = await checkAlertBounds();
   assert.deepEqual(failures,[],'renderer console errors');
-  writeFileSync(join(output,'ui-results.json'), JSON.stringify({passed:true,alertGeometryCases,moduleEditors:30,connectionEditors:8,checks:['empty workspace','three-page navigation','legacy route gate','search gate','remove/re-add preserves configuration','profile isolation and editor dismissal','individual activity and connection editors','global preferences scope','all 30 module editors','monitor has no feature configuration inputs','manual song queue','safe position settings','close-up live preview','coalesced settings writes','bot trailing spaces','small window layout','real alert DOM geometry','English module workflow','confirmed reset is scoped to current module','reset waits for pending edits','live chat and settings stay in module','local alert queue pause/resume/skip','isolated widget tests with emote rain active','separate connections without installation','fresh profile without losing connections','monitor free grid drag, corner resize, keyboard move, no overlaps, hide and persistence','compact module tiles','test waits for pending form edits','native pointer drag for alert position'],calls:fixture.calls.map(c=>c.channel)},null,2));
-  console.log('UI smoke passed: 30 module editors, 8 connection editors, draggable monitor, fresh profiles and isolated tests. Screenshots: dist/qa');
+  writeFileSync(join(output,'ui-results.json'), JSON.stringify({passed:true,alertGeometryCases,moduleEditors:39,connectionEditors:8,checks:['empty workspace','three-page navigation','legacy route gate','search gate','remove/re-add preserves configuration','profile isolation and editor dismissal','individual activity and connection editors','global preferences scope','all 39 module editors','monitor has no feature configuration inputs','manual song queue','safe position settings','close-up live preview','coalesced settings writes','bot trailing spaces','small window layout','real alert DOM geometry','English module workflow','confirmed reset is scoped to current module','reset waits for pending edits','live chat and settings stay in module','local alert queue pause/resume/skip','isolated widget tests with emote rain active','separate connections without installation','fresh profile without losing connections','monitor free grid drag, corner resize, keyboard move, no overlaps, hide and persistence','compact module tiles','test waits for pending form edits','native pointer drag for alert position'],calls:fixture.calls.map(c=>c.channel)},null,2));
+  console.log('UI smoke passed: 39 module editors, 8 connection editors, draggable monitor, fresh profiles and isolated tests. Screenshots: dist/qa');
 }).catch((error)=>{console.error(error);process.exitCode=1;}).finally(async()=>{alertWindow?.destroy(); await fixture?.stop(); window?.destroy(); app.exit(process.exitCode||0);});

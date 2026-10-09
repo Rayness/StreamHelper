@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <title>StreamHelper — Viewer stock exchange</title>
+    <style>
+      :root { --accent: #37d399; --up: #37d399; --down: #ff5d6c; }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; width: 100%; height: 100%; background: transparent; overflow: hidden; color: #fff; }
+      #tape { position: absolute; inset: 8px 0; display: flex; align-items: stretch; background: rgba(9, 11, 16, 0.9); border-top: 2px solid var(--accent); border-bottom: 1px solid #ffffff14; opacity: 0; transition: opacity 0.4s; }
+      #tape.on { opacity: 1; }
+      .label { flex: none; display: flex; align-items: center; gap: 8px; padding: 0 20px; background: var(--accent); color: #07110c; font-weight: 900; font-size: 20px; letter-spacing: 0.06em; text-transform: uppercase; z-index: 2; }
+      .viewport { position: relative; flex: 1; overflow: hidden; mask-image: linear-gradient(90deg, transparent, #000 40px, #000 calc(100% - 40px), transparent); }
+      .belt { position: absolute; top: 0; bottom: 0; left: 0; display: flex; align-items: center; white-space: nowrap; will-change: transform; }
+      .q { display: inline-flex; align-items: baseline; gap: 10px; padding: 0 26px; font-size: 24px; font-weight: 800; font-variant-numeric: tabular-nums; border-right: 1px solid #ffffff14; }
+      .q .sym { color: #fff; }
+      .q .price { color: #d9dde6; font-weight: 700; }
+      .q .chg { font-size: 20px; }
+      .q.up .chg { color: var(--up); } .q.down .chg { color: var(--down); } .q.flat .chg { color: #9aa1ad; }
+      .q svg { width: 70px; height: 26px; align-self: center; }
+      .q svg polyline { fill: none; stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; }
+      .q.up svg polyline { stroke: var(--up); } .q.down svg polyline { stroke: var(--down); } .q.flat svg polyline { stroke: #9aa1ad; }
+      .trade { position: absolute; right: 16px; top: 50%; transform: translate(120%, -50%); padding: 8px 14px; border-radius: 10px; background: rgba(9, 11, 16, 0.96); box-shadow: 0 0 0 2px var(--accent); font-size: 18px; font-weight: 800; transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1); z-index: 3; }
+      .trade.show { transform: translate(0, -50%); }
+    </style>
+  </head>
+  <body>
+    <div id="tape"><div class="label">📈 <span class="name"></span></div><div class="viewport"><div class="belt"></div><div class="trade"></div></div></div>
+    <script src="/overlay/assets/common.js"></script>
+    <script>
+      const tape = document.getElementById('tape');
+      const belt = tape.querySelector('.belt');
+      const tradeEl = tape.querySelector('.trade');
+      const SPEED = 70; // px per second
+      let offset = 0, last = performance.now(), loopWidth = 0, lastTradeAt = 0, tradeTimer = null;
+
+      function spark(history) {
+        const pts = history.slice(-20);
+        if (pts.length < 2) return '';
+        const min = Math.min(...pts), max = Math.max(...pts), span = max - min || 1;
+        return pts.map((p, i) => `${(i / (pts.length - 1)) * 68 + 1},${24 - ((p - min) / span) * 22}`).join(' ');
+      }
+      function item(q) {
+        const dir = q.change > 0.05 ? 'up' : q.change < -0.05 ? 'down' : 'flat';
+        const el = SH.el('span', 'q ' + dir);
+        el.append(SH.el('span', 'sym', '$' + q.name), SH.el('span', 'price', q.price.toFixed(q.price >= 100 ? 0 : 2)));
+        const line = spark(q.history);
+        if (line) { const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); svg.setAttribute('viewBox', '0 0 70 26'); const pl = document.createElementNS('http://www.w3.org/2000/svg', 'polyline'); pl.setAttribute('points', line); svg.appendChild(pl); el.appendChild(svg); }
+        el.appendChild(SH.el('span', 'chg', `${dir === 'up' ? '▲' : dir === 'down' ? '▼' : '•'} ${Math.abs(q.change).toFixed(1)}%`));
+        return el;
+      }
+      function frame(now) {
+        const dt = Math.min(0.1, (now - last) / 1000);
+        last = now;
+        if (loopWidth > 0 && !SH.reducedMotion) {
+          offset = (offset + SPEED * dt) % loopWidth;
+          belt.style.transform = `translateX(${-offset}px)`;
+        }
+        requestAnimationFrame(frame);
+      }
+      requestAnimationFrame(frame);
+
+      SH.connect('stocks', (msg) => {
+        if (msg.type !== 'stocks') return;
+        const s = msg.style, lang = msg.lang;
+        let quotes = msg.quotes;
+        if (SH.preview && !quotes.length) quotes = [['Viewer_42', 184, 12.4], ['NightOwl', 96, -8.1], ['GG_Masha', 131, 3.3], ['Pixel', 72, -21.5], ['Kotik', 240, 31.9]].map(([name, price, change], i) => ({ userId: String(i), name, price, change, holders: 3, history: Array.from({ length: 14 }, (_, k) => price * (1 + Math.sin(k / 2 + i) * 0.08 + (change / 100) * (k / 14))) }));
+        SH.useFont(tape, s.fontFamily);
+        tape.style.setProperty('--accent', s.accentColor);
+        tape.querySelector('.name').textContent = SH.tr(lang, 'Биржа чата', 'Chat market');
+        tape.classList.toggle('on', quotes.length > 0 && (s.enabled || SH.preview));
+        // Two copies of the list make the loop seamless.
+        belt.replaceChildren(...quotes.map(item), ...quotes.map(item));
+        loopWidth = belt.scrollWidth / 2;
+        const t = msg.lastTrade;
+        if (t && t.at !== lastTradeAt && Date.now() - t.at < 15000) {
+          lastTradeAt = t.at;
+          tradeEl.textContent = t.side === 'buy'
+            ? SH.tr(lang, `🟢 ${t.user} купил(а) ${t.qty} $${t.stock}`, `🟢 ${t.user} bought ${t.qty} $${t.stock}`)
+            : SH.tr(lang, `🔴 ${t.user} продал(а) ${t.qty} $${t.stock}`, `🔴 ${t.user} sold ${t.qty} $${t.stock}`);
+          tradeEl.classList.add('show');
+          clearTimeout(tradeTimer);
+          tradeTimer = setTimeout(() => tradeEl.classList.remove('show'), 5000);
+        }
+      });
+    </script>
+  </body>
+</html>

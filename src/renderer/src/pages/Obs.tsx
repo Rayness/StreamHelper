@@ -96,6 +96,9 @@ const STEP_TYPES: ActionStep['type'][] = [
   'bannerToggle',
   'emoteBurst',
   'streamerbotAction',
+  'clipMoment',
+  'shieldToggle',
+  'curseVote',
   'wait',
 ];
 

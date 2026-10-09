@@ -20,6 +20,14 @@ import { normalizeChatMessage, normalizeStreamEvent } from './normalize';
 
 type Account = 'broadcaster' | 'bot';
 
+export interface ChatModes {
+  followerMode: boolean;
+  followerMinutes: number;
+  slowMode: boolean;
+  slowSec: number;
+  emoteMode: boolean;
+}
+
 const STREAM_POLL_MS = 60_000;
 const VALIDATE_MS = 60 * 60_000;
 
@@ -128,6 +136,7 @@ export class TwitchService implements ChatPlatform {
     if (token.userId !== v.userId || token.login !== v.login || JSON.stringify(token.scopes) !== JSON.stringify(v.scopes)) {
       this.ctx.secrets.set(acc === 'broadcaster' ? 'twitch' : 'twitchBot', { ...token, userId: v.userId, login: v.login, scopes: v.scopes });
     }
+    if (acc === 'broadcaster') this.ctx.state.patch('twitch', { missingScopes: BROADCASTER_SCOPES.filter((scope) => !v!.scopes.includes(scope)) });
     const users = await this.helix[acc].get('/users', { id: v.userId });
     const u = users.data?.[0];
     return { userId: v.userId, login: v.login, displayName: u?.display_name ?? v.login, avatarUrl: u?.profile_image_url };
@@ -406,6 +415,72 @@ export class TwitchService implements ChatPlatform {
     if (g) return { id: g.id, name: g.name };
     const found = await this.searchCategories(name);
     return found[0] ?? null;
+  }
+
+  // ---------- clips, markers, chat settings ----------
+
+  /** A clip of the last ~30 seconds. Twitch needs a few seconds to process it before the link works. */
+  async createClip(): Promise<{ id: string; url: string; editUrl: string }> {
+    const id = this.requireBroadcaster();
+    const res = await this.helix.broadcaster.post('/clips', undefined, { broadcaster_id: id });
+    const clip = res?.data?.[0];
+    if (!clip?.id) throw new Error('Twitch did not create the clip');
+    return { id: clip.id, url: `https://clips.twitch.tv/${clip.id}`, editUrl: clip.edit_url ?? '' };
+  }
+
+  /** A stream marker for the VOD. Returns its position in seconds. */
+  async createMarker(description: string): Promise<number | null> {
+    const id = this.requireBroadcaster();
+    const res = await this.helix.broadcaster.post('/streams/markers', { user_id: id, description: description.slice(0, 140) });
+    const seconds = res?.data?.[0]?.position_seconds;
+    return typeof seconds === 'number' ? seconds : null;
+  }
+
+  async getChatSettings(): Promise<ChatModes> {
+    const id = this.requireBroadcaster();
+    const res = await this.helix.broadcaster.get('/chat/settings', { broadcaster_id: id, moderator_id: id });
+    const c = res?.data?.[0] ?? {};
+    return {
+      followerMode: !!c.follower_mode,
+      followerMinutes: c.follower_mode_duration ?? 0,
+      slowMode: !!c.slow_mode,
+      slowSec: c.slow_mode_wait_time ?? 0,
+      emoteMode: !!c.emote_mode,
+    };
+  }
+
+  async updateChatSettings(modes: Partial<ChatModes>): Promise<void> {
+    const id = this.requireBroadcaster();
+    const body: Record<string, unknown> = {};
+    if (modes.followerMode !== undefined) body.follower_mode = modes.followerMode;
+    if (modes.followerMode && modes.followerMinutes !== undefined) body.follower_mode_duration = Math.max(0, Math.min(129_600, Math.round(modes.followerMinutes)));
+    if (modes.slowMode !== undefined) body.slow_mode = modes.slowMode;
+    if (modes.slowMode && modes.slowSec !== undefined) body.slow_mode_wait_time = Math.max(3, Math.min(120, Math.round(modes.slowSec)));
+    if (modes.emoteMode !== undefined) body.emote_mode = modes.emoteMode;
+    if (!Object.keys(body).length) return;
+    await this.helix.broadcaster.patch('/chat/settings', body, { broadcaster_id: id, moderator_id: id });
+  }
+
+  async setShieldMode(active: boolean): Promise<void> {
+    const id = this.requireBroadcaster();
+    await this.helix.broadcaster.request('PUT', '/moderation/shield_mode', { body: { is_active: active }, query: { broadcaster_id: id, moderator_id: id } });
+  }
+
+  /** Display name of a channel by login, null when there is no such channel. */
+  async channelName(login: string): Promise<string | null> {
+    this.requireBroadcaster();
+    const res = await this.helix.broadcaster.get('/users', { login: login.toLowerCase() });
+    return res?.data?.[0]?.display_name ?? null;
+  }
+
+  /** Account creation dates, for spotting freshly made raid accounts. */
+  async getAccountAges(userIds: string[]): Promise<Map<string, number>> {
+    const out = new Map<string, number>();
+    for (let i = 0; i < userIds.length; i += 100) {
+      const res = await this.helix.broadcaster.get('/users', { id: userIds.slice(i, i + 100) });
+      for (const u of res?.data ?? []) if (u.created_at) out.set(u.id, Date.parse(u.created_at));
+    }
+    return out;
   }
 
   // ---------- ChatPlatform ----------

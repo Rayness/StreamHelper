@@ -17,7 +17,7 @@ interface Command {
 }
 
 /** Owners of operational shortcuts. Hidden modules cannot be invoked from search. */
-const OWNERS = { song:'song', wheel:'wheel', poll:'poll', give:'giveaway', quiz:'quiz', queue:'queue', guess:'guess', boss:'boss', 'counter+':'counter', 'counter-':'counter', emotes:'emotes', banner:'banner', act:'actions', alerts:'alerts', test:'alerts', scene:'obs' } as const;
+const OWNERS = { clip:'clipper', shield:'shield', curse:'curse', duel:'duel', melody:'melody', report:'report', song:'song', wheel:'wheel', poll:'poll', give:'giveaway', quiz:'quiz', queue:'queue', guess:'guess', boss:'boss', 'counter+':'counter', 'counter-':'counter', emotes:'emotes', banner:'banner', act:'actions', alerts:'alerts', test:'alerts', scene:'obs' } as const;
 function available(c: Command): boolean {
   const cards = normalizeWorkspaceCards(getData().settings?.workspace.cards);
   if (c.id.startsWith('module:')) return cards.some((id) => c.id === `module:${id}`);
@@ -84,6 +84,18 @@ function buildCommands(t: TFn): Command[] {
   const listen = settings.songRequests.listen;
   out.push({ id: 'song:listen', label: listen === 'viewers' ? t('song.listen.cmdOn') : t('song.listen.cmdOff'), group: music, icon: 'headphones', keywords: 'music headphones наушники слышать звук монитор',
     run: () => saveSettings('songRequests', { ...getData().settings!.songRequests, listen: listen === 'viewers' ? 'both' : 'viewers' }) });
+
+  const tools = t('workspace.group.automation');
+  out.push({ id: 'clip:now', label: `${t('tool.clipper')}: ${t('clipper.clipNow')}`, group: tools, icon: 'scissors', keywords: 'clip moment клип момент', run: () => void call('clipper:clip') });
+  out.push(state.shield.status === 'active'
+    ? { id: 'shield:release', label: t('shield.release'), group: tools, icon: 'shield', keywords: 'raid shield рейд щит защита', run: () => void call('shield:release') }
+    : { id: 'shield:activate', label: `${t('tool.shield')}: ${t('shield.panic')}`, group: tools, icon: 'shield', keywords: 'raid shield рейд щит защита', run: () => void call('shield:activate') });
+  out.push({ id: 'report:generate', label: `${t('tool.report')}: ${t('report.generate')}`, group: tools, icon: 'report', keywords: 'report recap итоги отчёт', run: () => void call('report:generate') });
+  if (state.curse.status === 'idle') out.push({ id: 'curse:vote', label: t('curse.vote'), group: fun, icon: 'skull', keywords: 'curse проклятие', run: () => void call('curse:vote') });
+  if (state.curse.status === 'active') out.push({ id: 'curse:lift', label: t('curse.lift'), group: fun, icon: 'skull', keywords: 'curse проклятие', run: () => void call('curse:lift') });
+  if (state.duel.status === 'idle' || state.duel.status === 'done') out.push({ id: 'duel:start', label: t('duel.start'), group: fun, icon: 'swords', keywords: 'duel music дуэль музыка', run: () => void call('duel:start') });
+  if (state.melody.status === 'playing' || state.melody.status === 'reveal') out.push({ id: 'melody:skip', label: `${t('ov.melody')}: ${t('melody.next')}`, group: fun, icon: 'disc', keywords: 'melody мелодия', run: () => void call('melody:skip') });
+  else out.push({ id: 'melody:start', label: `${t('ov.melody')}: ${t('melody.start')}`, group: fun, icon: 'disc', keywords: 'melody guess song угадай мелодию', run: () => void call('melody:start') });
 
   const quick = t('dash.quick');
   for (const a of settings.actions) out.push({ id: `act:${a.id}`, label: a.label, group: quick, icon: 'zap', keywords: a.hotkey, run: () => void call('actions:run', a.id) });

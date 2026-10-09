@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
+    <title>StreamHelper — Guess the melody</title>
+    <style>
+      :root { --accent: #37d399; }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; width: 100%; height: 100%; background: transparent; overflow: hidden; color: #fff; }
+      /* The YouTube player must stay "visible" for playback: it hides behind the card. */
+      #playerHost { position: absolute; left: 20px; top: 20px; width: 320px; height: 180px; opacity: 0.01; pointer-events: none; }
+      #playerHost iframe { width: 100%; height: 100%; border: 0; }
+      #melody { position: absolute; inset: 12px; display: grid; grid-template-columns: 210px 1fr; gap: 24px; align-items: center; padding: 24px 28px; border-radius: 22px; background: radial-gradient(90% 120% at 0% 50%, color-mix(in srgb, var(--accent) 26%, transparent), transparent 70%), rgba(10, 12, 18, 0.92); box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45); opacity: 0; transform: translateY(16px); transition: opacity 0.45s, transform 0.6s cubic-bezier(0.22, 1, 0.36, 1); }
+      #melody.on { opacity: 1; transform: none; }
+      .disc { position: relative; width: 200px; height: 200px; border-radius: 50%; background: repeating-radial-gradient(circle, #15161c 0 3px, #22242c 3px 5px); box-shadow: 0 10px 34px rgba(0,0,0,.6), inset 0 0 0 2px #ffffff10; background-size: cover; background-position: center; }
+      .disc::after { content: ''; position: absolute; inset: 72px; border-radius: 50%; background: var(--accent); box-shadow: inset 0 0 0 10px #0008; }
+      #melody.spinning .disc { animation: spin 2.2s linear infinite; }
+      #melody.reveal .disc { border-radius: 18px; width: 200px; height: 150px; animation: none; }
+      #melody.reveal .disc::after { display: none; }
+      .eyebrow { display: flex; justify-content: space-between; gap: 12px; color: var(--accent); font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; font-size: 15px; }
+      .hint { margin: 14px 0 8px; font: 800 38px/1.15 ui-monospace, "Cascadia Mono", Consolas, monospace; letter-spacing: 0.12em; word-break: break-word; }
+      #melody.reveal .hint { font-family: inherit; letter-spacing: 0; color: var(--accent); }
+      .title { font-size: 20px; font-weight: 700; opacity: 0.9; min-height: 1.4em; }
+      .bar { height: 10px; margin-top: 16px; border-radius: 5px; background: rgba(255,255,255,.1); overflow: hidden; }
+      .bar i { display: block; height: 100%; width: 100%; background: var(--accent); transform-origin: left; }
+      .board { display: none; list-style: none; margin: 10px 0 0; padding: 0; font-size: 22px; }
+      .board li { display: flex; justify-content: space-between; padding: 6px 0; border-top: 1px solid #ffffff18; font-weight: 700; }
+      #melody.finished .board { display: block; }
+      #melody.finished .hint, #melody.finished .bar { display: none; }
+      .winner { margin-top: 8px; font-size: 22px; font-weight: 800; min-height: 1.3em; }
+      /* Only in a normal browser tab: OBS plays sound without a click. */
+      #unlock { position: fixed; inset: 0; z-index: 10; display: none; place-items: center; background: rgba(0, 0, 0, 0.55); color: #fff; font: 800 24px/1.3 system-ui, sans-serif; border: 0; cursor: pointer; }
+      #unlock.show { display: grid; }
+      @keyframes spin { to { transform: rotate(360deg); } }
+      body.reduced #melody.spinning .disc { animation: none; }
+    </style>
+  </head>
+  <body>
+    <div id="playerHost"></div>
+    <button id="unlock" type="button"></button>
+    <div id="melody">
+      <div class="disc"></div>
+      <div>
+        <div class="eyebrow"><span class="label"></span><span class="round"></span></div>
+        <div class="hint"></div>
+        <div class="title"></div>
+        <div class="winner"></div>
+        <ol class="board"></ol>
+        <div class="bar"><i></i></div>
+      </div>
+    </div>
+    <script src="/overlay/assets/common.js"></script>
+    <script>
+      const root = document.getElementById('melody');
+      if (SH.reducedMotion) document.body.classList.add('reduced');
+      let m = null, style = null, lang = 'ru', skew = 0, apiReady = false, player = null, playerVideo = '', lastPlay = '', stopTimer = null, pending = null;
+      window.onYouTubeIframeAPIReady = () => { apiReady = true; if (pending) play(pending); };
+      if (!SH.preview) { const s = document.createElement('script'); s.src = 'https://www.youtube.com/iframe_api'; document.head.appendChild(s); }
+
+      function report(videoId, code) {
+        fetch('/player/error', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kind: 'melody', videoId, code }) }).catch(() => undefined);
+      }
+      const unlock = document.getElementById('unlock');
+      let checkTimer = null, reportedBlock = '';
+      unlock.addEventListener('click', () => {
+        unlock.classList.remove('show');
+        try { player.unMute(); player.setVolume(Math.max(0, Math.min(100, style.volume))); player.playVideo(); } catch (_) {}
+      });
+      /** A browser tab may refuse sound without a click: offer the click and tell the app. */
+      function checkSound(state) {
+        clearTimeout(checkTimer);
+        checkTimer = setTimeout(() => {
+          try {
+            const st = player.getPlayerState();
+            if (!player.isMuted() && (st === YT.PlayerState.PLAYING || st === YT.PlayerState.BUFFERING)) return;
+            unlock.textContent = SH.tr(lang, '🔊 Нажмите, чтобы включить звук (в OBS этого не нужно)', '🔊 Click to enable sound (not needed in OBS)');
+            unlock.classList.add('show');
+            if (reportedBlock !== state.playId) { reportedBlock = state.playId; report(state.videoId, 0); }
+          } catch (_) {}
+        }, 2000);
+      }
+      function stopSnippet() { clearTimeout(checkTimer); clearTimeout(stopTimer); stopTimer = null; try { player && player.pauseVideo(); } catch (_) {} }
+      function destroy() { stopSnippet(); try { player && player.destroy(); } catch (_) {} player = null; playerVideo = ''; document.getElementById('playerHost').replaceChildren(); }
+
+      /** Play `snippetSec` seconds from `startFraction` of the video. Muted until it is at the right spot. */
+      function play(state) {
+        if (!apiReady) { pending = state; return; }
+        pending = null;
+        const go = () => {
+          const len = player.getDuration() || 180;
+          player.seekTo(Math.max(0, Math.floor(len * state.startFraction)), true);
+          player.unMute();
+          player.setVolume(Math.max(0, Math.min(100, style.volume)));
+          player.playVideo();
+          clearTimeout(stopTimer);
+          stopTimer = setTimeout(stopSnippet, state.snippetSec * 1000);
+          checkSound(state);
+        };
+        if (player && playerVideo === state.videoId) { go(); return; }
+        destroy();
+        playerVideo = state.videoId;
+        const host = document.createElement('div');
+        document.getElementById('playerHost').appendChild(host);
+        let started = false;
+        player = new YT.Player(host, { width: 320, height: 180, videoId: state.videoId, playerVars: { autoplay: 1, controls: 0, playsinline: 1, origin: location.origin }, events: {
+          onReady: (e) => { e.target.mute(); e.target.playVideo(); },
+          onStateChange: (e) => { if (!started && e.data === YT.PlayerState.PLAYING) { started = true; go(); } },
+          onError: (e) => { report(state.videoId, e.data); destroy(); },
+        } });
+      }
+
+      function tick() {
+        if (!m) return;
+        const i = root.querySelector('.bar i');
+        if (m.status === 'playing' && m.endsAt) {
+          const total = style.roundSec * 1000;
+          i.style.transform = `scaleX(${Math.max(0, Math.min(1, (m.endsAt - (Date.now() + skew)) / total))})`;
+        } else i.style.transform = 'scaleX(0)';
+      }
+
+      SH.connect('melody', (msg) => {
+        if (msg.type !== 'melody') return;
+        m = msg.melody; style = msg.style; lang = msg.lang; skew = msg.now - Date.now();
+        if (SH.preview && m.status === 'idle') {
+          m = { status: 'playing', round: 2, rounds: 5, endsAt: Date.now() + 26000, playId: null, videoId: null, startFraction: 0.3, snippetSec: 8, hint: 'B_______ R_______', answer: null, winner: null, leaderboard: [] };
+          skew = 0;
+        }
+        SH.useFont(root, style.fontFamily);
+        root.style.setProperty('--accent', style.accentColor);
+        root.classList.toggle('on', m.status !== 'idle');
+        root.classList.toggle('spinning', m.status === 'playing');
+        root.classList.toggle('reveal', m.status === 'reveal');
+        root.classList.toggle('finished', m.status === 'finished');
+        root.querySelector('.label').textContent = m.status === 'finished' ? SH.tr(lang, 'Итоги', 'Results') : SH.tr(lang, '🎶 Угадай мелодию', '🎶 Guess the melody');
+        root.querySelector('.round').textContent = m.rounds && m.status !== 'finished' ? `${m.round} / ${m.rounds}` : '';
+        root.querySelector('.hint').textContent = m.hint;
+        root.querySelector('.title').textContent = m.status === 'reveal' && m.answer ? m.answer.title : m.status === 'playing' ? SH.tr(lang, 'Пишите название песни в чат', 'Type the song name in chat') : '';
+        root.querySelector('.winner').textContent = m.status === 'reveal' ? (m.winner ? SH.tr(lang, `✅ ${m.winner} угадал(а)!`, `✅ ${m.winner} got it!`) : SH.tr(lang, '⏱ Никто не угадал', '⏱ Nobody got it')) : '';
+        root.querySelector('.disc').style.backgroundImage = m.status === 'reveal' && m.answer ? `url(https://i.ytimg.com/vi/${encodeURIComponent(m.answer.videoId)}/hqdefault.jpg)` : '';
+        const board = root.querySelector('.board');
+        board.replaceChildren(...m.leaderboard.slice(0, 5).map((r, i) => { const li = SH.el('li'); li.append(SH.el('span', '', `${['🥇', '🥈', '🥉'][i] || i + 1 + '.'} ${r.userName}`), SH.el('b', '', String(r.points))); return li; }));
+        if (m.status === 'finished' && !m.leaderboard.length) board.replaceChildren(SH.el('li', '', SH.tr(lang, 'Мелодии победили 🎵', 'The melodies won 🎵')));
+        if (!SH.preview) {
+          if (m.status === 'playing' && m.videoId && m.playId && m.playId !== lastPlay) { lastPlay = m.playId; play(m); }
+          if (m.status !== 'playing') stopSnippet();
+          if (m.status === 'idle' || m.status === 'finished') { destroy(); lastPlay = ''; }
+        }
+        tick();
+      });
+      setInterval(tick, 200);
+    </script>
+  </body>
+</html>
