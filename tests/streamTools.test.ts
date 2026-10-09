@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import { existsSync, mkdtempSync } from 'node:fs';
+import { existsSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -16,11 +16,12 @@ import { DuelService, parseDuelVote } from '../src/main/features/duel';
 import { Ducker, DuckingService } from '../src/main/features/ducking';
 import { MarketService, nextPrice, parseQty, priceAfterTrade } from '../src/main/features/market';
 import { levenshtein, maskAnswer, melodyMatch, MelodyService, splitTitle } from '../src/main/features/melody';
-import { ircFragments, parseIrcLine, PortalService, stripLinks, trimFragments } from '../src/main/features/portal';
+import { ircFragments, parseIrcLine, partnerLogin, PortalService, stripLinks, trimFragments } from '../src/main/features/portal';
 import { ReportService } from '../src/main/features/report';
 import { reportHtml } from '../src/main/features/reportCard';
 import { RaidDetector, ShieldService, spamKey } from '../src/main/features/shield';
 import { isMusicOverlay } from '../src/main/obs/obs';
+import { ALL_OVERLAY_KINDS, LEGACY_OVERLAY_KINDS } from '@shared/profiles';
 
 let seq = 0;
 function msg(text: string, userId = 'u1', at = Date.now(), roles: Partial<ChatRoles> = {}): ChatMessage {
@@ -428,6 +429,8 @@ describe('portal', () => {
     expect(f).toEqual([{ type: 'text', text: '😀 hi ' }, { type: 'emote', text: 'Kappa', url: 'https://static-cdn.jtvnw.net/emoticons/v2/25/default/dark/2.0' }]);
     expect(trimFragments([{ type: 'text', text: '!portal hi ' }, { type: 'emote', text: 'Kappa', url: 'u' }], 7)).toEqual([{ type: 'text', text: 'hi ' }, { type: 'emote', text: 'Kappa', url: 'u' }]);
     expect(stripLinks('see https://evil.example/x now')).toBe('see 🔗 now');
+    expect(partnerLogin('https://www.twitch.tv/Rayness/videos')).toBe('rayness');
+    expect(partnerLogin('@Friend')).toBe('friend');
   });
 
   it('shows partner messages sent with the command and drops the rest', async () => {
@@ -573,6 +576,47 @@ describe('raid shield', () => {
     expect(deps.deleteMessage).toHaveBeenCalledTimes(5);
     expect(state.current.shield.suspects.map((s) => s.userId)).not.toContain('mod');
     shield.dispose();
+  });
+});
+
+describe('new overlays in existing profiles', () => {
+  it('switches new overlay kinds on once, keeping the ones the streamer turned off', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'sh-profiles-'));
+    const file = join(dir, 'settings.json');
+    // A 0.10.x profile: knows only the old kinds and has "wheel" turned off on purpose.
+    const legacy = ['chat', 'alerts', 'goal', 'timer', 'events', 'rewards', 'collab', 'music', 'song', 'banner', 'ad', 'label', 'emotes', 'poll', 'giveaway', 'kawaki', 'quiz', 'boss', 'live', 'spotlight', 'queue', 'guess', 'counter', 'hype', 'leaders'];
+    writeFileSync(file, JSON.stringify({ language: 'ru', activeProfileId: 'p', profiles: [{ id: 'p', name: 'Основной', config: {}, overlays: legacy }] }));
+    const first = new SettingsStore(file, new EventBus(), 'ru');
+    const overlays = first.get('profiles')[0].overlays;
+    for (const kind of ['curse', 'duel', 'melody', 'stocks', 'portal']) expect(overlays).toContain(kind);
+    expect(overlays).not.toContain('wheel');
+    // Turning a new overlay off survives the next start.
+    first.setProfileOverlay('p', 'portal', false);
+    first.flush();
+    const second = new SettingsStore(file, new EventBus(), 'ru');
+    expect(second.get('profiles')[0].overlays).not.toContain('portal');
+    expect(second.get('profiles')[0].overlays).toContain('melody');
+    expect(second.get('profiles')[0].overlays).toContain('donations');
+  });
+
+  it('fixes 0.11–0.12 profiles that kept the stream tools overlays hidden', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'sh-profiles-'));
+    const file = join(dir, 'settings.json');
+    // Saved by 0.12: the donation board exists and its overlays were switched on, the pack's were not;
+    // the streamer turned "custom" off afterwards.
+    const saved = [...LEGACY_OVERLAY_KINDS, 'donations'];
+    writeFileSync(file, JSON.stringify({ language: 'ru', donationsOverlay: {}, activeProfileId: 'p', profiles: [{ id: 'p', name: 'Основной', config: {}, overlays: saved }] }));
+    const store = new SettingsStore(file, new EventBus(), 'ru');
+    const overlays = store.get('profiles')[0].overlays;
+    expect(overlays).toContain('portal');
+    expect(overlays).toContain('melody');
+    expect(overlays).not.toContain('custom');
+  });
+
+  it('starts new installs with every overlay', () => {
+    const store = new SettingsStore(join(mkdtempSync(join(tmpdir(), 'sh-profiles-')), 'settings.json'), new EventBus(), 'ru');
+    expect([...store.get('profiles')[0].overlays].sort()).toEqual([...ALL_OVERLAY_KINDS].sort());
+    expect(store.get('overlayKindsSeen')).toEqual([...ALL_OVERLAY_KINDS]);
   });
 });
 

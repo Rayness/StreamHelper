@@ -95,8 +95,8 @@
           stage.style.setProperty('--accent', cfg.accentColor);
           stage.classList.toggle('right', cfg.side === 'right');
           stage.classList.toggle('on', !!(cfg.enabled && cfg.partner) || SH.preview);
-          stage.querySelector('.chan').textContent = msg.channel || cfg.partner || SH.tr(lang, 'канал-партнёр', 'partner channel');
-          if (SH.preview && !live.size) setTimeout(() => show({ id: 'preview', direction: 'in', userName: 'Гость_портала', color: '#3fa7ff', text: '', fragments: [{ type: 'text', text: SH.tr(lang, 'Привет из соседнего чата! 👋', 'Hello from the other chat! 👋') }], channel: cfg.partner || 'partner', at: Date.now() }), 400);
+          stage.querySelector('.chan').textContent = msg.channel || SH.tr(lang, 'канал-партнёр', 'partner channel');
+          if (SH.preview && !live.size) setTimeout(() => show({ id: 'preview', direction: 'in', userName: 'Гость_портала', color: '#3fa7ff', text: '', fragments: [{ type: 'text', text: SH.tr(lang, 'Привет из соседнего чата! 👋', 'Hello from the other chat! 👋') }], channel: msg.channel || 'partner', at: Date.now() }), 400);
         }
         if (msg.type === 'portal') show(msg.message);
         if (msg.type === 'portalDelete') remove(msg.id);

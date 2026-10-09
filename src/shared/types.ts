@@ -1602,6 +1602,8 @@ export interface Settings {
   appearance: AppearanceSettings;
   profiles: StreamProfile[];
   activeProfileId: string;
+  /** Overlay kinds the profiles already know about; newer kinds get enabled in every profile once. */
+  overlayKindsSeen?: OverlayKind[];
   workspace: { cards: WorkspaceCard[]; monitor?: MonitorLayout };
 }
 

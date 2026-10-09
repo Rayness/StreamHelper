@@ -90,6 +90,11 @@ export function parsePortalCommand(text: string, prefix: string, command: string
   return null;
 }
 
+/** "https://www.twitch.tv/Name/", "@Name" or "name" → "name". */
+export function partnerLogin(raw: string): string {
+  return raw.trim().replace(/^@/, '').replace(/^(https?:\/\/)?(www\.|m\.)?twitch\.tv\//i, '').replace(/[/?#].*$/, '').toLowerCase();
+}
+
 /** Links never travel through the portal. */
 export function stripLinks(text: string): string {
   return text.replace(/\bhttps?:\/\/\S+|\bwww\.\S+/gi, '🔗').replace(/\s+/g, ' ').trim();
@@ -133,7 +138,7 @@ export class PortalService {
   }
 
   configMessage(): OverlayMessage {
-    return { type: 'portalConfig', config: this.cfg, channel: this.ctx.state.current.portal.channel || this.cfg.partner, lang: this.ctx.settings.get('language') };
+    return { type: 'portalConfig', config: this.cfg, channel: this.ctx.state.current.portal.channel || partnerLogin(this.cfg.partner), lang: this.ctx.settings.get('language') };
   }
 
   start(): void {
@@ -141,7 +146,7 @@ export class PortalService {
   }
 
   private sync(): void {
-    const partner = this.cfg.partner.trim().replace(/^@/, '').replace(/^https?:\/\/(www\.)?twitch\.tv\//i, '').replace(/\/.*$/, '').toLowerCase();
+    const partner = partnerLogin(this.cfg.partner);
     const want = this.cfg.enabled && LOGIN.test(partner) ? partner : '';
     if (want === this.channel && (this.ws || this.retry || !want)) return;
     this.close();
@@ -278,7 +283,7 @@ export class PortalService {
   /** A sample message from the other side, to set up the overlay. */
   test(): void {
     const ru = this.ru;
-    this.emit({ id: `test:${Date.now()}`, direction: 'in', userName: ru ? 'Гость_портала' : 'Portal_guest', color: '#3fa7ff', text: ru ? 'Привет из соседнего чата! 👋' : 'Hello from the other chat! 👋', fragments: [{ type: 'text', text: ru ? 'Привет из соседнего чата! 👋' : 'Hello from the other chat! 👋' }], channel: this.channel || this.cfg.partner || 'partner', at: Date.now() }, false);
+    this.emit({ id: `test:${Date.now()}`, direction: 'in', userName: ru ? 'Гость_портала' : 'Portal_guest', color: '#3fa7ff', text: ru ? 'Привет из соседнего чата! 👋' : 'Hello from the other chat! 👋', fragments: [{ type: 'text', text: ru ? 'Привет из соседнего чата! 👋' : 'Hello from the other chat! 👋' }], channel: this.channel || partnerLogin(this.cfg.partner) || 'partner', at: Date.now() }, false);
   }
 
   private close(): void {
