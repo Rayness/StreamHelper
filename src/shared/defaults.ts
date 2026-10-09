@@ -537,7 +537,7 @@ export function defaultSettings(lang: Language): Settings {
     rewardsOverlay: { maxItems: 5, showInput: true, accentColor: '#9b6bff' },
     collabOverlay: { title: lang === 'ru' ? 'Коллаборация' : 'Collaboration', guests: [], showRaids: true, accentColor: '#9b6bff' },
     musicOverlay: { source: 'auto', style: 'card', showArtwork: true, showAlbum: true, showProgress: true, hideWhenPaused: true, accentColor: '#1db954', layout: 'horizontal', coverSize: 130, fontSize: 25, backgroundOpacity: 90, showSource: true },
-    songRequests: { enabled: false, rewardTitle: '', rewardId: '', replyInChat: true, refundRejected: true, listen: 'both', chatEnabled: true, chatCommand: 'sr', chatPermission: 'everyone', chatCooldownSec: 10, minDonation: 100, autoPlay: true, pauseWindowsMusic: true, resumeWindowsMusic: true, maxQueue: 30, videoLayout: 'full', videoPosition: 'left', videoWidth: 45, showRequester: true, showTitle: true, showQueueCount: true, showControls: true, volume: 100, accentColor: '#9146ff', backgroundOpacity: 88 },
+    songRequests: { enabled: false, rewardTitle: '', rewardId: '', replyInChat: true, refundRejected: true, listen: 'viewers', chatEnabled: true, chatCommand: 'sr', chatPermission: 'everyone', chatCooldownSec: 10, minDonation: 100, autoPlay: true, pauseWindowsMusic: true, resumeWindowsMusic: true, maxQueue: 30, videoLayout: 'full', videoPosition: 'left', videoWidth: 45, showRequester: true, showTitle: true, showQueueCount: true, showControls: true, volume: 100, accentColor: '#9146ff', backgroundOpacity: 88 },
     songQueue: [],
     goals: [defaultGoal(lang)],
     timers: [defaultTimer(lang)],

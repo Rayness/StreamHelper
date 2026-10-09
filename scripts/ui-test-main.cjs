@@ -150,9 +150,9 @@ app.whenReady().then(async () => {
   await click('Добавить');
   await until(`document.querySelector('[data-editor-module="song"]').textContent.includes('Тестовый трек')`,'manual song did not enter queue');
   // Who hears the music + picking tracks from the queue.
-  await js(`document.querySelector('[data-listen="viewers"]').click()`); await delay(250);
-  assert.equal(fixture.settings.get('songRequests').listen,'viewers','listen choice not saved');
-  assert.equal(await js(`document.querySelector('[data-listen="viewers"]').getAttribute('aria-checked')`),'true');
+  await js(`document.querySelector('[data-listen="both"]').click()`); await delay(250);
+  assert.equal(fixture.settings.get('songRequests').listen,'both','listen choice not saved');
+  assert.equal(await js(`document.querySelector('[data-listen="both"]').getAttribute('aria-checked')`),'true');
   await fill('[data-editor-module="song"] input[placeholder*=youtube]','https://youtu.be/dQw4w9WgXcQ'); await click('Добавить');
   await until(`document.querySelectorAll('[data-editor-module="song"] [data-song]').length===2`,'second song missing');
   const firstSong = fixture.settings.get('songQueue')[0].id, secondSong = fixture.settings.get('songQueue')[1].id;

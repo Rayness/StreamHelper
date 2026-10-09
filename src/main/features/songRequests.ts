@@ -130,20 +130,27 @@ export class SongRequestService {
     void this.reply(text, replyTo).catch(() => undefined); // chat may be offline; the request itself is unaffected
   }
 
-  private settle(request: Pick<SongRequest, 'redemption'> | null | undefined, status: 'FULFILLED' | 'CANCELED'): void {
+  /** Resolves `true` only when Twitch accepted the new status. */
+  private async settle(request: Pick<SongRequest, 'redemption'> | null | undefined, status: 'FULFILLED' | 'CANCELED'): Promise<boolean> {
     const r = request?.redemption;
-    if (!r || !this.options.rewards) return;
-    if (status === 'CANCELED' && !this.ctx.settings.get('songRequests').refundRejected) return;
-    // Fails for rewards not created by this app; that is expected and harmless.
-    void this.options.rewards.settle(r.rewardId, r.id, status).catch(() => undefined);
+    if (!r || !this.options.rewards) return false;
+    if (status === 'CANCELED' && !this.ctx.settings.get('songRequests').refundRejected) return false;
+    try {
+      await this.options.rewards.settle(r.rewardId, r.id, status);
+      return true;
+    } catch {
+      // Fails for rewards not created by this app; that is expected and harmless.
+      return false;
+    }
   }
 
   private reject(userName: string, code: Rejection, redemption?: SongRequest['redemption'], replyTo?: string): string {
     const reason = this.reason(code);
     this.ctx.state.patch('songRequests', { lastRejected: { userName, reason, at: Date.now() } });
-    this.settle({ redemption }, 'CANCELED');
-    const refunded = !!redemption && !!this.options.rewards && this.ctx.settings.get('songRequests').refundRejected;
-    this.say(`@${userName}, ${reason}${refunded ? (this.ru ? ' Баллы возвращены.' : ' Points refunded.') : ''}`, replyTo);
+    // Promise the refund in chat only after Twitch confirmed it: rewards made outside this app can't be refunded.
+    void this.settle({ redemption }, 'CANCELED').then((refunded) => {
+      this.say(`@${userName}, ${reason}${refunded ? (this.ru ? ' Баллы возвращены.' : ' Points refunded.') : ''}`, replyTo);
+    });
     return reason;
   }
 
@@ -245,7 +252,7 @@ export class SongRequestService {
 
   async skip(): Promise<void> {
     if (!this.current) return;
-    this.settle(this.current, 'FULFILLED');
+    void this.settle(this.current, 'FULFILLED');
     await this.dropCurrent();
   }
 
@@ -295,7 +302,7 @@ export class SongRequestService {
       return;
     }
     // Removed by the streamer before it played: the viewer gets the points back.
-    this.settle(this.ctx.settings.get('songQueue').find((item) => item.id === id), 'CANCELED');
+    void this.settle(this.ctx.settings.get('songQueue').find((item) => item.id === id), 'CANCELED');
     this.ctx.settings.set('songQueue', this.ctx.settings.get('songQueue').filter((item) => item.id !== id));
   }
 
@@ -324,7 +331,7 @@ export class SongRequestService {
       await this.resumeMusic();
       return true;
     }
-    this.settle(this.current, 'FULFILLED');
+    void this.settle(this.current, 'FULFILLED');
     await this.dropCurrent();
     return true;
   }

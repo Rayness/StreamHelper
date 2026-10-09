@@ -139,7 +139,7 @@ export class ObsService {
    */
   async applySongAudio(): Promise<void> {
     if (!this.connected) { this.ctx.state.patch('songRequests', { obsAudio: null }); return; }
-    const monitorType = MONITOR_TYPE[this.ctx.settings.get('songRequests')?.listen as keyof typeof MONITOR_TYPE] ?? MONITOR_TYPE.both;
+    const monitorType = MONITOR_TYPE[this.ctx.settings.get('songRequests')?.listen as keyof typeof MONITOR_TYPE] ?? MONITOR_TYPE.viewers;
     const generation = this.generation;
     let sources = 0;
     try {

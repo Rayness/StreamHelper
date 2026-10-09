@@ -171,6 +171,17 @@ describe('song requests', () => {
     expect(ctx.state.current.songRequests.lastRejected).toMatchObject({ userName: 'Ann' });
   });
 
+  it('does not promise a refund Twitch refused (reward created outside the app)', async () => {
+    const { ctx, reply, lookup, settle } = setup();
+    ctx.settings.set('songRequests', { ...ctx.settings.get('songRequests'), rewardId: 'song-reward' });
+    settle.mockRejectedValueOnce(Object.assign(new Error('Forbidden'), { status: 403 }));
+    lookup.mockResolvedValueOnce({ ok: false, reason: 'embedBlocked' });
+    ctx.bus.emit('event', { id: 'r1', source: 'twitch', timestamp: 1, userName: 'Ann', type: 'redemption', rewardId: 'song-reward', rewardTitle: 'Song', cost: 500, input: `https://youtu.be/${first}` });
+    await vi.waitFor(() => expect(reply).toHaveBeenCalledTimes(1));
+    expect(reply.mock.calls[0][0]).toMatch(/^@Ann, .*outside YouTube/s);
+    expect(reply.mock.calls[0][0]).not.toMatch(/refunded/i);
+  });
+
   it('refunds a redemption without a link and confirms a queued one with its position', async () => {
     const { ctx, reply, settle } = setup();
     ctx.settings.set('songRequests', { ...ctx.settings.get('songRequests'), rewardId: 'song-reward' });
