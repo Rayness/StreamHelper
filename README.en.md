@@ -2,9 +2,11 @@
 
 [Русский](README.md) · [English](README.en.md)
 
-StreamHelper is a Windows desktop app for managing a stream, chat, and OBS browser sources from one place. Current version: **0.10.1**. The interface supports Russian and English.
+StreamHelper is a Windows desktop app for managing a stream, chat, and OBS browser sources from one place. Current version: **0.11.0**. The interface supports Russian and English.
 
-Release **0.10.1** adds a separate Connections tab, draggable and resizable monitor blocks, fresh profiles, compact modules and a revised alert editor. Widget tests are isolated; streamer commands work while offline. [Verification report (Russian)](docs/verification-0.10.1.md).
+Release **0.11.0** adds themes (including a light one) and a glass effect, a free monitor grid, link checks and point refunds for song requests, and a "Who hears the music" choice. [Verification report (Russian)](docs/verification-0.11.0.md).
+
+> **Upgrading from 0.10.x:** to create the song-request reward from the app and refund its points, reconnect Twitch in **Connections**. "Who hears the music" sets the audio monitoring of the Song Request source every time OBS connects; the default is "Viewers only". If you set monitoring for that source by hand in OBS, pick the matching option in the module.
 
 Releases are available [in this repository](https://github.com/Rayness/StreamHelper/releases) and in the [public update repository](https://github.com/Rayness/StreamHelper-Releases/releases).
 
@@ -12,21 +14,21 @@ Releases are available [in this repository](https://github.com/Rayness/StreamHel
 
 These screenshots use fictional demo data; they contain no real accounts or tokens.
 
-**Workspace, connections and alert editor:**
+**Workspace, appearance and song requests:**
 
 ![Workspace](docs/screenshots/workspace-modules-0.10.1.png)
 
-![Connections](docs/screenshots/connections-0.10.1.png)
+![Appearance](docs/screenshots/settings-appearance-0.11.0.png)
 
-![Alert module](docs/screenshots/alerts-content-0.10.1.png)
+![Song requests](docs/screenshots/song-requests-0.11.0.png)
 
 ## Download and first run
 
-1. Download `StreamHelper-Setup-0.10.1.exe` from [release 0.10.1](https://github.com/Rayness/StreamHelper/releases/tag/v0.10.1) or the [update repository](https://github.com/Rayness/StreamHelper-Releases/releases/tag/v0.10.1). The Windows installer is currently unsigned.
+1. Download `StreamHelper-Setup-0.11.0.exe` from [release 0.11.0](https://github.com/Rayness/StreamHelper/releases/tag/v0.11.0) or the [update repository](https://github.com/Rayness/StreamHelper-Releases/releases/tag/v0.11.0). The Windows installer is currently unsigned.
 2. Open **Connections → Twitch** and sign in as the broadcaster. Authorization uses a device code on Twitch.
 3. If needed, open **Connections → OBS** and enter its WebSocket address, port and password. The usual port is 4455.
 4. Add the features you need: Alerts, Chat, Song Requests or individual activities. Select an added module to configure it and use **Add to OBS** for its browser source.
-5. Use **Monitor** to follow progress. Drag blocks by the layers handle and use **Customize monitor** to change their size and visibility. Connect a separate bot account in **Connections → Twitch → Bot account**.
+5. Use **Monitor** to follow progress. In **Customize monitor**, drag blocks by their header, resize them from the bottom-right corner and choose which blocks are visible. Connect a separate bot account in **Connections → Twitch → Bot account**.
 
 Keep StreamHelper running during the stream. Its local server on `127.0.0.1` serves the overlays and updates them over WebSocket. The default port is 4848; change it in **App preferences** if needed. The app can stay in the system tray when its window is closed.
 
@@ -36,11 +38,11 @@ Keep StreamHelper running during the stream. Its local server on `127.0.0.1` ser
 | --- | --- |
 | Workspace | Add, configure and manage only selected modules. Each profile has its own module list. |
 | Connections | Twitch, bot account, OBS and donation services. Shared across profiles. |
-| Monitor | Status and progress; drag blocks and choose their size and visibility. Layout is saved per profile. |
+| Monitor | Status and progress on a free grid; blocks never overlap. Layout is saved per profile. |
 | Profile picker | Create a fresh or copied profile, rename, switch and delete profiles. |
-| App preferences | Language, currency, tray behavior, local server port and updates. |
+| App preferences | Appearance (theme, accent, glass, density, scale), language, currency, tray behavior, local server port, updates and the shortcut list. Appearance is shared by all profiles. |
 
-Press `Ctrl+K` to search added modules and their actions. Removed modules cannot be configured through search or old shortcuts; their settings and progress are preserved.
+Shortcuts: `Ctrl+1`/`Ctrl+2`/`Ctrl+3` open Workspace, Monitor and Connections; `Ctrl+,` opens preferences; `Ctrl+Shift+L` toggles light and dark. Press `Ctrl+K` to search added modules and their actions. Removed modules cannot be configured through search or old shortcuts; their settings and progress are preserved.
 
 ## OBS overlays
 
@@ -72,6 +74,12 @@ Each overlay is a separate OBS Browser Source. Each added widget module shows it
 **Music:** open **Overlays → Now Playing** and add the source to OBS. Auto mode selects an active session, preferring Spotify, then the Yandex Music app, then a browser. You can pin a source and adjust the horizontal or vertical layout, artwork and title size, background opacity, accent color, source label, album, and progress. The card hides on pause by default. StreamHelper reads local Windows media sessions, so no Spotify or Yandex sign-in is needed. Yandex Music in Chrome or Edge appears as “Browser” because Windows does not provide the tab URL. If several tabs in one browser play at once, a specific tab cannot be selected.
 
 **Song requests:** open **Overlays → Song requests**, add its separate OBS Browser Source, and enable viewer requests. Set the exact title of a custom Twitch reward; viewers enter a link to an individual YouTube video. For donations, set a minimum in the main currency; the donation message must contain the link. DonationAlerts, Streamlabs, and StreamElements are supported. The queue survives restarts and can advance automatically or be controlled from the app and OBS dock. Choose full-size video, compact visible video beside request details, or queue-only mode with no YouTube video or audio in OBS. Adjust volume, player controls, requester and title labels, queue count, compact video position and size, accent color, and background opacity. YouTube playback requires a visible video; queue-only mode keeps requests ready until you switch back or play them in another player. StreamHelper can pause the active Windows media session and resume it after the queue. The YouTube video must allow embedding and be reachable from the OBS computer.
+
+Links are checked with YouTube before queueing: removed, private and embed-blocked videos are rejected, and the viewer gets a chat reply with their queue position or the reason. A video that still fails to play is skipped. Manage the queue in the module: drag to reorder, Play now, Play next, pause.
+
+**Point refunds:** **Create reward on Twitch** in the module makes a reward that StreamHelper manages. Rejected, unplayable and removed requests are refunded; played ones are marked fulfilled. This needs the `channel:manage:redemptions` scope: if Twitch was connected before 0.11.0, reconnect it. A reward created by hand in the Twitch dashboard still works for requests, but Twitch does not let the app refund it.
+
+**Who hears the music:** Viewers only, Viewers and me, or Only me. Every time OBS connects, StreamHelper turns on OBS audio control for all Song Request sources and sets their audio monitoring, so a monitoring mode set by hand in OBS is overwritten. The default is Viewers only. For Viewers and me, make sure OBS Desktop Audio does not capture the monitoring device, or the music reaches the stream twice.
 
 **Chat activities:** in **Overlays → Goals**, choose Chat messages or Unique chatters. Bot commands and messages sent by StreamHelper do not count. Each person counts once per goal; resetting the count clears that goal's participant list.
 
@@ -113,6 +121,8 @@ The overlay server listens only on `127.0.0.1`. The OBS dock has its own access 
 
 - **Blank overlay:** confirm StreamHelper is running and the source URL uses the current port. Some sources wait for an event or manual display.
 - **No channel rewards:** sign in as the broadcaster again to grant the required scope and check that the channel has a custom reward. Built-in rewards are not supported.
+- **"No permission to manage rewards" when creating a reward:** reconnect Twitch in **Connections** to grant `channel:manage:redemptions`.
+- **Requested music plays twice or echoes on stream:** "Who hears the music" includes you, and OBS Desktop Audio captures the same device as monitoring. Choose Viewers only or change the monitoring device in OBS → Settings → Audio.
 - **OBS controls unavailable:** enable OBS WebSocket Server and check the port and password.
 - **No music shown:** play a track on this PC, check the detected sources, and try Auto or Browser. Some players do not publish a Windows media session, so their tracks cannot appear.
 - **SmartScreen or antivirus warning:** the installer is not yet publisher-signed. Compare its SHA-256 with the checksum in the release.
