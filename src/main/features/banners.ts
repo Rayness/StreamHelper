@@ -1,5 +1,5 @@
 import { renderTemplate } from '@shared/template';
-import type { Banner, Label, OverlayMessage, RenderedBanner, Settings } from '@shared/types';
+import type { Banner, Label, OverlayMessage, RenderedBanner, RenderedCustomOverlay, Settings } from '@shared/types';
 import type { AppContext } from '../core/context';
 import { mediaUrl } from './alerts';
 import { resolveStreamVar } from './vars';
@@ -7,7 +7,7 @@ import { resolveStreamVar } from './vars';
 const TICK_MS = 2000;
 
 export interface TextOverlayTarget {
-  forEachClient(kind: 'banner' | 'label', fn: (id: string | null) => OverlayMessage | null): void;
+  forEachClient(kind: 'banner' | 'label' | 'custom', fn: (id: string | null) => OverlayMessage | null): void;
 }
 
 /** Whether a banner is on screen right now: manual toggle, or inside its scheduled pop-up window. */
@@ -33,7 +33,7 @@ export class TextOverlays {
     private target: () => TextOverlayTarget,
   ) {
     ctx.bus.on('settings:changed', (key) => {
-      if (key === 'banners' || key === 'labels' || key === 'stats' || key === 'bot' || key === 'language' || key === 'currency') this.update();
+      if (['banners', 'labels', 'customOverlays', 'variables', 'donationLog', 'stats', 'bot', 'language', 'currency'].includes(key)) this.update();
     });
     ctx.bus.on('stream:update', () => this.update());
     ctx.bus.on('kawaki:now', () => this.update());
@@ -104,6 +104,18 @@ export class TextOverlays {
     return l ? { ...l, text: this.text(l.template) } : null;
   }
 
+  /** A designer overlay with its text templates filled in and media turned into URLs. */
+  renderCustom(id: string | null): RenderedCustomOverlay | null {
+    const list = this.s.customOverlays ?? [];
+    const o = (id ? list.find((x) => x.id === id) : list[0]) ?? null;
+    if (!o) return null;
+    return {
+      ...o,
+      elements: o.elements.filter((el) => el.visible).map((el) => el.type === 'text' ? { ...el, text: this.text(el.text) }
+        : el.type === 'image' ? { ...el, media: mediaUrl(el.media) } : el),
+    };
+  }
+
   update(): void {
     const now = Date.now();
     this.runSchedule(now);
@@ -119,6 +131,7 @@ export class TextOverlays {
     };
     t.forEachClient('banner', (id) => once(`b:${id}`, () => ({ type: 'banner', banner: this.renderBanner(id, now) })));
     t.forEachClient('label', (id) => once(`l:${id}`, () => ({ type: 'label', label: this.renderLabel(id) })));
+    t.forEachClient('custom', (id) => once(`c:${id}`, () => ({ type: 'custom', overlay: this.renderCustom(id) })));
   }
 
   private changed(key: string, msg: OverlayMessage): OverlayMessage | null {
@@ -129,7 +142,8 @@ export class TextOverlays {
   }
 
   /** New overlay connected: it needs the current state even if nothing changed. */
-  initial(kind: 'banner' | 'label', id: string | null): OverlayMessage {
+  initial(kind: 'banner' | 'label' | 'custom', id: string | null): OverlayMessage {
+    if (kind === 'custom') return { type: 'custom', overlay: this.renderCustom(id) };
     return kind === 'banner' ? { type: 'banner', banner: this.renderBanner(id) } : { type: 'label', label: this.renderLabel(id) };
   }
 }

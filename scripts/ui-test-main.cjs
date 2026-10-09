@@ -66,7 +66,7 @@ app.whenReady().then(async () => {
   await window.loadFile(join(root,'out/renderer/index.html'));
   console.log('UI QA: app loaded');
   await until(`!!document.querySelector('.workspace-welcome')`,'empty workspace did not load');
-  assert.equal(await js(`document.querySelectorAll('.sidebar .nav-group li').length`),3,'workspace, monitor and connections belong in main navigation');
+  assert.equal(await js(`document.querySelectorAll('.sidebar .nav-group li').length`),5,'workspace, monitor, designer, variables and connections belong in main navigation');
   assert.equal(await js(`document.querySelectorAll('.content input,.content textarea').length`),0,'empty workspace must not expose settings');
   await capture('workspace-empty');
   const legacy = async (page,sub) => {
@@ -196,21 +196,39 @@ app.whenReady().then(async () => {
   const remaining = await js(`[...document.querySelectorAll('[data-add-module]:not(:disabled)')].map(b=>b.dataset.addModule)`);
   await click('Отмена');
   const toolPack = ['clipper','curse','duel','melody','ducking','stocks','portal','report','shield'];
-  for (const id of remaining) { await add(id); assert.equal(await js(`document.querySelectorAll('[data-editor-module]').length`),1,'more than one editor mounted'); if (toolPack.includes(id)) { await delay(400); await capture('module-'+id); } }
+  for (const id of remaining) { await add(id); assert.equal(await js(`document.querySelectorAll('[data-editor-module]').length`),1,'more than one editor mounted'); if (toolPack.includes(id) || id === 'donations') { await delay(400); await capture('module-'+id); }
+    if (id === 'banner') {
+      await js(`document.querySelector('.font-picker-button').click()`); await until(`document.querySelectorAll('.font-option').length>20`,'font picker lists bundled fonts');
+      await capture('font-picker'); await js(`document.querySelector('.font-picker-button').click()`);
+    } }
   await click('Рабочая область'); await capture('workspace-modules');
   const tiles = await js(`[...document.querySelectorAll('.workspace-installed')].map((tile)=>tile.getBoundingClientRect().height)`);
   assert(tiles.every((height)=>height<145),'module tiles are too tall');
   await click('Подключения');
   await until(`!!document.querySelector('[data-connection-editor]')`,'connections page missing');
   assert.equal(await js(`document.querySelectorAll('[data-add-module]').length`),0,'connections require installing a workspace module');
-  for(const id of ['twitch','donationalerts','streamlabs','streamelements','streamerbot','discord','obs','subforstream']) {
+  for(const id of ['twitch','donationalerts','streamlabs','streamelements','streamerbot','discord','obs','kawaki','subforstream']) {
     await js(`document.querySelector('[data-connection="${id}"]').click()`);
     await until(`!!document.querySelector('[data-connection-editor="${id}"]')`,'connection editor missing: '+id);
     assert.equal(await js(`document.querySelectorAll('[data-connection-editor]').length`),1);
   }
   await js(`document.querySelector('[data-connection="twitch"]').click()`); await capture('connections');
+  // Variables tab: a variable of your own, counters and live built-in values.
+  await click('Переменные'); await until(`!!document.querySelector('.variables-page')`,'variables page missing');
+  assert(await js(`document.querySelectorAll('.var-table .var-token').length`) > 30,'built-in variables are listed');
+  await js(`document.querySelector('.variables-page .card-actions button').click()`); await until(`document.querySelectorAll('.var-row:not(.counter)').length===1`,'custom variable was not added');
+  await capture('variables');
+  // Designer tab: a template overlay with draggable layers and a live preview.
+  await click('Конструктор'); await until(`!!document.querySelector('.designer-page')`,'designer page missing');
+  await js(`[...document.querySelectorAll('.designer-starter')].find((b)=>b.textContent.includes('Инфо-полоса')).click()`);
+  await until(`document.querySelectorAll('.designer-box').length===5`,'designer template layers missing');
+  await until(`!!document.querySelector('.designer-canvas iframe')`,'designer preview missing');
+  await js(`document.querySelector('.designer-box').dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,button:0,clientX:10,clientY:10,pointerId:1}))`);
+  await until(`!!document.querySelector('.designer-box.selected')`,'designer selection missing');
+  await until(`!!document.querySelector('.designer-props')`,'designer properties missing');
+  await capture('designer');
   await click('Панель'); await until(`!!document.querySelector('.monitor-grid')`,'full monitor missing'); await capture('monitor-modules');
-  assert.equal(await js(`document.querySelectorAll('.monitor-card').length`),39);
+  assert.equal(await js(`document.querySelectorAll('.monitor-card').length`),40);
   assert.equal(await js(`document.querySelectorAll('.content input,.content textarea,.content select').length`),0,'monitor renders mutable settings');
   await js(`document.querySelector('[data-monitor-edit]').click()`); await delay(150);
   // Free grid: drag by header and resize by corner with real pointer events; nothing may overlap.
@@ -301,6 +319,6 @@ app.whenReady().then(async () => {
   assert.equal(await js(`document.documentElement.lang`),'en');
   const alertGeometryCases = await checkAlertBounds();
   assert.deepEqual(failures,[],'renderer console errors');
-  writeFileSync(join(output,'ui-results.json'), JSON.stringify({passed:true,alertGeometryCases,moduleEditors:39,connectionEditors:8,checks:['empty workspace','three-page navigation','legacy route gate','search gate','remove/re-add preserves configuration','profile isolation and editor dismissal','individual activity and connection editors','global preferences scope','all 39 module editors','monitor has no feature configuration inputs','manual song queue','safe position settings','close-up live preview','coalesced settings writes','bot trailing spaces','small window layout','real alert DOM geometry','English module workflow','confirmed reset is scoped to current module','reset waits for pending edits','live chat and settings stay in module','local alert queue pause/resume/skip','isolated widget tests with emote rain active','separate connections without installation','fresh profile without losing connections','monitor free grid drag, corner resize, keyboard move, no overlaps, hide and persistence','compact module tiles','test waits for pending form edits','native pointer drag for alert position'],calls:fixture.calls.map(c=>c.channel)},null,2));
-  console.log('UI smoke passed: 39 module editors, 8 connection editors, draggable monitor, fresh profiles and isolated tests. Screenshots: dist/qa');
+  writeFileSync(join(output,'ui-results.json'), JSON.stringify({passed:true,alertGeometryCases,moduleEditors:40,connectionEditors:9,checks:['empty workspace','three-page navigation','legacy route gate','search gate','remove/re-add preserves configuration','profile isolation and editor dismissal','individual activity and connection editors','global preferences scope','all 40 module editors','variables tab','designer tab','monitor has no feature configuration inputs','manual song queue','safe position settings','close-up live preview','coalesced settings writes','bot trailing spaces','small window layout','real alert DOM geometry','English module workflow','confirmed reset is scoped to current module','reset waits for pending edits','live chat and settings stay in module','local alert queue pause/resume/skip','isolated widget tests with emote rain active','separate connections without installation','fresh profile without losing connections','monitor free grid drag, corner resize, keyboard move, no overlaps, hide and persistence','compact module tiles','test waits for pending form edits','native pointer drag for alert position'],calls:fixture.calls.map(c=>c.channel)},null,2));
+  console.log('UI smoke passed: 40 module editors, 9 connection editors, designer, variables, draggable monitor, fresh profiles and isolated tests. Screenshots: dist/qa');
 }).catch((error)=>{console.error(error);process.exitCode=1;}).finally(async()=>{alertWindow?.destroy(); await fixture?.stop(); window?.destroy(); app.exit(process.exitCode||0);});

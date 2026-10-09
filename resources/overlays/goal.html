@@ -108,6 +108,7 @@
         const g = msg.goal;
         root.classList.toggle('visible', !!g);
         if (!g) return;
+        SH.useFont(root, g.fontFamily || 'Montserrat');
         root.style.setProperty('--bar', g.barColor);
         root.style.setProperty('--text', g.textColor);
         const pct = g.target > 0 ? Math.min(100, (g.current / g.target) * 100) : 0;

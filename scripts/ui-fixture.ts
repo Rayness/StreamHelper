@@ -76,6 +76,9 @@ export async function createFixture(root: string, dataDir: string, push: (channe
         case 'alerts:skip': return alerts.skip();
         case 'twitch:searchCategories': return [];
         case 'clipboard:write': return;
+        case 'fonts:system': return ['Arial', 'Segoe UI', 'Times New Roman'];
+        case 'counter:add': settings.update('bot', (b) => ({ ...b, counters: { ...b.counters, [args[0]]: (b.counters[args[0]] ?? 0) + args[1] } })); return;
+        case 'donations:clear': settings.set('donationLog', []); return;
         default: throw new Error('Unhandled QA action: ' + channel);
       }
     },

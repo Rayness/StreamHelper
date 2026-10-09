@@ -1,9 +1,9 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { defaultSettings, mergeDefaults, migrateSettings } from '@shared/defaults';
+import { defaultSettings, mergeDefaults, migrateLists, migrateSettings } from '@shared/defaults';
 import { merge3 } from '@shared/merge';
-import { ALL_OVERLAY_KINDS, PROFILE_KEYS, profileSnapshot } from '@shared/profiles';
+import { ALL_OVERLAY_KINDS, NEW_OVERLAY_KINDS, PROFILE_KEYS, profileSnapshot } from '@shared/profiles';
 import { normalizeWorkspaceCards, normalizeMonitorLayout } from '@shared/workspace';
 import type { Language, OverlayKind, ProfileConfig, ProfileSettingsKey, Settings, SettingsKey } from '@shared/types';
 import type { EventBus } from './eventBus';
@@ -30,6 +30,8 @@ export class SettingsStore {
       }
     }
     const lang = (stored as Partial<Settings> | undefined)?.language ?? systemLanguage;
+    // Settings saved before the donation board existed: its overlays get switched on in every profile once.
+    const upgrading = !!stored && typeof stored === 'object' && !('donationsOverlay' in stored);
     this.data = migrateSettings(mergeDefaults(defaultSettings(lang), stored));
     const base = profileSnapshot(this.data);
     if (!this.data.profiles.length) {
@@ -39,6 +41,7 @@ export class SettingsStore {
     } else {
       this.data.profiles = this.data.profiles.map((profile) => {
         const config = mergeDefaults(base, profile.config);
+        Object.assign(config, migrateLists(config));
         config.workspace = { ...config.workspace, cards: normalizeWorkspaceCards(config.workspace.cards), monitor: normalizeMonitorLayout(profile.config?.workspace?.monitor) };
         config.alerts.donationTiers = config.alerts.donationTiers.map((tier) => ({
           ...tier,
@@ -47,7 +50,9 @@ export class SettingsStore {
         return {
           ...profile,
           config,
-          overlays: Array.isArray(profile.overlays) ? profile.overlays.filter((kind) => ALL_OVERLAY_KINDS.includes(kind)) : [...ALL_OVERLAY_KINDS],
+          overlays: Array.isArray(profile.overlays)
+            ? [...new Set([...profile.overlays, ...(upgrading ? NEW_OVERLAY_KINDS : [])])].filter((kind) => ALL_OVERLAY_KINDS.includes(kind))
+            : [...ALL_OVERLAY_KINDS],
         };
       });
       if (!this.data.profiles.some((profile) => profile.id === this.data.activeProfileId)) {

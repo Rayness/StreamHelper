@@ -1,6 +1,7 @@
 import { EventSubscription, OBSWebSocket } from 'obs-websocket-js/json';
 import { errorMessage, type AppContext } from '../core/context';
 import { ALL_OVERLAY_KINDS } from '@shared/profiles';
+import type { ObsAppSource, ObsGroupMode, OverlayKind } from '@shared/types';
 
 const RETRY_MS = 10_000;
 
@@ -17,10 +18,27 @@ export function overlayIdentity(raw: string): string | null {
     const url = new URL(raw);
     if (!['http:', 'https:'].includes(url.protocol) || !['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname)) return null;
     const match = /^\/overlay\/([a-z]+)\/?$/.exec(url.pathname);
-    if (!match || !ALL_OVERLAY_KINDS.includes(match[1] as import('@shared/types').OverlayKind)) return null;
-    return `${url.pathname.replace(/\/$/, '')}?id=${url.searchParams.get('id') ?? ''}`;
+    if (!match || !ALL_OVERLAY_KINDS.includes(match[1] as OverlayKind)) return null;
+    const variant = url.searchParams.get('v');
+    return `${url.pathname.replace(/\/$/, '')}?id=${url.searchParams.get('id') ?? ''}${variant ? `&v=${variant}` : ''}`;
   } catch { return null; }
 }
+
+/** Kind, instance and per-scene variant of a StreamHelper overlay URL. */
+export function parseOverlayUrl(raw: string): { kind: OverlayKind; id: string | null; variant: string | null } | null {
+  if (!overlayIdentity(raw)) return null;
+  const url = new URL(raw);
+  const kind = /^\/overlay\/([a-z]+)/.exec(url.pathname)![1] as OverlayKind;
+  return { kind, id: url.searchParams.get('id') || null, variant: url.searchParams.get('v') || null };
+}
+
+/** OBS can't create groups through obs-websocket; a nested scene is OBS's own recommended replacement. */
+export const CONTAINER_NAME = 'StreamHelper';
+export function containerName(mode: ObsGroupMode, scene: string): string | null {
+  if (mode === 'none') return null;
+  return mode === 'shared' ? CONTAINER_NAME : `${CONTAINER_NAME} · ${scene}`;
+}
+export const isContainerName = (name: string): boolean => name === CONTAINER_NAME || name.startsWith(`${CONTAINER_NAME} · `);
 
 /** Overlays that play YouTube audio follow the song requests' "who hears the music" choice. */
 export function isMusicOverlay(url: string): boolean {
@@ -41,7 +59,7 @@ export class ObsService {
       // Our own disconnect before a reconnect: connect() reports the outcome itself.
       if (this.connecting && this.ctx.state.current.obs.status === 'connecting') return;
       const wasConnected = this.ctx.state.current.obs.status === 'connected';
-      this.ctx.state.patch('obs', { status: 'disconnected', error: wasConnected ? undefined : err?.message, sceneItems: [], inputs: [] });
+      this.ctx.state.patch('obs', { status: 'disconnected', error: wasConnected ? undefined : err?.message, sceneItems: [], inputs: [], appSources: [] });
       if (wasConnected && !this.manualDisconnect) this.ctx.toast('info', 'toast.obsDisconnected');
       this.scheduleRetry();
     });
@@ -52,12 +70,16 @@ export class ObsService {
     this.obs.on('SceneListChanged', () => void this.refreshScenes().catch((err) => console.warn('[obs] scenes', errorMessage(err))));
     this.obs.on('CurrentSceneCollectionChanged', () => void this.refreshScenes().then(() => this.repairBrowserSources()).catch((err) => console.warn('[obs] collection', errorMessage(err))));
     this.obs.on('SceneItemEnableStateChanged', ({ sceneName, sceneItemId, sceneItemEnabled }) => {
+      const app = this.ctx.state.current.obs.appSources ?? [];
+      if (app.some((a) => a.itemScene === sceneName && a.itemId === sceneItemId)) {
+        this.ctx.state.patch('obs', { appSources: app.map((a) => a.itemScene === sceneName && a.itemId === sceneItemId ? { ...a, enabled: sceneItemEnabled } : a) });
+      }
       if (sceneName !== this.ctx.state.current.obs.currentScene) return;
       const sceneItems = this.ctx.state.current.obs.sceneItems.map((i) => (i.id === sceneItemId ? { ...i, enabled: sceneItemEnabled } : i));
       this.ctx.state.patch('obs', { sceneItems });
     });
-    this.obs.on('SceneItemCreated', () => void this.refreshSceneItems());
-    this.obs.on('SceneItemRemoved', () => void this.refreshSceneItems());
+    this.obs.on('SceneItemCreated', () => { void this.refreshSceneItems(); this.scheduleAppSources(); });
+    this.obs.on('SceneItemRemoved', () => { void this.refreshSceneItems(); this.scheduleAppSources(); });
     this.obs.on('InputMuteStateChanged', ({ inputName, inputMuted }) => {
       const inputs = this.ctx.state.current.obs.inputs.map((i) => (i.name === inputName ? { ...i, muted: inputMuted } : i));
       this.ctx.state.patch('obs', { inputs });
@@ -65,11 +87,13 @@ export class ObsService {
     const refreshInputs = () => void this.refreshInputs().catch((err) => console.warn('[obs] inputs', errorMessage(err)));
     this.obs.on('InputCreated', (input) => {
       refreshInputs();
+      this.scheduleAppSources();
       // A Song Request source added by hand in OBS gets the chosen listening mode too.
       if ((input as { inputKind?: string }).inputKind === 'browser_source') this.scheduleSongAudio();
     });
-    this.obs.on('InputRemoved', refreshInputs);
-    this.obs.on('InputNameChanged', refreshInputs);
+    this.obs.on('InputRemoved', () => { refreshInputs(); this.scheduleAppSources(); });
+    this.obs.on('InputNameChanged', () => { refreshInputs(); this.scheduleAppSources(); });
+    this.obs.on('InputSettingsChanged', () => this.scheduleAppSources());
     this.obs.on('InputVolumeMeters', ({ inputs }) => {
       if (!this.meterListeners.size) return;
       const levels = new Map<string, number>();
@@ -168,7 +192,7 @@ export class ObsService {
     if (this.retryTimer) clearTimeout(this.retryTimer);
     this.retryTimer = null;
     await this.obs.disconnect().catch(() => undefined);
-    this.ctx.state.patch('obs', { status: 'disconnected', error: undefined, sceneItems: [], inputs: [] });
+    this.ctx.state.patch('obs', { status: 'disconnected', error: undefined, sceneItems: [], inputs: [], appSources: [] });
   }
 
   private songAudioTimer: NodeJS.Timeout | null = null;
@@ -221,8 +245,128 @@ export class ObsService {
     if (generation !== this.generation || !this.connected) return;
     // OBS returns scenes bottom-to-top; reverse to match the OBS UI.
     const scenes = (list.scenes as { sceneName: string }[]).map((s) => s.sceneName).reverse();
-    this.ctx.state.patch('obs', { scenes, currentScene: list.currentProgramSceneName });
+    this.ctx.state.patch('obs', { scenes, currentScene: list.currentProgramSceneName, containers: scenes.filter(isContainerName) });
     await this.refreshSceneItems();
+    this.scheduleAppSources();
+  }
+
+  // ---------- StreamHelper sources in every scene ----------
+
+  private appSourcesTimer: NodeJS.Timeout | null = null;
+  private scheduleAppSources(): void {
+    if (!this.connected) return;
+    if (this.appSourcesTimer) clearTimeout(this.appSourcesTimer);
+    this.appSourcesTimer = setTimeout(() => {
+      this.appSourcesTimer = null;
+      void this.refreshAppSources().catch((err) => console.warn('[obs] app sources', errorMessage(err)));
+    }, 300);
+  }
+
+  /**
+   * Finds every StreamHelper overlay placed in OBS: straight in a scene, inside a group, or inside
+   * our "StreamHelper" container scene, so the app can show and control them per scene.
+   */
+  async refreshAppSources(): Promise<ObsAppSource[]> {
+    if (!this.connected) return [];
+    const generation = this.generation;
+    const [{ scenes }, { inputs }] = await Promise.all([this.obs.call('GetSceneList'), this.obs.call('GetInputList', { inputKind: 'browser_source' })]);
+    const urls = new Map<string, string>();
+    await Promise.all((inputs as { inputName: string }[]).map(async ({ inputName }) => {
+      const { inputSettings } = await this.obs.call('GetInputSettings', { inputName }).catch(() => ({ inputSettings: {} }));
+      const url = (inputSettings as { url?: string }).url;
+      if (url) urls.set(inputName, url);
+    }));
+    type Item = { sceneItemId: number; sourceName: string; sceneItemEnabled: boolean; isGroup?: boolean | null };
+    const names = (scenes as { sceneName: string }[]).map((x) => x.sceneName).reverse();
+    const containers = new Set(names.filter(isContainerName));
+    const found: ObsAppSource[] = [];
+    const add = (scene: string, parent: string | null, parentType: ObsAppSource['parentType'], itemScene: string, item: Item) => {
+      const parsed = parseOverlayUrl(urls.get(item.sourceName) ?? '');
+      if (parsed) found.push({ scene, parent, parentType, itemScene, itemId: item.sceneItemId, sourceName: item.sourceName, enabled: item.sceneItemEnabled, ...parsed });
+    };
+    for (const scene of names) {
+      if (containers.has(scene)) continue;
+      const { sceneItems } = await this.obs.call('GetSceneItemList', { sceneName: scene });
+      for (const item of sceneItems as unknown as Item[]) {
+        if (item.isGroup) {
+          const { sceneItems: children } = await this.obs.call('GetGroupSceneItemList', { sceneName: item.sourceName }).catch(() => ({ sceneItems: [] }));
+          for (const child of children as unknown as Item[]) add(scene, item.sourceName, 'group', item.sourceName, child);
+        } else if (containers.has(item.sourceName) || isContainerName(item.sourceName)) {
+          const { sceneItems: children } = await this.obs.call('GetSceneItemList', { sceneName: item.sourceName }).catch(() => ({ sceneItems: [] }));
+          for (const child of children as unknown as Item[]) add(scene, item.sourceName, 'container', item.sourceName, child);
+        } else add(scene, null, null, scene, item);
+      }
+    }
+    if (generation === this.generation && this.connected) this.ctx.state.patch('obs', { appSources: found, containers: [...containers] });
+    return found;
+  }
+
+  private groupMode(): ObsGroupMode {
+    // Settings saved before groups existed (and tests) keep the old flat behaviour.
+    return this.ctx.settings.get('obs').group ?? 'none';
+  }
+
+  /** The scene new items go into: the scene's StreamHelper container (created on demand) or the scene itself. */
+  private async targetScene(sceneName: string): Promise<string> {
+    const name = isContainerName(sceneName) ? null : containerName(this.groupMode(), sceneName);
+    if (!name) return sceneName;
+    const { scenes } = await this.obs.call('GetSceneList');
+    if (!(scenes as { sceneName: string }[]).some((x) => x.sceneName === name)) await this.obs.call('CreateScene', { sceneName: name });
+    const { sceneItems } = await this.obs.call('GetSceneItemList', { sceneName });
+    if (!(sceneItems as { sourceName: string }[]).some((i) => i.sourceName === name)) {
+      await this.obs.call('CreateSceneItem', { sceneName, sourceName: name, sceneItemEnabled: true });
+    }
+    return name;
+  }
+
+  /** Where an input already sits in a scene: directly, in a group or in our container. */
+  private async findInScene(sceneName: string, sourceName: string): Promise<{ scene: string; itemId: number } | null> {
+    type Item = { sceneItemId: number; sourceName: string; isGroup?: boolean | null };
+    const { sceneItems } = await this.obs.call('GetSceneItemList', { sceneName });
+    for (const item of sceneItems as unknown as Item[]) {
+      if (item.sourceName === sourceName) return { scene: sceneName, itemId: item.sceneItemId };
+      const nested = item.isGroup ? await this.obs.call('GetGroupSceneItemList', { sceneName: item.sourceName }).catch(() => null)
+        : isContainerName(item.sourceName) ? await this.obs.call('GetSceneItemList', { sceneName: item.sourceName }).catch(() => null) : null;
+      const child = (nested?.sceneItems as unknown as Item[] | undefined)?.find((c) => c.sourceName === sourceName);
+      if (child) return { scene: item.sourceName, itemId: child.sceneItemId };
+    }
+    return null;
+  }
+
+  async setItemEnabled(sceneName: string, sceneItemId: number, enabled: boolean): Promise<void> {
+    this.ensure();
+    await this.obs.call('SetSceneItemEnabled', { sceneName, sceneItemId, sceneItemEnabled: enabled });
+    this.scheduleAppSources();
+  }
+
+  async removeItem(sceneName: string, sceneItemId: number): Promise<void> {
+    this.ensure();
+    await this.obs.call('RemoveSceneItem', { sceneName, sceneItemId });
+    this.scheduleAppSources();
+  }
+
+  /** Moves the StreamHelper overlays lying loose in a scene into its container, keeping their place and size. */
+  async tidyScene(sceneName: string): Promise<number> {
+    this.ensure();
+    const loose = (await this.refreshAppSources()).filter((a) => a.scene === sceneName && a.parent === null);
+    if (!loose.length) return 0;
+    const target = await this.targetScene(sceneName);
+    if (target === sceneName) return 0;
+    let moved = 0;
+    // Bottom item first: each new item lands on top, so the stacking order is kept.
+    for (const item of [...loose].reverse()) {
+      const { sceneItemTransform } = await this.obs.call('GetSceneItemTransform', { sceneName, sceneItemId: item.itemId });
+      const { sceneItemId } = await this.obs.call('CreateSceneItem', { sceneName: target, sourceName: item.sourceName, sceneItemEnabled: item.enabled });
+      const transform = { ...sceneItemTransform as Record<string, unknown> };
+      for (const key of ['sourceWidth', 'sourceHeight', 'width', 'height']) delete transform[key];
+      if (Number(transform.boundsWidth) < 1) delete transform.boundsWidth;
+      if (Number(transform.boundsHeight) < 1) delete transform.boundsHeight;
+      await this.obs.call('SetSceneItemTransform', { sceneName: target, sceneItemId, sceneItemTransform: transform as never });
+      await this.obs.call('RemoveSceneItem', { sceneName, sceneItemId: item.itemId });
+      moved++;
+    }
+    await this.refreshAppSources();
+    return moved;
   }
 
   private async refreshSceneItems(): Promise<void> {
@@ -315,15 +459,15 @@ export class ObsService {
    * routed through OBS (alert sounds, TTS). If a browser source with this URL already exists,
    * it's reused so the overlay isn't duplicated across scenes.
    */
-  async addBrowserSource(name: string, url: string, width: number, height: number): Promise<'created' | 'added' | 'exists'> {
-    const operation = this.sourceWrites.then(() => this.addBrowserSourceNow(name, url, width, height));
+  async addBrowserSource(name: string, url: string, width: number, height: number, scene?: string): Promise<'created' | 'added' | 'exists'> {
+    const operation = this.sourceWrites.then(() => this.addBrowserSourceNow(name, url, width, height, scene));
     this.sourceWrites = operation.catch(() => undefined);
     return operation;
   }
 
-  private async addBrowserSourceNow(name: string, url: string, width: number, height: number): Promise<'created' | 'added' | 'exists'> {
+  private async addBrowserSourceNow(name: string, url: string, width: number, height: number, scene?: string): Promise<'created' | 'added' | 'exists'> {
     this.ensure();
-    const sceneName = this.ctx.state.current.obs.currentScene;
+    const sceneName = scene || this.ctx.state.current.obs.currentScene;
     if (!sceneName) throw new Error('no current scene');
     const { inputs } = await this.obs.call('GetInputList', { inputKind: 'browser_source' });
     for (const input of inputs as { inputName: string }[]) {
@@ -332,15 +476,16 @@ export class ObsService {
       if (existingUrl !== url && (!overlayIdentity(url) || overlayIdentity(existingUrl) !== overlayIdentity(url))) continue;
       await this.repairInput(input.inputName, url);
       if (isMusicOverlay(url)) await this.applySongAudio();
-      const { sceneItems } = await this.obs.call('GetSceneItemList', { sceneName });
-      const existing = (sceneItems as { sourceName: string; sceneItemId: number }[]).find((i) => i.sourceName === input.inputName);
+      const existing = await this.findInScene(sceneName, input.inputName);
       if (existing) {
-        await this.obs.call('SetSceneItemEnabled', { sceneName, sceneItemId: existing.sceneItemId, sceneItemEnabled: true });
+        await this.obs.call('SetSceneItemEnabled', { sceneName: existing.scene, sceneItemId: existing.itemId, sceneItemEnabled: true });
         await this.refreshSceneItems();
+        this.scheduleAppSources();
         return 'exists';
       }
-      await this.obs.call('CreateSceneItem', { sceneName, sourceName: input.inputName, sceneItemEnabled: true });
+      await this.obs.call('CreateSceneItem', { sceneName: await this.targetScene(sceneName), sourceName: input.inputName, sceneItemEnabled: true });
       await this.refreshSceneItems();
+      this.scheduleAppSources();
       return 'added';
     }
     const { inputs: all } = await this.obs.call('GetInputList');
@@ -348,13 +493,14 @@ export class ObsService {
     let inputName = name;
     for (let n = 2; taken.has(inputName); n++) inputName = `${name} ${n}`;
     await this.obs.call('CreateInput', {
-      sceneName,
+      sceneName: await this.targetScene(sceneName),
       inputName,
       inputKind: 'browser_source',
       inputSettings: { url, width, height, reroute_audio: true, shutdown: false, restart_when_active: false, fps_custom: true, fps: 30 },
       sceneItemEnabled: true,
     });
     await this.refreshSceneItems();
+    this.scheduleAppSources();
     if (isMusicOverlay(url)) await this.applySongAudio();
     return 'created';
   }

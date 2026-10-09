@@ -4,7 +4,9 @@ import { HotkeyInput } from '../components/HotkeyInput';
 import { Icon } from '../components/icons';
 import { Button, Card, ColorInput, Empty, Field, IconButton, NumberInput, PageHeader, Select, StatusText, TextInput, Toggle } from '../components/ui';
 import { useT, type TFn } from '../i18n';
-import { call, saveSettings, useApp } from '../store';
+import { call, callOk, openModule, saveSettings, toast, useApp } from '../store';
+import type { ObsAppSource, ObsGroupMode, WorkspaceCard } from '@shared/types';
+import { isWorkspaceModule } from '@shared/workspace';
 
 export function Obs() {
   const t = useT();
@@ -36,7 +38,7 @@ export function Obs() {
             }
           >
             <div className="scene-grid big">
-              {obs.scenes.map((s) => (
+              {obs.scenes.filter((s) => !(obs.containers ?? []).includes(s)).map((s) => (
                 <button key={s} type="button" className={`scene-btn ${s === obs.currentScene ? 'active' : ''}`} onClick={() => void call('obs:setScene', s)}>
                   {s}
                 </button>
@@ -67,6 +69,7 @@ export function Obs() {
           </Card>
         </div>
       )}
+      {connected && <AppSourcesCard />}
       <Card title={t('obs.dock')}>
         <p className="muted small">{t('obs.dockHint')}</p>
         <div className="row-gap wrap">
@@ -99,6 +102,7 @@ const STEP_TYPES: ActionStep['type'][] = [
   'clipMoment',
   'shieldToggle',
   'curseVote',
+  'variable',
   'wait',
 ];
 
@@ -131,6 +135,8 @@ function newStep(type: ActionStep['type']): ActionStep {
       return { type, bannerId: '' };
     case 'streamerbotAction':
       return { type, actionId: '' };
+    case 'variable':
+      return { type, name: '', value: '+1' };
     default:
       return { type } as ActionStep;
   }
@@ -144,6 +150,7 @@ function StepEditor({ step, onChange, t }: { step: ActionStep; onChange: (s: Act
   const wheels = useApp((d) => d.settings!.wheels);
   const banners = useApp((d) => d.settings!.banners);
   const streamerbotActions = useApp((d) => d.state!.streamerbot.actions);
+  const variables = useApp((d) => d.settings!.variables);
   const withCurrent = (list: string[], v: string) => (v && !list.includes(v) ? [v, ...list] : list);
   const opts = (list: string[], v: string, placeholder: string) => [{ value: '', label: placeholder }, ...withCurrent(list, v).map((x) => ({ value: x, label: x }))];
   const modes = (['toggle', 'start', 'stop'] as const).map((m) => ({ value: m, label: t(`stepMode.${m}`) }));
@@ -203,6 +210,13 @@ function StepEditor({ step, onChange, t }: { step: ActionStep; onChange: (s: Act
       );
     case 'streamerbotAction':
       return <Select value={step.actionId} onChange={(actionId) => onChange({ ...step, actionId })} options={[{ value: '', label: t('integration.pickSbAction') }, ...streamerbotActions.map((a) => ({ value: a.id, label: a.name }))]} />;
+    case 'variable':
+      return (
+        <>
+          <Select value={step.name} onChange={(name) => onChange({ ...step, name })} options={opts(variables.map((v) => v.name), step.name, t('step.pickVariable'))} />
+          <TextInput value={step.value} onChange={(value) => onChange({ ...step, value })} placeholder={t('step.variableValue')} />
+        </>
+      );
     default:
       return null;
   }
@@ -310,5 +324,59 @@ export function SubForStream() {
         </div>
         {subsState.overlayUrl && <p className="muted small mono">{subsState.overlayUrl}</p>}
       </Card>
+  );
+}
+
+/** Where StreamHelper's overlays sit in OBS, scene by scene (also inside groups and the StreamHelper group). */
+export function AppSourcesCard() {
+  const t = useT();
+  const obs = useApp((d) => d.state!.obs);
+  const cfg = useApp((d) => d.settings!.obs);
+  const variants = useApp((d) => d.settings!.overlayVariants);
+  const sources = obs.appSources ?? [];
+  const scenes = obs.scenes.filter((s) => !(obs.containers ?? []).includes(s));
+  const name = (a: ObsAppSource) => {
+    const variant = a.variant ? variants.find((v) => v.id === a.variant) : undefined;
+    return `${t(`ov.${a.kind}` as never)}${variant ? ` · ${variant.scene}` : ''}`;
+  };
+  return (
+    <Card icon="folder" title={t('obs.appSources')} actions={<Button size="sm" icon="refresh" onClick={() => void call('obs:refreshAppSources')}>{t('common.reload')}</Button>}>
+      <p className="muted small">{t('obs.appSourcesHint')}</p>
+      <Field label={t('obs.groupMode')} hint={t(`obs.groupMode_${cfg.group ?? 'perScene'}_hint` as never)} wide>
+        <Select<ObsGroupMode> value={cfg.group ?? 'perScene'} onChange={(group) => saveSettings('obs', { ...cfg, group })} options={(['perScene', 'shared', 'none'] as const).map((m) => ({ value: m, label: t(`obs.groupMode_${m}`) }))} />
+      </Field>
+      <div className="app-sources">
+        {scenes.map((scene) => {
+          const items = sources.filter((a) => a.scene === scene);
+          const loose = items.filter((a) => a.parent === null).length;
+          return (
+            <section key={scene} className={`app-scene ${scene === obs.currentScene ? 'current' : ''}`}>
+              <header>
+                <strong>{scene}</strong>
+                {scene === obs.currentScene && <span className="pill">{t('obs.live')}</span>}
+                <span className="muted small">{items.length ? t('obs.appCount', { n: items.length }) : t('obs.appNone')}</span>
+                {loose > 0 && (cfg.group ?? 'perScene') !== 'none' && <Button size="sm" icon="folder" onClick={async () => {
+                  const moved = await call('obs:tidyScene', scene);
+                  if (moved) toast('success', 'obs.tidied', { n: moved, scene });
+                }}>{t('obs.tidy')}</Button>}
+              </header>
+              {items.length > 0 && <ul className="source-list">
+                {items.map((a) => (
+                  <li key={`${a.itemScene}:${a.itemId}`} className={a.enabled ? '' : 'off'}>
+                    <span className="app-source-name">
+                      <b>{name(a)}</b>
+                      <span className="muted small">{a.sourceName}{a.parent ? ` · ${a.parentType === 'group' ? t('obs.inGroup', { name: a.parent }) : t('obs.inContainer')}` : ''}</span>
+                    </span>
+                    {isWorkspaceModule(a.kind) && <IconButton icon="settings" label={t('workspace.settings')} onClick={() => openModule(a.kind as WorkspaceCard)} />}
+                    <IconButton icon={a.enabled ? 'eye' : 'eyeOff'} label={t('obs.toggleVisibility')} onClick={() => void callOk('obs:setItemEnabled', a.itemScene, a.itemId, !a.enabled)} />
+                    <IconButton icon="trash" label={t('obs.removeFromScene')} onClick={() => confirm(t('obs.removeConfirm', { name: a.sourceName, scene })) && void callOk('obs:removeItem', a.itemScene, a.itemId)} />
+                  </li>
+                ))}
+              </ul>}
+            </section>
+          );
+        })}
+      </div>
+    </Card>
   );
 }

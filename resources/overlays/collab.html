@@ -28,6 +28,7 @@
     let lang = 'ru';
     const seen = new Set();
     function render() {
+      SH.useFont(document.body, cfg.fontFamily || 'Segoe UI');
       document.documentElement.style.setProperty('--accent', cfg.accentColor || '#9b6bff');
       title.textContent = cfg.title || '';
       guests.replaceChildren();

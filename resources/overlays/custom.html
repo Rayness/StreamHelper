@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <title>StreamHelper — Custom overlay</title>
+    <style>
+      html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; }
+      #stage { position: absolute; left: 0; top: 0; transform-origin: 0 0; overflow: hidden; }
+      .el { position: absolute; box-sizing: border-box; }
+      .text { display: flex; flex-direction: column; overflow: visible; white-space: pre-wrap; overflow-wrap: anywhere; paint-order: stroke fill; }
+      .text.fit { white-space: pre; }
+      .text > span { display: block; width: 100%; }
+      .image img { width: 100%; height: 100%; display: block; }
+      .widget iframe { width: 100%; height: 100%; border: 0; background: transparent; display: block; }
+      .swap { animation: swap 0.5s cubic-bezier(0.22, 1, 0.36, 1); }
+      @keyframes swap { from { opacity: 0; transform: translateY(0.35em); filter: blur(2px); } }
+    </style>
+  </head>
+  <body>
+    <div id="stage"></div>
+    <script src="/overlay/assets/common.js"></script>
+    <script>
+      const stage = document.getElementById('stage');
+      const nodes = new Map();
+      let overlay = null;
+
+      function fitStage() {
+        if (!overlay) return;
+        const scale = Math.min(innerWidth / overlay.width, innerHeight / overlay.height) || 1;
+        stage.style.width = overlay.width + 'px';
+        stage.style.height = overlay.height + 'px';
+        stage.style.transform = `scale(${scale})`;
+      }
+      addEventListener('resize', fitStage);
+
+      function place(node, el) {
+        Object.assign(node.style, {
+          left: el.x + 'px', top: el.y + 'px', width: el.w + 'px', height: el.h + 'px',
+          transform: el.rotation ? `rotate(${el.rotation}deg)` : '',
+          opacity: String(Math.max(0, Math.min(100, el.opacity ?? 100)) / 100),
+        });
+      }
+
+      function fitText(node, span, el) {
+        node.style.fontSize = el.fontSize + 'px';
+        if (!el.autoFit) return;
+        // Shrink a single line until it fits the box (long nicknames, big numbers).
+        let size = el.fontSize;
+        while (size > 8 && (span.scrollWidth > node.clientWidth + 1 || span.scrollHeight > node.clientHeight + 1)) {
+          size = Math.floor(size * 0.92);
+          node.style.fontSize = size + 'px';
+        }
+      }
+
+      function renderText(node, el) {
+        node.className = `el text${el.autoFit ? ' fit' : ''}`;
+        SH.useFont(node, el.fontFamily);
+        Object.assign(node.style, {
+          color: el.color, fontWeight: String(el.fontWeight || 700), fontStyle: el.italic ? 'italic' : 'normal',
+          textTransform: el.uppercase ? 'uppercase' : 'none', textAlign: el.align, letterSpacing: (el.letterSpacing || 0) + 'px',
+          lineHeight: String(el.lineHeight || 1.2), justifyContent: el.valign === 'top' ? 'flex-start' : el.valign === 'bottom' ? 'flex-end' : 'center',
+          webkitTextStroke: el.strokeWidth > 0 ? `${el.strokeWidth}px ${el.strokeColor}` : '',
+          textShadow: el.shadow ? '0 2px 4px rgba(0,0,0,.75), 0 0 14px rgba(0,0,0,.4)' : 'none',
+        });
+        let span = node.firstChild;
+        if (!span) { span = document.createElement('span'); node.appendChild(span); }
+        if (span.textContent !== el.text) {
+          const first = !span.dataset.ready;
+          span.textContent = el.text;
+          span.dataset.ready = '1';
+          if (!first && !SH.reducedMotion) { span.classList.remove('swap'); void span.offsetWidth; span.classList.add('swap'); }
+        }
+        fitText(node, span, el);
+      }
+
+      function renderImage(node, el) {
+        node.className = 'el image';
+        let img = node.firstChild;
+        if (!el.media) { node.replaceChildren(); return; }
+        const video = /\.(webm|mp4)$/i.test(el.media);
+        if (!img || img.tagName !== (video ? 'VIDEO' : 'IMG')) {
+          img = document.createElement(video ? 'video' : 'img');
+          if (video) Object.assign(img, { autoplay: true, loop: true, muted: true, playsInline: true });
+          node.replaceChildren(img);
+        }
+        if (img.getAttribute('src') !== el.media) img.setAttribute('src', el.media);
+        img.style.objectFit = el.fit || 'contain';
+        img.style.borderRadius = (el.radius || 0) + 'px';
+      }
+
+      function renderShape(node, el) {
+        node.className = 'el shape';
+        const fill = el.fill2 ? `linear-gradient(${el.gradientAngle || 0}deg, ${el.fill}, ${el.fill2})` : el.fill;
+        Object.assign(node.style, {
+          background: fill,
+          border: el.borderWidth > 0 && el.shape !== 'line' ? `${el.borderWidth}px solid ${el.borderColor}` : 'none',
+          borderRadius: el.shape === 'ellipse' ? '50%' : (el.radius || 0) + 'px',
+          filter: el.blur > 0 ? `blur(${el.blur}px)` : '',
+          backdropFilter: '',
+        });
+      }
+
+      function renderWidget(node, el) {
+        node.className = 'el widget';
+        const src = `/overlay/${el.kind}${el.itemId ? `?id=${encodeURIComponent(el.itemId)}` : ''}${SH.preview ? `${el.itemId ? '&' : '?'}preview=1` : ''}`;
+        let frame = node.firstChild;
+        if (!frame) { frame = document.createElement('iframe'); frame.setAttribute('allow', 'autoplay'); node.appendChild(frame); }
+        if (frame.getAttribute('src') !== src) frame.setAttribute('src', src);
+      }
+
+      function render() {
+        if (!overlay) { stage.replaceChildren(); nodes.clear(); return; }
+        fitStage();
+        stage.style.background = overlay.background || 'transparent';
+        const keep = new Set();
+        overlay.elements.forEach((el, index) => {
+          let node = nodes.get(el.id);
+          // A different element type in the same slot (undo, paste): start from a clean node.
+          if (node && node.dataset.type !== el.type) { node.remove(); node = null; }
+          if (!node) { node = document.createElement('div'); node.dataset.type = el.type; nodes.set(el.id, node); }
+          keep.add(el.id);
+          place(node, el);
+          node.style.zIndex = String(index + 1);
+          if (el.type === 'text') renderText(node, el);
+          else if (el.type === 'image') renderImage(node, el);
+          else if (el.type === 'shape') renderShape(node, el);
+          else if (el.type === 'widget') renderWidget(node, el);
+          if (node.parentNode !== stage) stage.appendChild(node);
+        });
+        for (const [id, node] of nodes) if (!keep.has(id)) { node.remove(); nodes.delete(id); }
+      }
+
+      document.fonts?.addEventListener('loadingdone', () => render());
+      // The app's designer drives its preview directly, so edits show before they are saved.
+      let local = false;
+      if (SH.preview) addEventListener('message', (e) => {
+        if (e.source !== parent || e.data?.type !== 'custom') return;
+        local = true;
+        overlay = e.data.overlay;
+        render();
+      });
+      SH.connect('custom', (msg) => {
+        if (msg.type !== 'custom' || local) return;
+        overlay = msg.overlay;
+        render();
+      });
+    </script>
+  </body>
+</html>

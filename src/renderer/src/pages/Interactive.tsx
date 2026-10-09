@@ -7,6 +7,7 @@ import { MediaPicker } from '../components/MediaPicker';
 import { InstancePicker, OverlayBar, OverlayPreview, pickInstance } from '../components/overlay';
 import { Button, Card, ColorInput, Empty, Field, IconButton, LinesInput, NumberInput, Select, TextInput, Toggle } from '../components/ui';
 import { useClock, useNow } from '../hooks';
+import { FontPicker } from '../components/FontPicker';
 import { useT, type TFn } from '../i18n';
 import { call, callOk, navigate, saveSettings, useApp } from '../store';
 
@@ -131,7 +132,7 @@ function WheelTab() {
                   <input type="range" min={0} max={1} step={0.05} value={w.volume} onChange={(e) => update({ volume: Number(e.target.value) })} />
                 </Field>
                 <Field label={t('common.font')} hint={t('common.fontHint')}>
-                  <TextInput value={w.fontFamily} onChange={(fontFamily) => update({ fontFamily })} />
+                  <FontPicker value={w.fontFamily} onChange={(fontFamily) => update({ fontFamily })} />
                 </Field>
               </div>
             </Card>
@@ -281,7 +282,7 @@ function PollTab() {
               <ColorInput value={cfg.textColor} onChange={(textColor) => set({ textColor })} />
             </Field>
             <Field label={t('common.font')} hint={t('common.fontHint')}>
-              <TextInput value={cfg.fontFamily} onChange={(fontFamily) => set({ fontFamily })} />
+              <FontPicker value={cfg.fontFamily} onChange={(fontFamily) => set({ fontFamily })} />
             </Field>
           </div>
         </Card>
@@ -406,7 +407,7 @@ function GiveawayTab() {
               <ColorInput value={cfg.accentColor} onChange={(accentColor) => set({ accentColor })} />
             </Field>
             <Field label={t('common.font')} hint={t('common.fontHint')}>
-              <TextInput value={cfg.fontFamily} onChange={(fontFamily) => set({ fontFamily })} />
+              <FontPicker value={cfg.fontFamily} onChange={(fontFamily) => set({ fontFamily })} />
             </Field>
           </div>
         </Card>
@@ -521,7 +522,7 @@ function QuizTab() {
               <ColorInput value={cfg.accentColor} onChange={(accentColor) => set({ accentColor })} />
             </Field>
             <Field label={t('common.font')} hint={t('common.fontHint')}>
-              <TextInput value={cfg.fontFamily} onChange={(fontFamily) => set({ fontFamily })} />
+              <FontPicker value={cfg.fontFamily} onChange={(fontFamily) => set({ fontFamily })} />
             </Field>
           </div>
         </Card>
@@ -561,6 +562,7 @@ function BossTab() {
           <Field label={t('boss.command')}><div className="trigger"><span className="prefix">{prefix}</span><input className="input mono" value={cfg.command} onChange={(e) => set({ command: e.target.value.replace(/\s+/g, '').replace(prefix, '') })} /></div></Field>
           <Field label={t('actions.redemption')}><TextInput value={cfg.redemptionTitle} onChange={(redemptionTitle) => set({ redemptionTitle })} placeholder={t('actions.redemptionPh')} /></Field>
           <Field label={t('common.accent')}><ColorInput value={cfg.accentColor} onChange={(accentColor) => set({ accentColor })} /></Field>
+          <Field label={t('common.font')} hint={t('common.fontHint')}><FontPicker value={cfg.fontFamily} onChange={(fontFamily) => set({ fontFamily })} /></Field>
           <Field label={t('boss.announce')}><Toggle checked={cfg.announce} onChange={(announce) => set({ announce })} /></Field>
         </div>
       </Card>

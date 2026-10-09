@@ -4,6 +4,7 @@ import { enExtra, ruExtra } from './i18n.extra';
 import { enMore, ruMore } from './i18n.more';
 import { enWorkspace, ruWorkspace } from './i18n.workspace';
 import { enFeatures, ruFeatures } from './i18n.features';
+import { enStudio, ruStudio } from './i18n.studio';
 import { useApp } from './store';
 
 const ruBase = {
@@ -24,7 +25,7 @@ const ruBase = {
   'common.copied': 'Скопировано',
   'common.delete': 'Удалить',
   'common.font': 'Шрифт',
-  'common.fontHint': 'Любой шрифт с Google Fonts, например Montserrat, Rubik, Inter',
+  'common.fontHint': 'Встроенный в StreamHelper, установленный в системе или любой с Google Fonts',
   'common.fontSize': 'Размер шрифта, px',
   'common.reload': 'Обновить',
   'common.textColor': 'Цвет текста',
@@ -416,7 +417,7 @@ const ruBase = {
   'toast.twitchSessionExpired': 'Сессия Twitch истекла — войдите снова',
 };
 
-const ru = { ...ruBase, ...ruExtra, ...ruMore, ...ruWorkspace, ...ruFeatures };
+const ru = { ...ruBase, ...ruExtra, ...ruMore, ...ruWorkspace, ...ruFeatures, ...ruStudio };
 export type TKey = keyof typeof ru;
 
 const enBase: Record<keyof typeof ruBase, string> = {
@@ -437,7 +438,7 @@ const enBase: Record<keyof typeof ruBase, string> = {
   'common.copied': 'Copied',
   'common.delete': 'Delete',
   'common.font': 'Font',
-  'common.fontHint': 'Any Google Fonts family, e.g. Montserrat, Rubik, Inter',
+  'common.fontHint': 'Bundled with StreamHelper, installed on this PC, or any Google Fonts family',
   'common.fontSize': 'Font size, px',
   'common.reload': 'Reload',
   'common.textColor': 'Text color',
@@ -829,7 +830,7 @@ const enBase: Record<keyof typeof ruBase, string> = {
   'toast.twitchSessionExpired': 'Twitch session expired — please log in again',
 };
 
-const en: Record<TKey, string> = { ...enBase, ...enExtra, ...enMore, ...enWorkspace, ...enFeatures };
+const en: Record<TKey, string> = { ...enBase, ...enExtra, ...enMore, ...enWorkspace, ...enFeatures, ...enStudio };
 
 const DICTS = { ru, en } as const;
 type Params = Record<string, string | number>;

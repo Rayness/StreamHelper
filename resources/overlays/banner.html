@@ -132,7 +132,8 @@
 
       /* ---- ticker ---- */
       .ticker {
-        width: 100%;
+        width: var(--ticker-width, 100%);
+        flex: none;
         height: 1.9em;
         display: flex;
         align-items: center;
@@ -245,7 +246,7 @@
         const make = () => banner.slides.forEach((s) => track.appendChild(slideNode(s, 'item')));
         make();
         // Repeat the content until it is at least twice the visible width, so the loop is seamless.
-        const viewport = root.clientWidth || 1920;
+        const viewport = track.parentElement?.clientWidth || root.clientWidth || 1920;
         let guard = 0;
         while (track.scrollWidth < viewport * 2 && guard++ < 20 && banner.slides.length) make();
         // A CSS animation runs on the compositor: far cheaper for OBS than moving it from JS every frame.
@@ -261,7 +262,10 @@
         root.style.setProperty('--text', banner.textColor);
         root.style.setProperty('--bg', banner.background);
         root.style.setProperty('--accent', banner.accentColor);
-        root.className = 'align-' + (banner.layout === 'ticker' ? 'left' : banner.align);
+        const tickerWidth = Math.max(10, Math.min(100, Number(banner.tickerWidth) || 100));
+        root.style.setProperty('--ticker-width', tickerWidth + '%');
+        // A full-width ticker has nowhere to move; a narrower strip is placed by the alignment.
+        root.className = 'align-' + (banner.layout === 'ticker' && tickerWidth >= 100 ? 'left' : banner.align);
       }
 
       SH.connect('banner', (msg) => {
@@ -273,7 +277,7 @@
         if (SH.preview) banner.shown = true;
         applyStyle();
         // Rebuild only when the content or layout changed; a pure show/hide just animates.
-        const key = JSON.stringify([banner.layout, banner.slides, banner.name, banner.intervalSec]);
+        const key = JSON.stringify([banner.layout, banner.slides, banner.name, banner.intervalSec, banner.tickerWidth, banner.tickerSpeed]);
         if (key !== layoutKey || !root.firstChild) {
           layoutKey = key;
           build();

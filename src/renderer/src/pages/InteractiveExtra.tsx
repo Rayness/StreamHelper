@@ -2,6 +2,7 @@ import type { GuessSettings, Permission, ViewerQueueSettings } from '@shared/typ
 import { OverlayBar, OverlayPreview } from '../components/overlay';
 import { Button, Card, ColorInput, Empty, Field, IconButton, NumberInput, Select, TextInput, Toggle } from '../components/ui';
 import { useClock, useNow } from '../hooks';
+import { FontPicker } from '../components/FontPicker';
 import { useT } from '../i18n';
 import { call, callOk, saveSettings, useApp } from '../store';
 
@@ -86,7 +87,7 @@ export function QueueTab() {
               </div>
             </Field>
             <Field label={t('common.accent')}><ColorInput value={cfg.accentColor} onChange={(accentColor) => set({ accentColor })} /></Field>
-            <Field label={t('common.font')} hint={t('common.fontHint')}><TextInput value={cfg.fontFamily} onChange={(fontFamily) => set({ fontFamily })} /></Field>
+            <Field label={t('common.font')} hint={t('common.fontHint')}><FontPicker value={cfg.fontFamily} onChange={(fontFamily) => set({ fontFamily })} /></Field>
           </div>
         </Card>
       </div>
@@ -144,7 +145,7 @@ export function GuessTab() {
             <Field label={t('guess.cooldown')} hint={t('guess.cooldownHint')}><NumberInput value={cfg.cooldownSec} min={0} max={600} onChange={(cooldownSec) => set({ cooldownSec })} /></Field>
             <Field label={t('overlays.options')} wide><Toggle checked={cfg.announce} onChange={(announce) => set({ announce })} label={t('guess.announce')} /></Field>
             <Field label={t('common.accent')}><ColorInput value={cfg.accentColor} onChange={(accentColor) => set({ accentColor })} /></Field>
-            <Field label={t('common.font')} hint={t('common.fontHint')}><TextInput value={cfg.fontFamily} onChange={(fontFamily) => set({ fontFamily })} /></Field>
+            <Field label={t('common.font')} hint={t('common.fontHint')}><FontPicker value={cfg.fontFamily} onChange={(fontFamily) => set({ fontFamily })} /></Field>
           </div>
         </Card>
       </div>

@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <title>StreamHelper — Donations</title>
+    <style>
+      :root { --text: #fff; --accent: #ffb547; --bg: rgba(14, 12, 20, 0.78); --size: 26px; }
+      html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; }
+      #root { position: absolute; inset: 0; box-sizing: border-box; padding: 10px; display: flex; flex-direction: column; color: var(--text); font-size: var(--size); }
+      #root.align-center { align-items: center; text-align: center; }
+      #root.align-right { align-items: flex-end; text-align: right; }
+      #root.hidden { display: none; }
+      .board { box-sizing: border-box; max-width: 100%; max-height: 100%; display: flex; flex-direction: column; min-height: 0; padding: 0.55em 0.8em; border-radius: 0.55em; background: var(--bg); box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent), 0 10px 30px rgba(0, 0, 0, 0.35); }
+      #root:not(.ticker) .board { min-width: min(100%, 12em); }
+      .title { flex: none; display: flex; align-items: center; gap: 0.4em; margin-bottom: 0.35em; color: var(--accent); font-size: 0.62em; font-weight: 900; letter-spacing: 0.1em; text-transform: uppercase; }
+      #root.align-center .title { justify-content: center; }
+      #root.align-right .title { justify-content: flex-end; }
+      .title::before { content: ''; width: 0.55em; height: 0.55em; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0.6em var(--accent); }
+      .viewport { position: relative; min-height: 0; overflow: hidden; }
+      .rows { display: flex; flex-direction: column; gap: 0.22em; }
+      .rows.scroll { animation: scroll var(--scroll-time, 20s) ease-in-out infinite alternate; }
+      @keyframes scroll { 0%, 12% { transform: translateY(0); } 88%, 100% { transform: translateY(var(--scroll-by)); } }
+      .row { display: flex; align-items: baseline; gap: 0.5em; line-height: 1.25; }
+      #root.align-center .row { justify-content: center; }
+      #root.align-right .row { justify-content: flex-end; }
+      .rank { flex: none; min-width: 1.2em; color: var(--accent); font-weight: 900; font-variant-numeric: tabular-nums; }
+      .name { font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+      .amount { flex: none; margin-left: auto; color: var(--accent); font-weight: 900; font-variant-numeric: tabular-nums; white-space: nowrap; }
+      #root.align-center .amount, #root.align-right .amount { margin-left: 0; }
+      .message { margin: -0.05em 0 0.2em; font-size: 0.62em; opacity: 0.85; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+      .single { display: flex; flex-direction: column; gap: 0.15em; }
+      .single .row { font-size: 1.1em; }
+      .total { font-size: 1.9em; font-weight: 900; color: var(--accent); font-variant-numeric: tabular-nums; line-height: 1.1; }
+      .count { font-size: 0.62em; opacity: 0.8; font-weight: 700; }
+      .page { animation: page-in 0.55s cubic-bezier(0.22, 1, 0.36, 1); }
+      @keyframes page-in { from { opacity: 0; transform: translateY(0.45em); filter: blur(3px); } }
+      /* ticker */
+      #root.ticker { justify-content: center; }
+      #root.ticker .board { width: 100%; flex-direction: row; align-items: center; padding: 0.3em 0; overflow: hidden; -webkit-mask-image: linear-gradient(90deg, transparent, #000 3%, #000 97%, transparent); mask-image: linear-gradient(90deg, transparent, #000 3%, #000 97%, transparent); }
+      .track { display: flex; align-items: center; gap: 1.2em; padding-left: 1.2em; white-space: nowrap; font-weight: 700; will-change: transform; }
+      .track .label { color: var(--accent); font-weight: 900; text-transform: uppercase; font-size: 0.7em; letter-spacing: 0.08em; }
+      .track .sep { color: var(--accent); opacity: 0.7; }
+      @keyframes ticker { from { transform: translateX(0); } to { transform: translateX(var(--shift)); } }
+    </style>
+  </head>
+  <body>
+    <div id="root" class="hidden"></div>
+    <script src="/overlay/assets/common.js"></script>
+    <script>
+      const root = document.getElementById('root');
+      let msg = null;
+      let pageIndex = 0;
+      let itemIndex = 0;
+      let timer = null;
+      let lastKey = '';
+
+      const SAMPLE = (lang) => {
+        const now = Date.now();
+        const names = ['Kira', 'Alex_88', 'Мирон', 'NightOwl', 'Sasha'];
+        const amounts = [500, 150, 1000, 300, 50];
+        const all = names.map((name, i) => ({ id: 's' + i, name, amount: amounts[i], currency: 'RUB', amountMain: amounts[i], message: SH.tr(lang, 'Спасибо за стрим!', 'Thanks for the stream!'), at: now - i * 60000 }));
+        return { latest: all, top: [...all].sort((a, b) => b.amount - a.amount).map((d) => ({ name: d.name, amount: d.amount, count: 1 })), all, total: 2000, count: 5, currency: 'RUB' };
+      };
+
+      const fmt = (n) => (Number.isInteger(n) ? n.toLocaleString('ru-RU') : n.toLocaleString('ru-RU', { maximumFractionDigits: 2 }));
+      const money = (amount, currency) => `${fmt(Number(amount) || 0)} ${currency || ''}`.trim();
+
+      function pages() {
+        const { board, style } = msg;
+        const enabled = (style.pages || []).filter((p) => ['latest', 'top', 'all', 'total'].includes(p));
+        return enabled.filter((p) => (p === 'total' ? board.count > 0 : (board[p] || []).length > 0));
+      }
+
+      function entries(page) {
+        const { board } = msg;
+        if (page === 'top') return board.top.map((d) => ({ name: d.name, amount: money(d.amount, board.currency), message: '' }));
+        return (board[page] || []).map((d) => ({ name: d.name, amount: money(d.amount, d.currency), message: d.message || '' }));
+      }
+
+      function row(e, rank) {
+        const r = SH.el('div', 'row');
+        if (rank) r.appendChild(SH.el('span', 'rank', String(rank)));
+        r.appendChild(SH.el('span', 'name', e.name));
+        r.appendChild(SH.el('span', 'amount', e.amount));
+        return r;
+      }
+
+      function renderTicker(list) {
+        const { style, board } = msg;
+        const box = SH.el('div', 'board');
+        const track = SH.el('div', 'track');
+        box.appendChild(track);
+        root.appendChild(box);
+        const fill = () => list.forEach((page) => {
+          if (style.showTitle) track.appendChild(SH.el('span', 'label', style.titles?.[page] || ''));
+          if (page === 'total') track.appendChild(SH.el('span', 'amount', money(board.total, board.currency)));
+          else entries(page).forEach((e, i) => {
+            if (i) track.appendChild(SH.el('span', 'sep', '•'));
+            const item = SH.el('span', '');
+            item.appendChild(SH.el('b', '', e.name + ' '));
+            item.appendChild(SH.el('span', 'amount', e.amount));
+            track.appendChild(item);
+          });
+          track.appendChild(SH.el('span', 'sep', '✦'));
+        });
+        fill();
+        let guard = 0;
+        while (track.scrollWidth < box.clientWidth * 2 && guard++ < 20) fill();
+        const half = track.scrollWidth / 2;
+        track.style.setProperty('--shift', `-${half}px`);
+        if (!SH.reducedMotion && half > 0) track.style.animation = `ticker ${half / Math.max(10, Number(style.tickerSpeed) || 90)}s linear infinite`;
+      }
+
+      function renderPage(page) {
+        const { style, board } = msg;
+        const box = SH.el('div', 'board page');
+        if (style.showTitle) box.appendChild(SH.el('div', 'title', style.titles?.[page] || ''));
+        const viewport = SH.el('div', 'viewport');
+        box.appendChild(viewport);
+        root.appendChild(box);
+        if (page === 'total') {
+          const single = SH.el('div', 'single');
+          single.appendChild(SH.el('div', 'total', money(board.total, board.currency)));
+          single.appendChild(SH.el('div', 'count', SH.tr(msg.lang, `${board.count} ${SH.plural(board.count, 'донат', 'доната', 'донатов')}`, `${board.count} donation${board.count === 1 ? '' : 's'}`)));
+          viewport.appendChild(single);
+          return 1;
+        }
+        const list = entries(page);
+        if (style.layout === 'single') {
+          const e = list[itemIndex % list.length];
+          const single = SH.el('div', 'single page');
+          single.appendChild(row(e, page === 'top' ? (itemIndex % list.length) + 1 : 0));
+          if (style.showMessage && e.message) single.appendChild(SH.el('div', 'message', e.message));
+          viewport.appendChild(single);
+          return list.length;
+        }
+        const rows = SH.el('div', 'rows');
+        list.forEach((e, i) => {
+          rows.appendChild(row(e, page === 'top' ? i + 1 : 0));
+          if (style.showMessage && e.message) rows.appendChild(SH.el('div', 'message', e.message));
+        });
+        viewport.appendChild(rows);
+        // Longer than the source: scroll through slowly instead of cutting the list off.
+        requestAnimationFrame(() => {
+          const by = rows.scrollHeight - viewport.clientHeight;
+          if (by > 4 && !SH.reducedMotion) {
+            rows.style.setProperty('--scroll-by', `-${by}px`);
+            rows.style.setProperty('--scroll-time', `${Math.max(6, by / 25)}s`);
+            rows.classList.add('scroll');
+          }
+        });
+        return 1;
+      }
+
+      function show() {
+        clearTimeout(timer);
+        root.replaceChildren();
+        const list = pages();
+        root.classList.toggle('hidden', !list.length);
+        if (!list.length) return;
+        const { style } = msg;
+        root.className = `align-${style.align || 'left'}${style.layout === 'ticker' ? ' ticker' : ''}`;
+        if (style.layout === 'ticker') return renderTicker(list);
+        const page = list[pageIndex % list.length];
+        const items = renderPage(page);
+        const single = style.layout === 'single' && page !== 'total';
+        const wait = single ? Math.max(2, Number(style.itemSec) || 6) : Math.max(3, Number(style.pageSec) || 12);
+        timer = setTimeout(() => {
+          if (single && itemIndex + 1 < items) itemIndex++;
+          else { itemIndex = 0; pageIndex = (pageIndex + 1) % list.length; }
+          show();
+        }, wait * 1000);
+      }
+
+      SH.connect('donations', (m) => {
+        if (m.type !== 'donations') return;
+        const board = m.board.count === 0 && SH.preview ? SAMPLE(m.lang) : m.board;
+        msg = { ...m, board };
+        const s = m.style;
+        SH.useFont(root, s.fontFamily || 'Montserrat');
+        root.style.setProperty('--size', Math.max(10, Math.min(120, Number(s.fontSize) || 26)) + 'px');
+        root.style.setProperty('--text', s.textColor || '#fff');
+        root.style.setProperty('--accent', s.accentColor || '#ffb547');
+        root.style.setProperty('--bg', s.background || 'rgba(14,12,20,.78)');
+        // New donations update the page in place; a different look restarts the rotation.
+        const key = JSON.stringify([s.layout, s.pages, s.align]);
+        if (key !== lastKey) { lastKey = key; pageIndex = 0; itemIndex = 0; }
+        show();
+      });
+    </script>
+  </body>
+</html>

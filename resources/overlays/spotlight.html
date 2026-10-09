@@ -83,6 +83,7 @@
     }
     function applyConfig(next){
       config={...defaults,...next};
+      SH.useFont(document.body,config.fontFamily||'Inter');
       const s=document.documentElement.style;
       s.setProperty('--accent',config.accentColor);s.setProperty('--text',config.textColor);s.setProperty('--bg',config.background);s.setProperty('--size',clamp(config.fontSize,16,100)+'px');
       clear();if(lastMessage)show(lastMessage);else if(SH.preview)show({userName:'Viewer',text:'Сообщение появится здесь'});

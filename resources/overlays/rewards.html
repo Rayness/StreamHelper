@@ -47,6 +47,7 @@
     SH.connect('rewards', (message) => {
       if (message.type === 'rewards') {
         cfg = message.config || cfg;
+        SH.useFont(document.body, cfg.fontFamily || 'Segoe UI');
         document.documentElement.style.setProperty('--accent', cfg.accentColor || '#9b6bff');
         list.replaceChildren(); seen.clear();
         for (const event of message.events || []) add(event, false);

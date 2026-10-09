@@ -9,8 +9,9 @@ import { MediaPicker } from '../components/MediaPicker';
 import { InstancePicker, OverlayBar, OverlayPreview, pickInstance } from '../components/overlay';
 import { Button, Card, ColorInput, Field, IconButton, LinesInput, NumberInput, Select, Tabs, TextInput, Toggle } from '../components/ui';
 import { useNow } from '../hooks';
+import { FontPicker } from '../components/FontPicker';
 import { useT } from '../i18n';
-import { CounterDetail, HypeDetail, LeadersDetail } from './OverlaysExtra';
+import { CounterDetail, DonationsDetail, HypeDetail, LeadersDetail } from './OverlaysExtra';
 import { call, callOk, navigate, saveSettings, toast, useApp } from '../store';
 
 /** Settings on the left, the live preview on the right. */
@@ -24,26 +25,15 @@ export function Split({ settings, preview, stacked }: { settings: ReactNode; pre
 }
 
 export function OverlayDetail({ kind }: { kind: OverlayKind }) {
-  const t = useT();
   switch (kind) {
     case 'alerts':
       return null;
     case 'chat':
       return <ChatDetail />;
     case 'events':
-      return (
-        <>
-          <OverlayBar kind="events" name={t('ov.events')} />
-          <Split
-            settings={
-              <Card>
-                <p className="muted small">{t('overlays.eventsHint')}</p>
-              </Card>
-            }
-            preview={<OverlayPreview kind="events" children={<TestAlertButtons kind="events" types={['follow', 'sub', 'donation']} />} />}
-          />
-        </>
-      );
+      return <EventsDetail />;
+    case 'donations':
+      return <DonationsDetail />;
     case 'rewards':
       return <RewardsDetail />;
     case 'collab':
@@ -57,7 +47,7 @@ export function OverlayDetail({ kind }: { kind: OverlayKind }) {
     case 'ad':
       return <AdsDetail />;
     case 'live':
-      return <SimpleDetail kind="live" />;
+      return <LiveDetail />;
     case 'spotlight':
       return <SpotlightDetail />;
     case 'label':
@@ -87,11 +77,40 @@ export function OverlayDetail({ kind }: { kind: OverlayKind }) {
   }
 }
 
-function SimpleDetail({ kind }: { kind: 'live' }) {
+function LiveDetail() {
   const t = useT();
+  const cfg = useApp((d) => d.settings!.liveOverlay);
+  const set = (patch: Partial<typeof cfg>) => saveSettings('liveOverlay', { ...cfg, ...patch });
   return <>
-    <OverlayBar kind={kind} name={t(`ov.${kind}`)} />
-    <Split settings={<Card><p className="muted">{t(`simple.${kind}`)}</p></Card>} preview={<OverlayPreview kind={kind} />} />
+    <OverlayBar kind="live" name={t('ov.live')} />
+    <Split settings={<Card>
+      <p className="muted">{t('simple.live')}</p>
+      <div className="form">
+        <Field label={t('common.font')} hint={t('common.fontHint')}><FontPicker value={cfg.fontFamily} onChange={(fontFamily) => set({ fontFamily })} /></Field>
+        <Field label={t('common.accent')}><ColorInput value={cfg.accentColor} onChange={(accentColor) => set({ accentColor })} /></Field>
+      </div>
+    </Card>} preview={<OverlayPreview kind="live" />} />
+  </>;
+}
+
+function EventsDetail() {
+  const t = useT();
+  const cfg = useApp((d) => d.settings!.eventsOverlay);
+  const set = (patch: Partial<typeof cfg>) => saveSettings('eventsOverlay', { ...cfg, ...patch });
+  return <>
+    <OverlayBar kind="events" name={t('ov.events')} />
+    <Split
+      settings={<Card>
+        <p className="muted small">{t('overlays.eventsHint')}</p>
+        <div className="form">
+          <Field label={t('common.font')} hint={t('common.fontHint')}><FontPicker value={cfg.fontFamily} onChange={(fontFamily) => set({ fontFamily })} /></Field>
+          <Field label={t('common.fontSize')}><NumberInput value={cfg.fontSize} min={10} max={72} onChange={(fontSize) => set({ fontSize })} /></Field>
+          <Field label={t('common.textColor')}><ColorInput value={cfg.textColor} onChange={(textColor) => set({ textColor })} /></Field>
+          <Field label={t('common.background')} hint={t('overlays.chatBgHint')}><TextInput value={cfg.background} onChange={(background) => set({ background })} mono /></Field>
+        </div>
+      </Card>}
+      preview={<OverlayPreview kind="events" children={<TestAlertButtons kind="events" types={['follow', 'sub', 'donation']} />} />}
+    />
   </>;
 }
 
@@ -107,6 +126,7 @@ function SpotlightDetail() {
         <Field label={t('spotlight.autoHighlighted')} wide><Toggle checked={cfg.autoHighlighted} onChange={(autoHighlighted) => set({ autoHighlighted })} /></Field>
         <Field label={t('spotlight.mode')}><Select value={cfg.mode} onChange={(mode) => set({ mode })} options={(['single', 'stack', 'rain'] as const).map((mode) => ({ value: mode, label: t(`spotlight.mode_${mode}`) }))} /></Field>
         <Field label={t('spotlight.cardStyle')}><Select value={cfg.cardStyle} onChange={(cardStyle) => set({ cardStyle })} options={(['solid', 'glass', 'outline'] as const).map((cardStyle) => ({ value: cardStyle, label: t(`spotlight.cardStyle_${cardStyle}`) }))} /></Field>
+        <Field label={t('common.font')} hint={t('common.fontHint')}><FontPicker value={cfg.fontFamily} onChange={(fontFamily) => set({ fontFamily })} /></Field>
         <Field label={t('common.fontSize')}><NumberInput value={cfg.fontSize} min={16} max={100} onChange={(fontSize) => set({ fontSize })} /></Field>
         <Field label={t('common.textColor')}><ColorInput value={cfg.textColor} onChange={(textColor) => set({ textColor })} /></Field>
         <Field label={t('common.accent')}><ColorInput value={cfg.accentColor} onChange={(accentColor) => set({ accentColor })} /></Field>
@@ -150,6 +170,7 @@ function MusicDetail() {
         { value: 'vertical', label: t('music.layout.vertical') },
       ]} /></Field>
       <Field label={t('music.coverSize')}><NumberInput value={cfg.coverSize} min={60} max={240} onChange={(coverSize) => set({ coverSize })} /></Field>
+      <Field label={t('common.font')} hint={t('common.fontHint')}><FontPicker value={cfg.fontFamily} onChange={(fontFamily) => set({ fontFamily })} /></Field>
       <Field label={t('music.fontSize')}><NumberInput value={cfg.fontSize} min={16} max={48} onChange={(fontSize) => set({ fontSize })} /></Field>
       <Field label={t('music.opacity')}><NumberInput value={cfg.backgroundOpacity} min={0} max={100} onChange={(backgroundOpacity) => set({ backgroundOpacity })} /></Field>
       <Field label={t('common.accent')}><ColorInput value={cfg.accentColor} onChange={(accentColor) => set({ accentColor })} /></Field>
@@ -224,6 +245,7 @@ function SongDetail() {
           <p className="muted small">{t('song.youtubeHint')}</p>
         </>}
         <Field label={t('song.opacity')}><NumberInput value={cfg.backgroundOpacity} min={0} max={100} onChange={(backgroundOpacity) => set({ backgroundOpacity })} /></Field>
+        <Field label={t('common.font')} hint={t('common.fontHint')}><FontPicker value={cfg.fontFamily} onChange={(fontFamily) => set({ fontFamily })} /></Field>
         <Field label={t('common.accent')}><ColorInput value={cfg.accentColor} onChange={(accentColor) => set({ accentColor })} /></Field>
         <Field label={t('overlays.options')} wide><div className="stack">
           <Toggle checked={cfg.showTitle} onChange={(showTitle) => set({ showTitle })} label={t('song.showTitle')} />
@@ -430,7 +452,7 @@ function ChatDetail() {
           ]} />
           {section === 'look' && <Card title={t('chatSettings.appearance')}>
             <div className="form">
-              <Field label={t('common.font')} hint={t('common.fontHint')}><TextInput value={c.fontFamily} onChange={(fontFamily) => set({ fontFamily })} /></Field>
+              <Field label={t('common.font')} hint={t('common.fontHint')}><FontPicker value={c.fontFamily} onChange={(fontFamily) => set({ fontFamily })} /></Field>
               <Field label={t('common.fontSize')}><NumberInput value={c.fontSize} min={10} max={72} onChange={(fontSize) => set({ fontSize })} /></Field>
               <Field label={t('common.textColor')}><ColorInput value={c.textColor} onChange={(textColor) => set({ textColor })} /></Field>
               <Field label={t('common.accent')}><ColorInput value={c.accentColor} onChange={(accentColor) => set({ accentColor })} /></Field>
@@ -516,6 +538,7 @@ function RewardsDetail() {
         <Field label={t('rewards.maxItems')}><NumberInput value={cfg.maxItems} min={1} max={12} onChange={(maxItems) => set({ maxItems })} /></Field>
         <Field label={t('rewards.showInput')}><Toggle checked={cfg.showInput} onChange={(showInput) => set({ showInput })} /></Field>
         <Field label={t('common.accent')}><ColorInput value={cfg.accentColor} onChange={(accentColor) => set({ accentColor })} /></Field>
+        <Field label={t('common.font')} hint={t('common.fontHint')}><FontPicker value={cfg.fontFamily} onChange={(fontFamily) => set({ fontFamily })} /></Field>
       </div>
     </Card>} preview={<OverlayPreview kind="rewards" maxHeight={450}><TestAlertButtons kind="rewards" types={['redemption']} /></OverlayPreview>} />
   </>;
@@ -534,6 +557,7 @@ function CollabDetail() {
         <Field label={t('collab.guests')} hint={t('collab.guestsHint')} wide><LinesInput value={cfg.guests} onChange={(guests) => set({ guests })} rows={5} /></Field>
         <Field label={t('collab.showRaids')}><Toggle checked={cfg.showRaids} onChange={(showRaids) => set({ showRaids })} /></Field>
         <Field label={t('common.accent')}><ColorInput value={cfg.accentColor} onChange={(accentColor) => set({ accentColor })} /></Field>
+        <Field label={t('common.font')} hint={t('common.fontHint')}><FontPicker value={cfg.fontFamily} onChange={(fontFamily) => set({ fontFamily })} /></Field>
       </div>
     </Card>} preview={<OverlayPreview kind="collab" maxHeight={370}><TestAlertButtons kind="collab" types={['raid']} /></OverlayPreview>} />
   </>;
@@ -562,6 +586,7 @@ function AdsDetail() {
             <Field label={t('ads.headline')}><TextInput value={ad.headline} onChange={(headline) => update({ headline })} /></Field>
             <Field label={t('ads.caption')}><TextInput value={ad.caption} onChange={(caption) => update({ caption })} /></Field>
             <Field label={t('common.accent')}><ColorInput value={ad.accentColor} onChange={(accentColor) => update({ accentColor })} /></Field>
+            <Field label={t('common.font')} hint={t('common.fontHint')}><FontPicker value={ad.fontFamily ?? 'Montserrat'} onChange={(fontFamily) => update({ fontFamily })} /></Field>
             <Field label={t('ads.position')}><Select value={ad.position} onChange={(position) => update({ position })} options={(['bottomRight','bottomLeft','topRight','topLeft'] as const).map((x) => ({ value:x, label:t(`ads.pos_${x}`) }))} /></Field>
             <Field label={t('ads.entrance')}><Select<AdEntrance> value={ad.entrance ?? 'slideUp'} onChange={(entrance) => update({ entrance })} options={(['fade','slideUp','slideDown','slideSide','zoom','bounce','flip','blur','wipe','glitch','rotate','drop','pulse','curtain'] as const).map((x) => ({ value: x, label: t(`ads.fx_${x}`) }))} /></Field>
             <Field label={t('ads.entranceMs')}><NumberInput value={ad.entranceMs ?? 550} min={150} max={2500} step={50} onChange={(entranceMs) => update({ entranceMs })} /></Field>
@@ -675,9 +700,20 @@ function BannersDetail() {
                       />
                     </Field>
                     {b.layout === 'ticker' ? (
-                      <Field label={t('banners.speed')}>
-                        <NumberInput value={b.tickerSpeed} min={10} max={600} step={10} onChange={(tickerSpeed) => update({ tickerSpeed })} />
-                      </Field>
+                      <>
+                        <Field label={t('banners.speed')}>
+                          <NumberInput value={b.tickerSpeed} min={10} max={600} step={10} onChange={(tickerSpeed) => update({ tickerSpeed })} />
+                        </Field>
+                        <Field label={t('banners.tickerWidth')} hint={t('banners.tickerWidthHint')}>
+                          <div className="range-field">
+                            <input type="range" min={10} max={100} step={5} value={b.tickerWidth ?? 100} onChange={(e) => update({ tickerWidth: Number(e.target.value) })} />
+                            <NumberInput value={b.tickerWidth ?? 100} min={10} max={100} step={5} onChange={(tickerWidth) => update({ tickerWidth })} />
+                          </div>
+                        </Field>
+                        {(b.tickerWidth ?? 100) < 100 && <Field label={t('banners.align')}>
+                          <Select value={b.align} onChange={(align) => update({ align })} options={(['left', 'center', 'right'] as const).map((a) => ({ value: a, label: t(`align.${a}`) }))} />
+                        </Field>}
+                      </>
                     ) : (
                       <>
                         <Field label={t('banners.interval')}>
@@ -693,7 +729,7 @@ function BannersDetail() {
                       </>
                     )}
                     <Field label={t('common.font')} hint={t('common.fontHint')}>
-                      <TextInput value={b.fontFamily} onChange={(fontFamily) => update({ fontFamily })} />
+                      <FontPicker value={b.fontFamily} onChange={(fontFamily) => update({ fontFamily })} />
                     </Field>
                     <Field label={t('common.fontSize')}>
                       <NumberInput value={b.fontSize} min={10} max={120} onChange={(fontSize) => update({ fontSize })} />
@@ -768,7 +804,7 @@ function LabelsDetail() {
                       <VarsHelp />
                     </Field>
                     <Field label={t('common.font')} hint={t('common.fontHint')}>
-                      <TextInput value={l.fontFamily} onChange={(fontFamily) => update({ fontFamily })} />
+                      <FontPicker value={l.fontFamily} onChange={(fontFamily) => update({ fontFamily })} />
                     </Field>
                     <Field label={t('common.fontSize')}>
                       <NumberInput value={l.fontSize} min={10} max={160} onChange={(fontSize) => update({ fontSize })} />
@@ -874,6 +910,9 @@ function GoalsDetail() {
                     </>}
                     <Field label={t('goals.showAmounts')}><Toggle checked={g.showAmounts ?? true} onChange={(showAmounts) => update({ showAmounts })} /></Field>
                     <Field label={t('goals.showPercent')}><Toggle checked={g.showPercent ?? true} onChange={(showPercent) => update({ showPercent })} /></Field>
+                    <Field label={t('common.font')} hint={t('common.fontHint')}>
+                      <FontPicker value={g.fontFamily ?? 'Montserrat'} onChange={(fontFamily) => update({ fontFamily })} />
+                    </Field>
                     <Field label={t('goals.barColor')}>
                       <ColorInput value={g.barColor} onChange={(barColor) => update({ barColor })} />
                     </Field>
@@ -958,7 +997,7 @@ function TimersDetail() {
                       </Field>
                     )}
                     <Field label={t('common.font')}>
-                      <TextInput value={tm.fontFamily} onChange={(fontFamily) => update({ fontFamily })} />
+                      <FontPicker value={tm.fontFamily} onChange={(fontFamily) => update({ fontFamily })} />
                     </Field>
                     <Field label={t('common.fontSize')}>
                       <NumberInput value={tm.fontSize} min={12} max={300} onChange={(fontSize) => update({ fontSize })} />
@@ -1034,7 +1073,7 @@ export function KawakiStyleCard() {
           <ColorInput value={k.accentColor} onChange={(accentColor) => set({ accentColor })} />
         </Field>
         <Field label={t('common.font')} hint={t('common.fontHint')}>
-          <TextInput value={k.fontFamily} onChange={(fontFamily) => set({ fontFamily })} />
+          <FontPicker value={k.fontFamily} onChange={(fontFamily) => set({ fontFamily })} />
         </Field>
       </div>
     </Card>

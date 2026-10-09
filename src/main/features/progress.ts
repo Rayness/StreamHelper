@@ -3,6 +3,7 @@ import type { ChatMessage, Goal, OverlayTimer, StreamEvent } from '@shared/types
 import { emptyStats } from '@shared/defaults';
 import { donationAmount } from '@shared/events';
 import type { AppContext } from '../core/context';
+import { appendDonation, donationRecord } from '@shared/donations';
 import { applyEventToStats } from './vars';
 
 /** How much an event moves a goal of the given kind. */
@@ -64,6 +65,7 @@ export class ProgressTracker {
       this.applyToGoals(e);
       this.applyToTimers(e);
       this.applyToStats(e);
+      if (e.type === 'donation') this.ctx.settings.update('donationLog', (log) => appendDonation(log ?? [], donationRecord(e, this.ctx.settings.get('currency'))));
     });
     ctx.bus.on('chat:message', (message) => this.applyToChatGoals(message));
   }
@@ -98,6 +100,10 @@ export class ProgressTracker {
 
   resetStats(): void {
     this.ctx.settings.set('stats', emptyStats());
+  }
+
+  clearDonations(): void {
+    this.ctx.settings.set('donationLog', []);
   }
 
   private applyToGoals(e: StreamEvent): void {

@@ -23,7 +23,7 @@
         display: flex;
         align-items: center;
         gap: 10px;
-        background: rgba(0, 0, 0, 0.45);
+        background: var(--row-bg, rgba(0, 0, 0, 0.45));
         border-radius: 10px;
         padding: 6px 12px;
         animation: in 0.4s ease-out;
@@ -90,6 +90,13 @@
 
       SH.connect('events', (msg) => {
         if (msg.type === 'events') {
+          const st = msg.style;
+          if (st) {
+            SH.useFont(list, st.fontFamily || 'Inter');
+            list.style.fontSize = Math.max(10, Math.min(72, Number(st.fontSize) || 18)) + 'px';
+            list.style.color = st.textColor || '#fff';
+            list.style.setProperty('--row-bg', st.background || 'rgba(0,0,0,.45)');
+          }
           list.innerHTML = '';
           msg.events.filter(wanted).slice(0, limit).forEach((e) => list.appendChild(row(e)));
         } else if (msg.type === 'event' && wanted(msg.event)) {
