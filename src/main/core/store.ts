@@ -3,7 +3,7 @@ import { dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { defaultSettings, mergeDefaults, migrateLists, migrateSettings } from '@shared/defaults';
 import { merge3 } from '@shared/merge';
-import { ALL_OVERLAY_KINDS, NEW_OVERLAY_KINDS, PROFILE_KEYS, profileSnapshot } from '@shared/profiles';
+import { ALL_OVERLAY_KINDS, LEGACY_OVERLAY_KINDS, OVERLAY_KINDS_0_12, PROFILE_KEYS, profileSnapshot } from '@shared/profiles';
 import { normalizeWorkspaceCards, normalizeMonitorLayout } from '@shared/workspace';
 import type { Language, OverlayKind, ProfileConfig, ProfileSettingsKey, Settings, SettingsKey } from '@shared/types';
 import type { EventBus } from './eventBus';
@@ -30,8 +30,11 @@ export class SettingsStore {
       }
     }
     const lang = (stored as Partial<Settings> | undefined)?.language ?? systemLanguage;
-    // Settings saved before the donation board existed: its overlays get switched on in every profile once.
-    const upgrading = !!stored && typeof stored === 'object' && !('donationsOverlay' in stored);
+    // Overlay kinds the profiles already know. Older files don't say: up to 0.10 knew the legacy kinds,
+    // 0.11–0.12 (detected by the donation board) also had donations and custom switched on.
+    const raw = stored && typeof stored === 'object' ? stored as Partial<Settings> : null;
+    const seenBefore: readonly OverlayKind[] = Array.isArray(raw?.overlayKindsSeen) ? raw!.overlayKindsSeen!
+      : raw && 'donationsOverlay' in raw ? OVERLAY_KINDS_0_12 : LEGACY_OVERLAY_KINDS;
     this.data = migrateSettings(mergeDefaults(defaultSettings(lang), stored));
     const base = profileSnapshot(this.data);
     if (!this.data.profiles.length) {
@@ -50,15 +53,21 @@ export class SettingsStore {
         return {
           ...profile,
           config,
-          overlays: Array.isArray(profile.overlays)
-            ? [...new Set([...profile.overlays, ...(upgrading ? NEW_OVERLAY_KINDS : [])])].filter((kind) => ALL_OVERLAY_KINDS.includes(kind))
-            : [...ALL_OVERLAY_KINDS],
+          overlays: Array.isArray(profile.overlays) ? profile.overlays.filter((kind) => ALL_OVERLAY_KINDS.includes(kind)) : [...ALL_OVERLAY_KINDS],
         };
       });
+      // Overlays added in a newer version are missing from every profile's whitelist, so OBS would
+      // hide them ("profileVisibility: false"). Enable them once; kinds the streamer turned off stay off.
+      const added = ALL_OVERLAY_KINDS.filter((kind) => !seenBefore.includes(kind));
+      if (added.length) {
+        this.data.profiles = this.data.profiles.map((profile) => ({ ...profile, overlays: [...new Set([...profile.overlays, ...added])] }));
+        this.scheduleSave();
+      }
       if (!this.data.profiles.some((profile) => profile.id === this.data.activeProfileId)) {
         this.data.activeProfileId = this.data.profiles[0].id;
       }
     }
+    this.data.overlayKindsSeen = [...ALL_OVERLAY_KINDS];
     if (!stored) this.flush();
   }
 
