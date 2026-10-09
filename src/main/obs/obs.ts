@@ -22,6 +22,12 @@ export function overlayIdentity(raw: string): string | null {
   } catch { return null; }
 }
 
+/** Overlays that play YouTube audio follow the song requests' "who hears the music" choice. */
+export function isMusicOverlay(url: string): boolean {
+  const id = overlayIdentity(url);
+  return !!id && ['/overlay/song?', '/overlay/duel?', '/overlay/melody?'].some((prefix) => id.startsWith(prefix));
+}
+
 export class ObsService {
   private obs = new OBSWebSocket();
   private retryTimer: NodeJS.Timeout | null = null;
@@ -64,8 +70,47 @@ export class ObsService {
     });
     this.obs.on('InputRemoved', refreshInputs);
     this.obs.on('InputNameChanged', refreshInputs);
+    this.obs.on('InputVolumeMeters', ({ inputs }) => {
+      if (!this.meterListeners.size) return;
+      const levels = new Map<string, number>();
+      for (const input of inputs as { inputName?: string; inputLevelsMul?: number[][] }[]) {
+        if (!input.inputName) continue;
+        // [magnitude, peak, input peak] per channel; the loudest channel peak wins.
+        const peak = Math.max(0, ...(input.inputLevelsMul ?? []).map((ch) => Number(ch?.[1]) || 0));
+        levels.set(input.inputName, peak > 0 ? 20 * Math.log10(peak) : -100);
+      }
+      for (const listener of this.meterListeners) listener(levels);
+    });
     this.obs.on('StreamStateChanged', ({ outputActive }) => this.ctx.state.patch('obs', { streaming: outputActive }));
     this.obs.on('RecordStateChanged', ({ outputActive }) => this.ctx.state.patch('obs', { recording: outputActive }));
+  }
+
+  private subscriptions(): number {
+    const base = EventSubscription.General | EventSubscription.Scenes | EventSubscription.SceneItems | EventSubscription.Inputs | EventSubscription.Outputs;
+    // Audio levels arrive ~20 times a second: only ask for them while someone listens.
+    return this.meterListeners.size ? base | EventSubscription.InputVolumeMeters : base;
+  }
+
+  private meterListeners = new Set<(levels: Map<string, number>) => void>();
+
+  /**
+   * Peak level of every audio input in dBFS, about 20 times a second while subscribed.
+   * Returns an unsubscribe function.
+   */
+  onVolumeMeters(listener: (levels: Map<string, number>) => void): () => void {
+    const first = this.meterListeners.size === 0;
+    this.meterListeners.add(listener);
+    if (first) void this.reidentify();
+    return () => {
+      if (!this.meterListeners.delete(listener)) return;
+      if (this.meterListeners.size === 0) void this.reidentify();
+    };
+  }
+
+  private async reidentify(): Promise<void> {
+    if (!this.connected) return;
+    try { await this.obs.reidentify({ eventSubscriptions: this.subscriptions() }); }
+    catch (err) { console.warn('[obs] reidentify', errorMessage(err)); }
   }
 
   get connected(): boolean {
@@ -90,7 +135,7 @@ export class ObsService {
     try {
       if (wasConnected) await this.obs.disconnect();
       await this.obs.connect(`ws://${host}:${port}`, this.ctx.secrets.get('obsPassword'), {
-        eventSubscriptions: EventSubscription.General | EventSubscription.Scenes | EventSubscription.SceneItems | EventSubscription.Inputs | EventSubscription.Outputs,
+        eventSubscriptions: this.subscriptions(),
       });
       if (generation !== this.generation || this.manualDisconnect) { await this.obs.disconnect(); return; }
       this.ctx.state.patch('obs', { status: 'connected', error: undefined });
@@ -147,7 +192,7 @@ export class ObsService {
       for (const input of inputs as { inputName: string }[]) {
         const { inputSettings } = await this.obs.call('GetInputSettings', { inputName: input.inputName });
         const settings = inputSettings as { url?: string; reroute_audio?: boolean };
-        if (!overlayIdentity(settings.url ?? '')?.startsWith('/overlay/song?')) continue;
+        if (!isMusicOverlay(settings.url ?? '')) continue;
         // Without "Control audio via OBS" the browser plays straight to the speakers and OBS cannot route it.
         if (!settings.reroute_audio) await this.obs.call('SetInputSettings', { inputName: input.inputName, inputSettings: { reroute_audio: true }, overlay: true });
         await this.obs.call('SetInputAudioMonitorType', { inputName: input.inputName, monitorType });
@@ -286,7 +331,7 @@ export class ObsService {
       const existingUrl = (inputSettings as { url?: string }).url ?? '';
       if (existingUrl !== url && (!overlayIdentity(url) || overlayIdentity(existingUrl) !== overlayIdentity(url))) continue;
       await this.repairInput(input.inputName, url);
-      if (overlayIdentity(url)?.startsWith('/overlay/song?')) await this.applySongAudio();
+      if (isMusicOverlay(url)) await this.applySongAudio();
       const { sceneItems } = await this.obs.call('GetSceneItemList', { sceneName });
       const existing = (sceneItems as { sourceName: string; sceneItemId: number }[]).find((i) => i.sourceName === input.inputName);
       if (existing) {
@@ -310,8 +355,59 @@ export class ObsService {
       sceneItemEnabled: true,
     });
     await this.refreshSceneItems();
-    if (overlayIdentity(url)?.startsWith('/overlay/song?')) await this.applySongAudio();
+    if (isMusicOverlay(url)) await this.applySongAudio();
     return 'created';
+  }
+
+  // ---------- precise controls (curses, ducking) ----------
+
+  /** Every input and scene: filters can be attached to both. */
+  async listSources(): Promise<string[]> {
+    this.ensure();
+    const [{ inputs }, { scenes }] = await Promise.all([this.obs.call('GetInputList'), this.obs.call('GetSceneList')]);
+    const names = [...(inputs as { inputName: string }[]).map((i) => i.inputName), ...(scenes as { sceneName: string }[]).map((s) => s.sceneName)];
+    return [...new Set(names)].sort((a, b) => a.localeCompare(b));
+  }
+
+  async listFilters(sourceName: string): Promise<string[]> {
+    this.ensure();
+    const { filters } = await this.obs.call('GetSourceFilterList', { sourceName });
+    return (filters as { filterName: string }[]).map((f) => f.filterName);
+  }
+
+  /** Returns the previous state, so the caller can undo exactly what it changed. */
+  async setFilterEnabled(sourceName: string, filterName: string, enabled: boolean): Promise<boolean> {
+    this.ensure();
+    const { filterEnabled } = await this.obs.call('GetSourceFilter', { sourceName, filterName });
+    if (filterEnabled !== enabled) await this.obs.call('SetSourceFilterEnabled', { sourceName, filterName, filterEnabled: enabled });
+    return filterEnabled as boolean;
+  }
+
+  async setSourceVisible(sceneName: string, sourceName: string, visible: boolean): Promise<boolean> {
+    this.ensure();
+    const scene = sceneName || this.ctx.state.current.obs.currentScene;
+    const { sceneItemId } = await this.obs.call('GetSceneItemId', { sceneName: scene, sourceName });
+    const { sceneItemEnabled } = await this.obs.call('GetSceneItemEnabled', { sceneName: scene, sceneItemId });
+    if (sceneItemEnabled !== visible) await this.obs.call('SetSceneItemEnabled', { sceneName: scene, sceneItemId, sceneItemEnabled: visible });
+    return sceneItemEnabled as boolean;
+  }
+
+  async setMute(inputName: string, muted: boolean): Promise<boolean> {
+    this.ensure();
+    const { inputMuted } = await this.obs.call('GetInputMute', { inputName });
+    if (inputMuted !== muted) await this.obs.call('SetInputMute', { inputName, inputMuted: muted });
+    return inputMuted as boolean;
+  }
+
+  async getVolume(inputName: string): Promise<number> {
+    this.ensure();
+    const { inputVolumeMul } = await this.obs.call('GetInputVolume', { inputName });
+    return inputVolumeMul as number;
+  }
+
+  async setVolume(inputName: string, multiplier: number): Promise<void> {
+    this.ensure();
+    await this.obs.call('SetInputVolume', { inputName, inputVolumeMul: Math.max(0, Math.min(20, multiplier)) });
   }
 
   async toggleMute(inputName: string): Promise<void> {

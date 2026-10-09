@@ -3,6 +3,9 @@ import type { MonitorLayout, WorkspaceCard } from './types';
 import { clampRect } from './monitorGrid';
 
 export const INTERACTIVE_MODULES = ['wheel', 'poll', 'giveaway', 'queue', 'guess', 'quiz', 'boss'] as const;
+/** Modules added in the "stream tools" pack, each with its own editor. */
+export const FEATURE_MODULES = ['clipper', 'curse', 'duel', 'melody', 'ducking', 'stocks', 'portal', 'report', 'shield'] as const;
+export type FeatureModule = typeof FEATURE_MODULES[number];
 export const CONNECTION_MODULES = ['twitch', 'donationalerts', 'streamlabs', 'streamelements', 'streamerbot', 'discord'] as const;
 export const CONNECTION_TABS = [...CONNECTION_MODULES, 'obs', 'subforstream'] as const;
 export type ConnectionTab = typeof CONNECTION_TABS[number];
@@ -39,7 +42,8 @@ export function reorderCards(cards: WorkspaceCard[], from: WorkspaceCard, to: Wo
   next.splice(cards.indexOf(to), 0, from);
   return next;
 }
-export const WORKSPACE_CARDS: readonly WorkspaceCard[] = ['stream', 'obs', 'actions', 'bot', ...CONNECTION_MODULES, 'subforstream', ...ALL_OVERLAY_KINDS];
+export const TOOL_MODULES = ['clipper', 'ducking', 'shield', 'report'] as const;
+export const WORKSPACE_CARDS: readonly WorkspaceCard[] = ['stream', 'obs', 'actions', 'bot', ...CONNECTION_MODULES, 'subforstream', ...TOOL_MODULES, ...ALL_OVERLAY_KINDS];
 
 /** Preserve explicit selections from the old card layout, including an empty workspace. */
 export function normalizeWorkspaceCards(value: unknown): WorkspaceCard[] {

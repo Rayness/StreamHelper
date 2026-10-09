@@ -19,6 +19,9 @@ export interface ActionTargets {
   bannerToggle(bannerId: string): void;
   emoteBurst(): void;
   streamerbotAction(actionId: string): Promise<void>;
+  clipMoment(): Promise<unknown>;
+  shieldToggle(): Promise<void>;
+  curseVote(): void;
 }
 
 /** Runs dashboard buttons / global hotkeys. Each step is independent: one failing step doesn't stop the rest. */
@@ -92,6 +95,12 @@ export class ActionRunner {
         return t.emoteBurst();
       case 'streamerbotAction':
         return t.streamerbotAction(s.actionId);
+      case 'clipMoment':
+        return void (await t.clipMoment());
+      case 'shieldToggle':
+        return t.shieldToggle();
+      case 'curseVote':
+        return t.curseVote();
       case 'wait':
         return new Promise((r) => setTimeout(r, Math.max(0, Math.min(60_000, s.ms))));
     }

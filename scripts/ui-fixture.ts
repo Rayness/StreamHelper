@@ -25,11 +25,18 @@ export async function createFixture(root: string, dataDir: string, push: (channe
       const base: OverlayMessage[] = [{ type: 'profileVisibility', visible: true }];
       if (kind === 'chat') base.push({ type: 'chatConfig', config: settings.get('chatOverlay') }, { type: 'chat', message: chat });
       if (kind === 'song') base.push(songs.overlayMessage);
+      // The stream tools pack: idle state, the overlays draw their own preview sample.
+      const now = Date.now();
+      if (kind === 'curse') base.push({ type: 'curse', curse: state.current.curse, style: settings.get('curses'), now, lang: 'ru' });
+      if (kind === 'duel') base.push({ type: 'duel', duel: state.current.duel, style: settings.get('duel'), now, lang: 'ru' });
+      if (kind === 'melody') base.push({ type: 'melody', melody: state.current.melody, style: settings.get('melody'), now, lang: 'ru' });
+      if (kind === 'stocks') base.push({ type: 'stocks', quotes: [], lastTrade: null, style: settings.get('market'), lang: 'ru' });
+      if (kind === 'portal') base.push({ type: 'portalConfig', config: settings.get('portal'), channel: '', lang: 'ru' });
       return base;
     },
   });
   await overlay.start();
-  state.patch('overlayUrl', `http://127.0.0.1:${overlay.port}`);
+  state.patch('overlayUrl', `http://localhost:${overlay.port}`);
   state.patch('twitch', { status: 'connected', account: { userId: 'fixture', login: 'streamer', displayName: 'Streamer' } });
   alerts = new AlertQueue(ctx, (alert) => overlay.broadcast('alerts', { type: 'alert', alert }), () => overlay.broadcast('alerts', { type: 'alertSkip' }));
   songs = new SongRequestService(ctx, { pauseCurrent: async () => null, resumeSource: async () => undefined } as any, (message) => overlay.broadcast('song', message), undefined, { lookup: async () => ({ ok: true, title: 'Тестовый трек' }) });

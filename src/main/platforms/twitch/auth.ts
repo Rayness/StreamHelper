@@ -15,6 +15,10 @@ export const BROADCASTER_SCOPES = [
   'channel:manage:redemptions',
   'channel:manage:broadcast',
   'bits:read',
+  // Auto clipper ("Moment!") and the raid shield.
+  'clips:edit',
+  'moderator:manage:chat_settings',
+  'moderator:manage:shield_mode',
 ];
 
 export const BOT_SCOPES = ['user:read:chat', 'user:write:chat', 'user:bot'];

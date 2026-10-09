@@ -19,6 +19,15 @@ const Kawaki = lazy(() => import('./Kawaki').then((m) => ({ default: m.Kawaki })
 const Connection = lazy(() => import('./Connections').then((m) => ({ default: m.ConnectionDetail })));
 const Interactive = lazy(() => import('./Interactive').then((m) => ({ default: m.InteractiveModule })));
 const Overlay = lazy(() => import('./Overlays').then((m) => ({ default: m.OverlayDetail })));
+const CurseModule = lazy(() => import('./FeaturesFun').then((m) => ({ default: m.CurseModule })));
+const DuelModule = lazy(() => import('./FeaturesFun').then((m) => ({ default: m.DuelModule })));
+const MelodyModule = lazy(() => import('./FeaturesFun').then((m) => ({ default: m.MelodyModule })));
+const StocksModule = lazy(() => import('./FeaturesFun').then((m) => ({ default: m.StocksModule })));
+const PortalModule = lazy(() => import('./FeaturesFun').then((m) => ({ default: m.PortalModule })));
+const ClipperModule = lazy(() => import('./FeaturesTools').then((m) => ({ default: m.ClipperModule })));
+const DuckingModule = lazy(() => import('./FeaturesTools').then((m) => ({ default: m.DuckingModule })));
+const ShieldModule = lazy(() => import('./FeaturesTools').then((m) => ({ default: m.ShieldModule })));
+const ReportModule = lazy(() => import('./FeaturesTools').then((m) => ({ default: m.ReportModule })));
 const RESET_KEYS: Partial<Record<WorkspaceCard, SettingsKey>> = { alerts:'alerts', bot:'bot', chat:'chatOverlay', actions:'actions' };
 const GROUPS: ('all' | ModuleGroup)[] = ['all','channel','display','fun','automation'];
 
@@ -34,6 +43,17 @@ function ModuleEditor({ id }: { id: WorkspaceCard }) {
   if (id === 'kawaki') return <Kawaki />;
   if (CONNECTION_MODULES.includes(id as typeof CONNECTION_MODULES[number])) return <Connection kind={id as typeof CONNECTION_MODULES[number]} />;
   if (INTERACTIVE_MODULES.includes(id as typeof INTERACTIVE_MODULES[number])) return <Interactive kind={id as typeof INTERACTIVE_MODULES[number]} />;
+  switch (id) {
+    case 'curse': return <CurseModule />;
+    case 'duel': return <DuelModule />;
+    case 'melody': return <MelodyModule />;
+    case 'stocks': return <StocksModule />;
+    case 'portal': return <PortalModule />;
+    case 'clipper': return <ClipperModule />;
+    case 'ducking': return <DuckingModule />;
+    case 'shield': return <ShieldModule />;
+    case 'report': return <ReportModule />;
+  }
   return <Overlay kind={id as OverlayKind} />;
 }
 

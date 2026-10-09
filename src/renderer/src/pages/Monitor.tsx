@@ -9,7 +9,7 @@ import { Button, Card, Empty, IconButton, StatusText, Toggle } from '../componen
 import { useNow } from '../hooks';
 import { useT } from '../i18n';
 import { moduleDef } from '../workspaceModules';
-import { navigate, openModule, saveSettings, useApp } from '../store';
+import { call, navigate, openModule, saveSettings, useApp } from '../store';
 import type { ConnectionState, MonitorLayout, MonitorRect, OverlayKind, WorkspaceCard } from '@shared/types';
 
 const ROW = 24;
@@ -139,6 +139,15 @@ export function Monitor() {
       case 'quiz': return <><p>{state.quiz.round} / {state.quiz.rounds} · {['loading','question','reveal'].includes(state.quiz.status) ? t('fun.running') : t('workspace.ready')}</p>{state.quiz.leaderboard.slice(0,5).map((row) => <div className="monitor-number" key={row.userName}><span>{row.userName}</span><strong>{row.points}</strong></div>)}{state.quiz.error && <p className="error">{state.quiz.error}</p>}</>;
       case 'boss': return <div className="monitor-progress"><strong>{s.boss.name}</strong><progress value={state.boss.hp} max={Math.max(1,state.boss.maxHp)} /><span>{state.boss.hp} / {state.boss.maxHp}</span></div>;
       case 'hype': return <div className="monitor-progress"><strong>{state.hype.level}</strong><progress value={state.hype.progress} max={1} /></div>;
+      case 'clipper': return <><strong>{s.clipper.enabled ? t('clipper.rate',{n:state.clipper.rate,base:state.clipper.baseline}) : t('workspace.disabled')}</strong>{state.clipper.moments.slice(0,3).map((m) => <p key={m.id} className="muted">{new Date(m.at).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' })} · {t(`clipReason.${m.reason}`)}{m.clipUrl ? ' 🎬' : ''}</p>)}</>;
+      case 'shield': return <><strong className={state.shield.status === 'active' ? 'error' : ''}>{t(`shieldStatus.${state.shield.status}`)}</strong>{state.shield.status === 'active' ? <><p>{state.shield.reason}</p><Button size="sm" onClick={() => void call('shield:release')}>{t('shield.release')}</Button></> : <Button size="sm" variant="danger" icon="shield" onClick={() => void call('shield:activate')}>{t('shield.panic')}</Button>}</>;
+      case 'ducking': return <><strong>{!s.ducking.enabled ? t('workspace.disabled') : state.ducking.ducked ? t('ducking.ducked') : t('ducking.normal')}</strong><p className="muted">{s.ducking.micInput || '—'}</p></>;
+      case 'report': return <><div className="monitor-number"><span>{t('report.messages')}</span><strong>{state.report.live.messages}</strong></div><div className="monitor-number"><span>{t('report.peak')}</span><strong>{state.report.live.peakViewers}</strong></div>{state.report.live.mvp[0] && <p className="muted">MVP: {state.report.live.mvp[0].name}</p>}</>;
+      case 'curse': return <><strong>{state.curse.active?.name ?? t(`curseStatus.${state.curse.status}`)}</strong>{state.curse.status === 'idle' ? <Button size="sm" icon="skull" onClick={() => void call('curse:vote')}>{t('curse.vote')}</Button> : state.curse.status === 'active' ? <Button size="sm" onClick={() => void call('curse:lift')}>{t('curse.lift')}</Button> : <p className="muted">{t('curse.votes',{n:state.curse.total})}</p>}</>;
+      case 'duel': return <><strong>{t(`duelStatus.${state.duel.status}`)}</strong>{state.duel.a && state.duel.b && <p>{state.duel.a.votes} : {state.duel.b.votes}</p>}</>;
+      case 'melody': return <><strong>{t(`melodyStatus.${state.melody.status}`)}</strong>{state.melody.round > 0 && <p className="muted">{state.melody.round} / {state.melody.rounds}</p>}{state.melody.leaderboard.slice(0,3).map((r) => <div className="monitor-number" key={r.userName}><span>{r.userName}</span><strong>{r.points}</strong></div>)}</>;
+      case 'stocks': return state.market.quotes.length ? state.market.quotes.slice(0,5).map((q) => <div className="monitor-number" key={q.userId}><span>${q.name}</span><strong className={q.change >= 0 ? 'up' : 'down'}>{q.price} <small>{q.change > 0 ? '+' : ''}{q.change}%</small></strong></div>) : <p className="muted">{t('market.empty')}</p>;
+      case 'portal': return <><StatusText status={state.portal.status} error={state.portal.error} />{state.portal.channel && <strong>{state.portal.channel}</strong>}{state.portal.messages.slice(0,3).map((m) => <p key={m.id} className="muted">{m.direction === 'in' ? '⬅' : '➡'} {m.userName}: {m.text}</p>)}</>;
       default: return <p className="muted">{t('workspace.sources',{n:state.overlayKinds[id as OverlayKind] ?? 0})}</p>;
     }
   };

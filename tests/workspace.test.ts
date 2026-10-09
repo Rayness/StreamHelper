@@ -43,7 +43,7 @@ describe('module-owned workspace', () => {
     expect(normalizeWorkspaceCards(['activities','counters','counter','chat','chat','unknown'])).toEqual(['wheel','poll','giveaway','queue','guess','quiz','boss','counter','chat']);
   });
   it('module registry contains only unique supported IDs', () => {
-    expect(WORKSPACE_CARDS.length).toBe(37);
+    expect(WORKSPACE_CARDS.length).toBe(46);
     expect(new Set(WORKSPACE_CARDS).size).toBe(WORKSPACE_CARDS.length);
     expect(WORKSPACE_CARDS.every(isWorkspaceModule)).toBe(true);
   });

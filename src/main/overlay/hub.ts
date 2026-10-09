@@ -28,6 +28,11 @@ export interface HubSources {
   guess: () => OverlayMessage;
   hype: () => OverlayMessage;
   leaders: () => OverlayMessage;
+  curse: () => OverlayMessage;
+  duel: () => OverlayMessage;
+  melody: () => OverlayMessage;
+  stocks: () => OverlayMessage;
+  portal: () => OverlayMessage;
 }
 
 /** Wires bus events and settings changes to connected overlays. */
@@ -199,6 +204,16 @@ export class OverlayHub {
         return [this.sources.hype()];
       case 'leaders':
         return [this.sources.leaders()];
+      case 'curse':
+        return [this.sources.curse()];
+      case 'duel':
+        return [this.sources.duel()];
+      case 'melody':
+        return [this.sources.melody()];
+      case 'stocks':
+        return [this.sources.stocks()];
+      case 'portal':
+        return [this.sources.portal()];
     }
   }
 }

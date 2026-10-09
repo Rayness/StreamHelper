@@ -41,6 +41,11 @@ export const OVERLAYS: OverlayDef[] = [
   { kind: 'quiz', icon: 'quiz', group: 'fun', size: [1280, 720] },
   { kind: 'boss', icon: 'target', group: 'fun', size: [900, 260] },
   { kind: 'emotes', icon: 'smile', group: 'fun', size: [1920, 1080] },
+  { kind: 'curse', icon: 'skull', group: 'fun', size: [900, 420] },
+  { kind: 'duel', icon: 'swords', group: 'fun', size: [1280, 420] },
+  { kind: 'melody', icon: 'disc', group: 'fun', size: [900, 290] },
+  { kind: 'stocks', icon: 'trend', group: 'fun', size: [1920, 80] },
+  { kind: 'portal', icon: 'portal', group: 'screen', size: [1280, 720] },
 ];
 
 export const overlayDef = (kind: OverlayKind): OverlayDef => OVERLAYS.find((o) => o.kind === kind)!;

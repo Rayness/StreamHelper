@@ -1085,3 +1085,342 @@
   background: var(--accent);
   transition: width 0.6s var(--ease-out);
 }
+
+/* ---------- stream tools pack ---------- */
+
+.feat-meter {
+  position: relative;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--track);
+  overflow: visible;
+}
+.feat-meter-fill {
+  height: 100%;
+  border-radius: 4px;
+  background: var(--accent);
+  transition: width 0.25s ease;
+}
+.feat-meter-mark {
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  width: 2px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: var(--warning);
+}
+
+.curse-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.curse-item {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--panel-2);
+}
+.curse-item > summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  cursor: pointer;
+  list-style: none;
+}
+.curse-item > summary::-webkit-details-marker {
+  display: none;
+}
+.curse-item > summary b {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.curse-item[open] > summary {
+  border-bottom: 1px solid var(--border);
+}
+.curse-item > .form,
+.curse-item > .row-gap {
+  padding: 12px;
+}
+.curse-item > .row-gap {
+  padding-top: 0;
+}
+.curse-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.curse-step {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.curse-step .select,
+.curse-step select {
+  flex: 1 1 140px;
+  min-width: 0;
+}
+
+.duel-now {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.duel-side {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--panel-2);
+}
+.duel-side.win {
+  box-shadow: inset 0 0 0 2px var(--success);
+}
+.duel-side b {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.duel-side .pill {
+  align-self: flex-start;
+}
+
+.melody-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 460px;
+  overflow: auto;
+}
+.melody-track {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.melody-track img {
+  width: 64px;
+  height: 48px;
+  flex: none;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  background: var(--panel-3);
+}
+.melody-track-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.melody-track-body > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.melody-track-body .row-gap {
+  flex-wrap: nowrap;
+}
+.melody-track-body .input:first-child {
+  flex: 2;
+}
+.melody-track-body .input:last-child {
+  flex: 1;
+}
+
+.command-help {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 6px 14px;
+}
+.command-help li {
+  display: flex;
+  flex-direction: column;
+}
+.command-help code {
+  font-size: 13px;
+  color: var(--accent-text);
+}
+
+.market-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+.market-table th {
+  text-align: left;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  padding: 0 8px 6px 0;
+}
+.market-table td {
+  padding: 6px 8px 6px 0;
+  border-top: 1px solid var(--border);
+}
+.market-table .up,
+.monitor-card .up {
+  color: var(--success);
+}
+.market-table .down,
+.monitor-card .down {
+  color: var(--danger);
+}
+
+.portal-log {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 320px;
+  overflow: auto;
+  overflow-wrap: anywhere;
+}
+
+.moment-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.moment-list li {
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+}
+.moment-list li:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+.moment-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.moment-head > .muted {
+  margin-right: auto;
+}
+.moment-sample {
+  margin: 6px 0 0;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.duck-level {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 10px;
+}
+.control-status b.ducked {
+  color: var(--accent-text);
+}
+
+.shield-readings {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.shield-reading {
+  display: grid;
+  grid-template-columns: minmax(150px, auto) 1fr 64px;
+  align-items: center;
+  gap: 10px;
+}
+.shield-reading .mono {
+  text-align: right;
+}
+.control-card.shield-active {
+  border-color: color-mix(in srgb, var(--danger) 55%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--danger) 30%, transparent);
+}
+
+.report-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 10px;
+}
+.report-grid > div {
+  display: flex;
+  flex-direction: column;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--panel-2);
+}
+.report-grid b {
+  font-size: 20px;
+  font-variant-numeric: tabular-nums;
+}
+.report-highlights {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+}
+.report-highlights img {
+  height: 20px;
+  vertical-align: -5px;
+}
+.report-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+}
+.report-gallery figure {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.report-gallery figure.open {
+  grid-column: 1 / -1;
+}
+.report-gallery img {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  cursor: zoom-in;
+  background: var(--panel-3);
+}
+.report-gallery figure.open img {
+  cursor: zoom-out;
+}
+.report-gallery figcaption {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.report-gallery figcaption > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (prefers-reduced-motion: reduce) {
+  .feat-meter-fill {
+    transition: none;
+  }
+}
