@@ -4,7 +4,7 @@ import { clampRect } from './monitorGrid';
 
 export const INTERACTIVE_MODULES = ['wheel', 'poll', 'giveaway', 'queue', 'guess', 'quiz', 'boss'] as const;
 /** Modules added in the "stream tools" pack, each with its own editor. */
-export const FEATURE_MODULES = ['clipper', 'curse', 'duel', 'melody', 'ducking', 'stocks', 'portal', 'report', 'shield'] as const;
+export const FEATURE_MODULES = ['clipper', 'curse', 'duel', 'melody', 'ducking', 'stocks', 'portal', 'report', 'shield', 'focus', 'shoutout', 'tts'] as const;
 export type FeatureModule = typeof FEATURE_MODULES[number];
 export const CONNECTION_MODULES = ['twitch', 'donationalerts', 'streamlabs', 'streamelements', 'streamerbot', 'discord'] as const;
 export const CONNECTION_TABS = [...CONNECTION_MODULES, 'obs', 'kawaki', 'subforstream'] as const;

@@ -32,21 +32,34 @@
     #queueList{display:none;list-style:none;margin:8px 0 0;padding:0;max-height:55%;overflow:hidden;font-size:17px}
     #shell.queue #queueList{display:block}
     #queueList li{padding:8px 0;border-top:1px solid #ffffff30;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    /* Background playlist with the picture switched off: the player keeps running, only sound reaches the stream. */
+    #shell.bg-hidden{opacity:0}
+    #shell.bg #requester{display:none}
+    /* A Yandex Music request plays in the streamer's Yandex Music app: the source shows its cover. */
+    #cover{display:none;position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+    #shell.yandex #cover{display:block}
+    #shell.yandex #playerHost{display:none}
+    /* A song from the computer: plain audio, a note stands in for the picture. */
+    #note{display:none;position:absolute;inset:0;place-items:center;background:linear-gradient(135deg,#161123,#3a2067 55%,#090710);font-size:clamp(50px,12vw,130px);color:#fff9}
+    #shell.local #note{display:grid}
+    #shell.local #playerHost{display:none}
     #shell.no-title #title,#shell.no-requester #requester,#shell.no-count #queueCount{display:none}
     @media (max-width:430px){#shell.compact #info{padding:12px}#shell.compact #video{min-width:200px}#shell.compact #title{font-size:20px}}
   </style>
 </head>
 <body>
   <div id="shell">
-    <div id="video"><div id="playerHost"></div><div id="mockVideo">▶</div></div>
+    <div id="video"><div id="playerHost"></div><img id="cover" alt=""><div id="note">♪</div><div id="mockVideo">▶</div></div>
     <div id="info"><div id="eyebrow"></div><div id="title"></div><div id="requester"></div><div id="queueCount"></div><ul id="queueList"></ul></div>
   </div>
   <script src="/overlay/assets/common.js"></script>
   <script>
     const $=(id)=>document.getElementById(id);
     const sample={id:'preview',videoId:'',url:'',userName:'Viewer'};
-    const defaults={videoLayout:'full',videoPosition:'left',videoWidth:45,showRequester:true,showTitle:true,showQueueCount:true,showControls:true,volume:100,accentColor:'#9146ff',backgroundOpacity:88};
-    let player=null,playerReady=false,apiReady=false,active=null,pending=null,reported=false,controls=true,config=defaults,lang='ru',videoTitle='',startTimer=null,apiFailed=false;
+    const defaults={videoLayout:'full',videoPosition:'left',videoWidth:45,showRequester:true,showTitle:true,showQueueCount:true,showControls:true,volume:100,accentColor:'#9146ff',backgroundOpacity:88,backgroundVolume:40,backgroundShowVideo:false};
+    let audio=null,player=null,playerReady=false,apiReady=false,active=null,pending=null,reported=false,controls=true,config=defaults,lang='ru',videoTitle='',startTimer=null,limitTimer=null,apiFailed=false,playerList=null,jamErrors=0;
+    // Where each jam (YouTube mix / playlist) was interrupted, so it continues instead of starting over.
+    const jamIndex={};
     const label=(ru,en)=>SH.tr(lang,ru,en);
     window.onYouTubeIframeAPIReady=()=>{apiReady=true;if(pending)load(pending)};
     if(!SH.preview){const script=document.createElement('script');script.src='https://www.youtube.com/iframe_api';script.onerror=()=>{apiFailed=true;if(active)void finished(label('Не удалось загрузить YouTube. Проверьте доступ к YouTube.','Could not load YouTube. Check YouTube access.'))};document.head.appendChild(script)}
@@ -59,36 +72,72 @@
       const request=active;
       try{await fetch('/song/finished',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:request.request.id,nonce:request.nonce,error,kind})})}catch(_){/* reconnect will resync */}
     }
-    function stopPlayer(){
-      clearTimeout(startTimer);startTimer=null;
-      if(player){try{player.destroy()}catch(_){/* player may still be loading */}}
-      player=null;playerReady=false;$('playerHost').replaceChildren();
+    // The length limit for viewers' requests also holds when YouTube could not report the length beforehand.
+    function watchLimit(){
+      clearInterval(limitTimer);limitTimer=null;
+      const max=Math.max(0,Number(config.maxDurationMin)||0)*60;
+      if(!max||!active||active.background||active.request.source==='manual')return;
+      limitTimer=setInterval(()=>{try{if(player&&playerReady&&active&&!active.background&&player.getCurrentTime()>=max)void finished()}catch(_){/* player still loading */}},1000);
     }
-    function applyVolume(){if(player&&playerReady)player.setVolume(Math.max(0,Math.min(100,Number(config.volume)||0)))}
+    function stopAudio(){if(!audio)return;const old=audio;audio=null;old.onended=old.onerror=null;try{old.pause();old.removeAttribute('src');old.load()}catch(_){/* already gone */}}
+    // A local song: an <audio> element with the same finish / pause / volume rules as the YouTube player.
+    function playLocal(){
+      stopPlayer();
+      const request=active.request;
+      audio=new Audio(request.url);
+      audio.volume=volumeLevel()/100;
+      audio.onended=()=>void finished();
+      audio.onerror=()=>void finished(label('Файл не воспроизводится: ','Cannot play the file: ')+(request.title||request.url),'video');
+      audio.onplaying=()=>{videoTitle='';render()};
+      if(!active.paused)audio.play().catch((e)=>{if(e&&e.name==='NotAllowedError')void finished(label('OBS не разрешил автозапуск звука.','OBS blocked audio autoplay.'),'player')});
+    }
+    function stopPlayer(){
+      stopAudio();
+      clearTimeout(startTimer);startTimer=null;clearInterval(limitTimer);limitTimer=null;
+      if(player){if(playerList&&playerReady){try{jamIndex[playerList]=player.getPlaylistIndex()}catch(_){/* keep the old position */}}try{player.destroy()}catch(_){/* player may still be loading */}}
+      player=null;playerReady=false;playerList=null;$('playerHost').replaceChildren();
+    }
+    function volumeLevel(){return Math.max(0,Math.min(100,Number(active?.background?config.backgroundVolume:config.volume)||0))}
+    function applyVolume(){if(audio)audio.volume=volumeLevel()/100;if(player&&playerReady)player.setVolume(volumeLevel())}
     // The streamer's pause button: keep the video and its position, just stop it.
-    function applyPause(){if(!player||!playerReady||!active)return;try{const state=player.getPlayerState();if(active.paused&&state!==YT.PlayerState.PAUSED)player.pauseVideo();if(!active.paused&&state===YT.PlayerState.PAUSED)player.playVideo()}catch(_){/* player still loading */}}
+    function applyPause(){if(audio&&active){if(active.paused&&!audio.paused)audio.pause();if(!active.paused&&audio.paused)audio.play().catch(()=>{});return}if(!player||!playerReady||!active)return;try{const state=player.getPlayerState();if(active.paused&&state!==YT.PlayerState.PAUSED)player.pauseVideo();if(!active.paused&&state===YT.PlayerState.PAUSED)player.playVideo()}catch(_){/* player still loading */}}
     function createPlayer(startAt=0){
       if(!apiReady||!active?.request||config.videoLayout==='queue')return;
       stopPlayer();
       const node=document.createElement('div');$('playerHost').appendChild(node);
       controls=!!config.showControls;
       const request=active.request;
-      player=new YT.Player(node,{width:'100%',height:'100%',videoId:request.videoId,playerVars:{autoplay:1,controls:controls?1:0,playsinline:1,origin:location.origin},events:{
-        onReady:(e)=>{if(player!==e.target||!active||config.videoLayout==='queue')return;playerReady=true;applyVolume();if(startAt>0)player.seekTo(startAt,true);if(active.paused)player.pauseVideo();else player.playVideo()},
-        onStateChange:(e)=>{if(player!==e.target||!active)return;if(e.data===YT.PlayerState.PLAYING){clearTimeout(startTimer);startTimer=null;videoTitle=player.getVideoData()?.title||videoTitle;render()}if(e.data===YT.PlayerState.ENDED&&player.getVideoData()?.video_id===active?.request.videoId)void finished()},
-        onError:(e)=>{if(player===e.target)void finished([2,100].includes(e.data)?label('Видео не найдено или недоступно.','Video not found or unavailable.')+' ('+e.data+')':[101,150].includes(e.data)?label('Автор запретил проигрывание этого видео в OBS. Выберите другой трек.','This video cannot be embedded in OBS. Choose another track.')+' ('+e.data+')':e.data===153?label('YouTube не подтвердил источник проигрывателя. Перезагрузите браузерный источник OBS.','YouTube could not identify the player. Refresh the OBS browser source.')+' (153)':'YouTube error '+e.data,[2,100,101,150].includes(e.data)?'video':'player')}
+      // A jam: YouTube plays the whole mix / playlist in a loop, the app only hears about failures.
+      const list=request.playlistId||null,saved=list?jamIndex[list]:undefined;
+      jamErrors=0;
+      player=new YT.Player(node,{width:'100%',height:'100%',videoId:request.videoId||undefined,playerVars:{autoplay:1,controls:controls?1:0,playsinline:1,origin:location.origin,...(list?{listType:'playlist',list,loop:1}:{})},events:{
+        onReady:(e)=>{if(player!==e.target||!active||config.videoLayout==='queue')return;playerReady=true;playerList=list;applyVolume();watchLimit();
+          if(list){try{player.setLoop(true);const count=(player.getPlaylist()||[]).length;
+            if(config.backgroundShuffle&&!startAt){player.setShuffle(true);player.nextVideo()}
+            else if(saved!=null&&saved>=0){const index=startAt?saved:saved+1;player.playVideoAt(count?index%count:index)}}catch(_){/* plays from the start */}}
+          else if(startAt>0)player.seekTo(startAt,true);
+          if(active.paused)player.pauseVideo();else player.playVideo()},
+        onStateChange:(e)=>{if(player!==e.target||!active)return;if(e.data===YT.PlayerState.PLAYING){jamErrors=0;clearTimeout(startTimer);startTimer=null;videoTitle=player.getVideoData()?.title||videoTitle;render()}if(!list&&e.data===YT.PlayerState.ENDED&&player.getVideoData()?.video_id===active?.request.videoId)void finished()},
+        onError:(e)=>{if(player!==e.target)return;
+          // One unplayable entry must not stop a jam: move on, give up only when nothing in it plays.
+          if(list&&[2,100,101,150].includes(e.data)&&++jamErrors<=5){try{player.nextVideo()}catch(_){/* reported below next time */}return}
+          void finished([2,100].includes(e.data)?label('Видео не найдено или недоступно.','Video not found or unavailable.')+' ('+e.data+')':[101,150].includes(e.data)?label('Автор запретил проигрывание этого видео в OBS. Выберите другой трек.','This video cannot be embedded in OBS. Choose another track.')+' ('+e.data+')':e.data===153?label('YouTube не подтвердил источник проигрывателя. Перезагрузите браузерный источник OBS.','YouTube could not identify the player. Refresh the OBS browser source.')+' (153)':'YouTube error '+e.data,[2,100,101,150].includes(e.data)?'video':'player')}
       }});
     }
     function render(){
       const request=SH.preview?sample:active?.request;
       const queue=pending?.queue||[];
+      const background=!SH.preview&&!!active?.background;
+      const yandex=!SH.preview&&request?.provider==='yandex';
+      const local=!SH.preview&&request?.provider==='local';
+      const cover=$('cover');if(yandex&&request.cover){if(cover.getAttribute('src')!==request.cover)cover.src=request.cover}else cover.removeAttribute('src');
       const mode=['full','compact','queue'].includes(config.videoLayout)?config.videoLayout:'full';
       const shell=$('shell');
-      shell.className=(SH.preview||request||mode==='queue'?'active ':'')+mode+(config.videoPosition==='right'?' right':'')+(!config.showTitle?' no-title':'')+(!config.showRequester?' no-requester':'')+(!config.showQueueCount?' no-count':'');
+      shell.className=(SH.preview||request||mode==='queue'?'active ':'')+mode+(config.videoPosition==='right'?' right':'')+(!config.showTitle?' no-title':'')+(!config.showRequester?' no-requester':'')+(!config.showQueueCount?' no-count':'')+(background?' bg'+(config.backgroundShowVideo?'':' bg-hidden'):'')+(yandex?' yandex':'')+(local?' local':'');
       document.documentElement.style.setProperty('--accent',/^#[0-9a-fA-F]{6}$/.test(config.accentColor)?config.accentColor:'#9146ff');
       document.documentElement.style.setProperty('--video-width',Math.max(25,Math.min(70,Number(config.videoWidth)||45))+'%');
       document.documentElement.style.setProperty('--panel-bg','rgba(15,12,23,'+(Math.max(0,Math.min(100,Number(config.backgroundOpacity)||0))/100)+')');
-      $('eyebrow').textContent=mode==='queue'?label('Очередь заказов','Song queue'):label('Заказ музыки','Song request');
+      $('eyebrow').textContent=mode==='queue'?label('Очередь заказов','Song queue'):background?label('Фоновая музыка','Background music')+(request?.playlistId&&request.title?' · '+request.title:''):label('Заказ музыки','Song request')+(yandex?' · '+label('Яндекс Музыка','Yandex Music'):'');
       $('title').textContent=mode==='queue'?label('Следующие треки','Up next'):(SH.preview?label('Пример видео','Sample video'):videoTitle||request?.title||request?.videoId||'');
       $('requester').textContent=request&&mode!=='queue'?label('Заказал(а): ','Requested by: ')+request.userName:'';
       const count=queue.filter((item)=>item.id!==request?.id).length;
@@ -106,15 +155,23 @@
       }
       if(SH.preview){render();return}
       if(!msg.request){active=null;videoTitle='';stopPlayer();render();return}
+      // Played by the Yandex Music app: nothing to load here and nothing to report back.
+      if(msg.request.provider==='yandex'){active=msg;reported=true;videoTitle='';stopPlayer();render();return}
+      if(msg.request.provider==='local'){
+        const fresh=!(active?.request.id===msg.request.id&&active.nonce===msg.nonce);
+        active=msg;
+        if(fresh||!audio){reported=false;videoTitle='';playLocal()}else{applyVolume();applyPause()}
+        render();return;
+      }
       const same=active?.request.id===msg.request.id&&active.nonce===msg.nonce;
       if(!same){active=msg;reported=false;videoTitle='';render();if(apiReady)createPlayer();if(apiFailed)void finished(label('Не удалось загрузить YouTube.','Could not load YouTube.'));else startTimer=setTimeout(()=>active?.paused?undefined:void finished(label('YouTube не начал воспроизведение. Проверьте источник OBS и доступ к YouTube.','YouTube did not start playback. Check the OBS source and YouTube access.')),60000);return}
       active=msg;
       if(!player&&apiReady)createPlayer();
-      else if(player&&controls!==!!config.showControls){let time=0;try{if(playerReady)time=player.getCurrentTime()}catch(_){}createPlayer(time)}
-      else {applyVolume();applyPause()}
+      else if(player&&controls!==!!config.showControls){let time=0;try{if(playerReady)time=player.getCurrentTime()}catch(_){}createPlayer(time||0.01)}
+      else {applyVolume();applyPause();if(player&&playerReady)watchLimit()}
       render();
     }
-    SH.connect('song',(msg)=>{if(msg.type==='song')load(msg);if(msg.type==='profileVisibility'&&!msg.visible&&player)player.pauseVideo()});
+    SH.connect('song',(msg)=>{if(msg.type==='song')load(msg);if(msg.type==='profileVisibility'&&!msg.visible){if(player)player.pauseVideo();if(audio)audio.pause()}});
     if(SH.preview)render();
   </script>
 </body>

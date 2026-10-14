@@ -88,7 +88,7 @@ describe('BotService', () => {
     const state = new StateHub(bus);
     const ctx = { bus, settings, state } as AppContext;
     const registry = new PlatformRegistry(); registry.register(platform);
-    const songs = new SongRequestService(ctx, { pauseCurrent: async () => null, resumeSource: async () => undefined } as any, () => undefined, (text, id) => platform.sendMessage(text, id), { lookup: async () => null });
+    const songs = new SongRequestService(ctx, { pauseCurrent: async () => null, resumeSource: async () => undefined } as any, () => undefined, (text, id) => platform.sendMessage(text, id), { lookup: async () => null, details: async () => null, search: async () => [], yandexTrack: async () => null, yandexSearch: async () => [] });
     settings.set('songRequests', { ...settings.get('songRequests'), enabled:true });
     const config = settings.get('bot');
     settings.set('bot', { ...config, moderation:{ ...config.moderation, links:{ ...config.moderation.links, enabled:true, allowed:[] } } });

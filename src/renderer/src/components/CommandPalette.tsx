@@ -17,7 +17,7 @@ interface Command {
 }
 
 /** Owners of operational shortcuts. Hidden modules cannot be invoked from search. */
-const OWNERS = { clip:'clipper', shield:'shield', curse:'curse', duel:'duel', melody:'melody', report:'report', song:'song', wheel:'wheel', poll:'poll', give:'giveaway', quiz:'quiz', queue:'queue', guess:'guess', boss:'boss', 'counter+':'counter', 'counter-':'counter', emotes:'emotes', banner:'banner', act:'actions', alerts:'alerts', test:'alerts', scene:'obs' } as const;
+const OWNERS = { focus:'focus', shoutout:'shoutout', clip:'clipper', shield:'shield', curse:'curse', duel:'duel', melody:'melody', report:'report', song:'song', wheel:'wheel', poll:'poll', give:'giveaway', quiz:'quiz', queue:'queue', guess:'guess', boss:'boss', 'counter+':'counter', 'counter-':'counter', emotes:'emotes', banner:'banner', act:'actions', alerts:'alerts', test:'alerts', scene:'obs' } as const;
 function available(c: Command): boolean {
   const cards = normalizeWorkspaceCards(getData().settings?.workspace.cards);
   if (c.id.startsWith('module:')) return cards.some((id) => c.id === `module:${id}`);
@@ -92,6 +92,10 @@ function buildCommands(t: TFn): Command[] {
   out.push(state.shield.status === 'active'
     ? { id: 'shield:release', label: t('shield.release'), group: tools, icon: 'shield', keywords: 'raid shield рейд щит защита', run: () => void call('shield:release') }
     : { id: 'shield:activate', label: `${t('tool.shield')}: ${t('shield.panic')}`, group: tools, icon: 'shield', keywords: 'raid shield рейд щит защита', run: () => void call('shield:activate') });
+  out.push({ id: 'focus:toggle', label: `${t('ov.focus')}: ${t(state.focus.status === 'running' ? 'focus.pause' : state.focus.status === 'paused' ? 'focus.resume' : 'focus.start')}`, group: tools, icon: 'tomato', keywords: 'focus pomodoro помидор помодоро фокус таймер', run: () => void call('focus:toggle') });
+  if (state.focus.status !== 'idle') out.push({ id: 'focus:skip', label: `${t('ov.focus')}: ${t('focus.skip')}`, group: tools, icon: 'skip', keywords: 'focus pomodoro break помодоро перерыв', run: () => void call('focus:skip') });
+  if (state.shoutout.current) out.push({ id: 'shoutout:skip', label: `${t('ov.shoutout')}: ${t('shoutout.hide')}`, group: tools, icon: 'megaphone', keywords: 'shoutout raid шаутаут рейд', run: () => void call('shoutout:skip') });
+  else out.push({ id: 'shoutout:test', label: `${t('ov.shoutout')}: ${t('shoutout.test')}`, group: tools, icon: 'megaphone', keywords: 'shoutout raid шаутаут рейд', run: () => void call('shoutout:test') });
   out.push({ id: 'report:generate', label: `${t('tool.report')}: ${t('report.generate')}`, group: tools, icon: 'report', keywords: 'report recap итоги отчёт', run: () => void call('report:generate') });
   if (state.curse.status === 'idle') out.push({ id: 'curse:vote', label: t('curse.vote'), group: fun, icon: 'skull', keywords: 'curse проклятие', run: () => void call('curse:vote') });
   if (state.curse.status === 'active') out.push({ id: 'curse:lift', label: t('curse.lift'), group: fun, icon: 'skull', keywords: 'curse проклятие', run: () => void call('curse:lift') });

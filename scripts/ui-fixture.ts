@@ -33,6 +33,8 @@ export async function createFixture(root: string, dataDir: string, push: (channe
       if (kind === 'melody') base.push({ type: 'melody', melody: state.current.melody, style: settings.get('melody'), now, lang: 'ru' });
       if (kind === 'stocks') base.push({ type: 'stocks', quotes: [], lastTrade: null, style: settings.get('market'), lang: 'ru' });
       if (kind === 'portal') base.push({ type: 'portalConfig', config: settings.get('portal'), channel: '', lang: 'ru' });
+      if (kind === 'focus') base.push({ type: 'focus', focus: state.current.focus, style: settings.get('focus'), task: '', now, lang: 'ru' });
+      if (kind === 'shoutout') base.push({ type: 'shoutout', card: null, endsAt: null, style: settings.get('shoutout'), now, lang: 'ru' });
       return base;
     },
   });
@@ -40,7 +42,7 @@ export async function createFixture(root: string, dataDir: string, push: (channe
   state.patch('overlayUrl', `http://localhost:${overlay.port}`);
   state.patch('twitch', { status: 'connected', account: { userId: 'fixture', login: 'streamer', displayName: 'Streamer' } });
   alerts = new AlertQueue(ctx, (alert) => overlay.broadcast('alerts', { type: 'alert', alert }), () => overlay.broadcast('alerts', { type: 'alertSkip' }));
-  songs = new SongRequestService(ctx, { pauseCurrent: async () => null, resumeSource: async () => undefined } as any, (message) => overlay.broadcast('song', message), undefined, { lookup: async () => ({ ok: true, title: 'Тестовый трек' }) });
+  songs = new SongRequestService(ctx, { pauseCurrent: async () => null, resumeSource: async () => undefined } as any, (message) => overlay.broadcast('song', message), undefined, { lookup: async () => ({ ok: true, title: 'Тестовый трек' }), playlistLookup: async () => ({ ok: true, title: 'Тестовый плейлист' }), details: async () => null, search: async () => [{ videoId: 'dQw4w9WgXcQ', title: 'Тестовый трек' }], yandexTrack: async (trackId) => ({ trackId, title: 'Тестовый исполнитель - Тестовый трек', available: true }), yandexSearch: async () => [] });
   const testBroadcasts: {kind:OverlayKind;message:OverlayMessage}[] = [];
   const broadcast = (kind:OverlayKind,message:OverlayMessage) => {testBroadcasts.push({kind,message});overlay.broadcast(kind,message);};
   new EmoteRain(ctx,{broadcast} as any);
@@ -68,6 +70,11 @@ export async function createFixture(root: string, dataDir: string, push: (channe
         case 'song:move': return songs.move(args[0], args[1]);
         case 'song:pause': return songs.pause(args[0]);
         case 'song:remove': return songs.remove(args[0]);
+        case 'song:skip': return songs.skip();
+        case 'song:banUser': return songs.banUser(args[0]);
+        case 'song:banVideo': return songs.banVideo(args[0]);
+        case 'song:backgroundAdd': return songs.addBackground(args[0]);
+        case 'song:jamAdd': return songs.addJam(args[0], args[1]);
         case 'twitch:rewards': return [{ id: 'song-reward', title: 'Заказ музыки', inputRequired: true, enabled: true, manageable: true }];
         case 'twitch:createSongReward': return { id: 'song-reward', title: args[0] };
         case 'alerts:test': return overlayTests.alert(args[0],args[1],args[2]);

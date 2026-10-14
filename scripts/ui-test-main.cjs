@@ -195,7 +195,7 @@ app.whenReady().then(async () => {
   await click('Добавить модуль');
   const remaining = await js(`[...document.querySelectorAll('[data-add-module]:not(:disabled)')].map(b=>b.dataset.addModule)`);
   await click('Отмена');
-  const toolPack = ['clipper','curse','duel','melody','ducking','stocks','portal','report','shield'];
+  const toolPack = ['clipper','curse','duel','melody','ducking','stocks','portal','report','shield','focus','shoutout'];
   for (const id of remaining) { await add(id); assert.equal(await js(`document.querySelectorAll('[data-editor-module]').length`),1,'more than one editor mounted'); if (toolPack.includes(id) || id === 'donations') { await delay(400); await capture('module-'+id); }
     if (id === 'banner') {
       await js(`document.querySelector('.font-picker-button').click()`); await until(`document.querySelectorAll('.font-option').length>20`,'font picker lists bundled fonts');
@@ -228,7 +228,7 @@ app.whenReady().then(async () => {
   await until(`!!document.querySelector('.designer-props')`,'designer properties missing');
   await capture('designer');
   await click('Панель'); await until(`!!document.querySelector('.monitor-grid')`,'full monitor missing'); await capture('monitor-modules');
-  assert.equal(await js(`document.querySelectorAll('.monitor-card').length`),40);
+  assert.equal(await js(`document.querySelectorAll('.monitor-card').length`),42);
   assert.equal(await js(`document.querySelectorAll('.content input,.content textarea,.content select').length`),0,'monitor renders mutable settings');
   await js(`document.querySelector('[data-monitor-edit]').click()`); await delay(150);
   // Free grid: drag by header and resize by corner with real pointer events; nothing may overlap.

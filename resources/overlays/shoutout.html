@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <title>StreamHelper — Shoutout</title>
+    <style>
+      :root { --accent: #9146ff; }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; width: 100%; height: 100%; background: transparent; overflow: hidden; color: #fff; }
+      #stage { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 20px; }
+      .card { position: relative; display: flex; align-items: stretch; gap: 26px; max-width: 100%; padding: 24px; border-radius: 22px; background: linear-gradient(135deg, rgba(16, 13, 26, 0.94), rgba(22, 16, 38, 0.94)); box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent), 0 24px 60px rgba(0, 0, 0, 0.5), 0 0 60px color-mix(in srgb, var(--accent) 25%, transparent); overflow: hidden; }
+      .card.noclip { flex-direction: column; align-items: center; text-align: center; width: 560px; }
+      .info { display: flex; flex-direction: column; justify-content: center; gap: 12px; width: 330px; flex-shrink: 0; }
+      .card.noclip .info { width: 100%; align-items: center; }
+      .avatar { width: 120px; height: 120px; border-radius: 50%; object-fit: cover; box-shadow: 0 0 0 4px var(--accent), 0 0 28px color-mix(in srgb, var(--accent) 60%, transparent); background: color-mix(in srgb, var(--accent) 35%, #111); display: grid; place-items: center; font-size: 54px; font-weight: 900; }
+      .kicker { display: inline-flex; align-self: flex-start; gap: 8px; padding: 6px 14px; border-radius: 999px; background: var(--accent); font-size: 16px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; }
+      .card.noclip .kicker { align-self: center; }
+      .name.long { font-size: 32px; }
+      .name.longer { font-size: 26px; }
+      .name { font-size: 40px; font-weight: 900; line-height: 1.1; overflow-wrap: anywhere; }
+      .game { font-size: 21px; font-weight: 700; color: color-mix(in srgb, var(--accent) 45%, #fff); }
+      .game:empty { display: none; }
+      .title { font-size: 18px; line-height: 1.35; opacity: 0.85; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+      .title:empty { display: none; }
+      .url { font-size: 18px; font-weight: 800; opacity: 0.9; }
+      .clip { position: relative; width: 704px; aspect-ratio: 16 / 9; border-radius: 14px; overflow: hidden; background: #000; box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 50%, transparent); }
+      .clip iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+      .clip .placeholder { position: absolute; inset: 0; display: grid; place-items: center; background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 40%, #000), #000); font-size: 22px; font-weight: 800; }
+      .clipname { position: absolute; left: 0; right: 0; bottom: 0; padding: 26px 14px 10px; background: linear-gradient(transparent, rgba(0, 0, 0, 0.8)); font-size: 16px; font-weight: 700; pointer-events: none; }
+      .progress { position: absolute; left: 0; bottom: 0; height: 5px; background: var(--accent); }
+      .enter { animation: enter 0.7s cubic-bezier(0.22, 1, 0.36, 1) both; }
+      .leave { animation: leave 0.45s ease-in both; }
+      @keyframes enter { from { opacity: 0; transform: translateY(40px) scale(0.94); } }
+      @keyframes leave { to { opacity: 0; transform: translateY(30px) scale(0.96); } }
+      body.reduced .enter, body.reduced .leave { animation-duration: 0.2s; }
+      @media (max-width: 1150px) { .card:not(.noclip) { flex-direction: column; align-items: center; } .card:not(.noclip) .info { width: 100%; } .clip { width: min(704px, 100%); } }
+    </style>
+  </head>
+  <body>
+    <div id="stage"></div>
+    <script src="/overlay/assets/common.js"></script>
+    <script>
+      const stage = document.getElementById('stage');
+      if (SH.reducedMotion) document.body.classList.add('reduced');
+      let shownId = null, skew = 0, progressTimer = null;
+
+      function avatar(card) {
+        if (/^https:\/\/static-cdn\.jtvnw\.net\//.test(card.avatarUrl)) {
+          const img = document.createElement('img');
+          img.className = 'avatar'; img.src = card.avatarUrl; img.alt = '';
+          return img;
+        }
+        return SH.el('div', 'avatar', (card.displayName || '?').slice(0, 1).toUpperCase());
+      }
+
+      function kicker(card, lang) {
+        if (card.viewers) {
+          const word = lang === 'en' ? (card.viewers === 1 ? 'viewer' : 'viewers') : SH.plural(card.viewers, 'зритель', 'зрителя', 'зрителей');
+          return `${SH.tr(lang, 'Рейд', 'Raid')} · ${card.viewers} ${word}`;
+        }
+        return SH.tr(lang, 'Загляните к ним', 'Go check them out');
+      }
+
+      function clipBox(card, style, lang) {
+        const box = SH.el('div', 'clip');
+        if (card.clip && /^[\w-]+$/.test(card.clip.id)) {
+          const frame = document.createElement('iframe');
+          // Twitch only plays embeds for the page's own host name ("localhost").
+          const q = new URLSearchParams({ clip: card.clip.id, parent: location.hostname, autoplay: 'true', muted: style.clipMuted ? 'true' : 'false', preload: 'auto' });
+          frame.src = `https://clips.twitch.tv/embed?${q}`;
+          frame.allow = 'autoplay; fullscreen';
+          frame.setAttribute('scrolling', 'no');
+          box.appendChild(frame);
+          if (card.clip.title) box.appendChild(SH.el('div', 'clipname', `🎬 ${card.clip.title}`));
+        } else {
+          box.appendChild(SH.el('div', 'placeholder', SH.tr(lang, '🎬 Здесь будет клип канала', "🎬 The channel's clip plays here")));
+        }
+        return box;
+      }
+
+      function show(card, endsAt, style, lang) {
+        const withClip = style.playClip && (card.clip || (SH.preview && card.reason === 'test'));
+        const el = SH.el('div', `card enter${withClip ? '' : ' noclip'}`);
+        const info = SH.el('div', 'info');
+        info.append(avatar(card), SH.el('span', 'kicker', kicker(card, lang)), SH.el('div', `name${card.displayName.length > 20 ? ' longer' : card.displayName.length > 13 ? ' long' : ''}`, card.displayName), SH.el('div', 'game', card.game ? `🎮 ${card.game}` : ''), SH.el('div', 'title', card.title), SH.el('div', 'url', `twitch.tv/${card.login}`));
+        el.appendChild(info);
+        if (withClip) el.appendChild(clipBox(card, style, lang));
+        const bar = SH.el('div', 'progress');
+        el.appendChild(bar);
+        stage.replaceChildren(el);
+        clearInterval(progressTimer);
+        const start = Date.now() + skew;
+        const total = Math.max(1, (endsAt || start) - start);
+        const tick = () => { bar.style.width = `${Math.max(0, Math.min(1, ((endsAt || start) - (Date.now() + skew)) / total)) * 100}%`; };
+        tick();
+        if (endsAt) progressTimer = setInterval(tick, 250);
+      }
+
+      function hide() {
+        clearInterval(progressTimer);
+        const el = stage.firstElementChild;
+        if (!el) return;
+        el.classList.remove('enter');
+        el.classList.add('leave');
+        // Stop the clip's sound right away.
+        el.querySelectorAll('iframe').forEach((f) => { f.src = 'about:blank'; });
+        setTimeout(() => { if (stage.firstElementChild === el) el.remove(); }, 500);
+      }
+
+      function sample(lang) {
+        return { id: 'preview', userId: '', login: 'streamhelper', displayName: SH.tr(lang, 'Дружественный_канал', 'Friendly_channel'), avatarUrl: '', game: 'Just Chatting', title: SH.tr(lang, 'Так будет выглядеть карточка шаутаута', 'This is how the shoutout card looks'), viewers: 42, reason: 'test', clip: null, at: Date.now() };
+      }
+
+      SH.connect('shoutout', (msg) => {
+        if (msg.type !== 'shoutout') return;
+        skew = msg.now - Date.now();
+        stage.style.setProperty('--accent', msg.style.accentColor);
+        SH.useFont(stage, msg.style.fontFamily);
+        const card = msg.card || (SH.preview ? sample(msg.lang) : null);
+        if (!card) { shownId = null; return hide(); }
+        // Settings changes resend the same card: keep it (and its playing clip) unless the clip options changed.
+        const key = `${card.id}|${msg.style.playClip}|${msg.style.clipMuted}`;
+        if (key === shownId && stage.firstElementChild) {
+          stage.firstElementChild.classList.remove('enter');
+          return;
+        }
+        shownId = key;
+        show(card, msg.endsAt, msg.style, msg.lang);
+      });
+    </script>
+  </body>
+</html>

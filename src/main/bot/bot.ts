@@ -208,6 +208,7 @@ export class BotService {
           if (!login) return;
           const so = await platform.shoutout(login);
           if (!so) return say('userNotFound', { login });
+          this.ctx.bus.emit('shoutout:command', { login: login.toLowerCase() });
           return say(so.category ? 'shoutout' : 'shoutoutNoGame', { name: so.displayName, login: login.toLowerCase(), game: so.category });
         }
         case 'counter': {

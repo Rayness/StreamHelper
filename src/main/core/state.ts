@@ -10,6 +10,7 @@ export function initialRuntimeState(): RuntimeState {
     twitchBot: { ...disconnected },
     donationalerts: { ...disconnected },
     streamlabs: { ...disconnected },
+    yandexMusic: { ...disconnected },
     streamelements: { ...disconnected },
     streamerbot: { ...disconnected, actions: [] },
     discord: { ...disconnected },
@@ -44,6 +45,9 @@ export function initialRuntimeState(): RuntimeState {
     market: { quotes: [], richest: [], traders: 0, lastTrade: null },
     portal: { status: 'disconnected', channel: '', messages: [] },
     report: { live: emptyReportSummary(Date.now()), reports: [], busy: false },
+    focus: { status: 'idle', phase: 'focus', endsAt: null, leftMs: 0, durationMs: 0, done: 0, focusMs: 0, extendedMin: 0, lastExtend: null },
+    shoutout: { current: null, endsAt: null, queue: [], history: [], error: null },
+    tts: { current: null, queue: [], history: [], voices: [], remembered: 0, error: null },
     shield: { status: 'off', readings: { newChatters: 0, similar: 0, young: 0 }, reason: null, activatedAt: null, releaseAt: null, suspects: [], history: [], error: null },
   };
 }

@@ -63,6 +63,8 @@ export function createDockRoutes(opts: DockOptions) {
         viewerQueue: { open: state.viewerQueue.open, entries: state.viewerQueue.entries.slice(0, 10).map((e) => e.userName), count: state.viewerQueue.entries.length, picked: state.viewerQueue.picked[0]?.userName ?? null },
         guess: { status: state.guess.status, low: state.guess.low, high: state.guess.high, attempts: state.guess.attempts, winner: state.guess.winner, answer: state.guess.answer },
         hype: state.hype,
+        focus: { status: state.focus.status, phase: state.focus.phase, label: settings.focus.labels[state.focus.phase], endsAt: state.focus.endsAt, leftMs: state.focus.leftMs, done: state.focus.done, now: Date.now() },
+        shoutout: { current: state.shoutout.current?.displayName ?? null, queue: state.shoutout.queue.length },
         counters: settings.counterOverlays.map((c) => ({ name: c.counter, title: c.title, value: settings.bot.counters[c.counter] ?? 0 })),
         language: settings.language,
       });

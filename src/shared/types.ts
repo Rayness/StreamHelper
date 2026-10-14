@@ -184,6 +184,8 @@ export interface RuntimeState {
   streamelements: ConnectionState;
   streamerbot: ConnectionState & { actions: { id: string; name: string }[] };
   discord: ConnectionState;
+  /** `device`: the Yandex Music app or site that plays requests (title as Yandex reports it). */
+  yandexMusic: ConnectionState & { device?: string | null; hasPlus?: boolean };
   subForStream: ConnectionState & { overlayUrl: string };
   obs: ObsState;
   stream: StreamInfo;
@@ -219,6 +221,9 @@ export interface RuntimeState {
   portal: PortalState;
   report: ReportState;
   shield: ShieldState;
+  focus: FocusState;
+  shoutout: ShoutoutState;
+  tts: TtsState;
 }
 
 // ---------- Settings ----------
@@ -448,6 +453,7 @@ export type ActionStep =
   | { type: 'clipMoment' }
   | { type: 'shieldToggle' }
   | { type: 'curseVote' }
+  | { type: 'focusToggle' }
   /** Set a custom variable; `value` is a template, "+5" / "-1" change a number. */
   | { type: 'variable'; name: string; value: string }
   | { type: 'wait'; ms: number };
@@ -561,6 +567,14 @@ export interface SongRequest {
   title?: string;
   /** Channel-points redemption to fulfil or refund (Twitch `redemption.id` / `reward.id`). */
   redemption?: { id: string; rewardId: string };
+  /** Background jam: the player runs this whole YouTube mix / playlist instead of one video. */
+  playlistId?: string;
+  /** `yandex`: plays in the streamer's Yandex Music app / site (`videoId` = `ym:<trackId>`); `local`: a file from the computer. */
+  provider?: 'yandex' | 'local';
+  yandexTrackId?: string;
+  yandexAlbumId?: string;
+  cover?: string;
+  durationMs?: number;
 }
 
 export interface SongRequestSettings {
@@ -577,6 +591,17 @@ export interface SongRequestSettings {
   chatCommand: string;
   chatPermission: Permission;
   chatCooldownSec: number;
+  /** Viewers may write "artist - title" instead of a link; the first playable YouTube result is queued. */
+  allowSearch: boolean;
+  /** Yandex Music tracks play in the streamer's Yandex Music app or site (needs the Yandex login). */
+  yandexPlayback: boolean;
+  /** Viewer limits (the streamer's own adds ignore them). 0 = no limit. */
+  maxPerUser: number;
+  /** Longer tracks are refused; the player also stops a viewer's track at this length. */
+  maxDurationMin: number;
+  minViews: number;
+  /** Requests whose search text or video title contains one of these are refused. */
+  bannedWords: string[];
   minDonation: number;
   autoPlay: boolean;
   pauseWindowsMusic: boolean;
@@ -593,6 +618,48 @@ export interface SongRequestSettings {
   accentColor: string;
   backgroundOpacity: number;
   fontFamily: string;
+  /** Viewers (lowercase names) whose requests and skips are refused. */
+  bannedUsers: string[];
+  /** Videos nobody may request. */
+  bannedVideos: SongTrack[];
+  /** Channel-points reward that skips the playing track. Empty = off. */
+  skipRewardTitle: string;
+  skipRewardId: string;
+  /** The streamer's own playlist: plays while there are no requests, gives way to them. */
+  backgroundEnabled: boolean;
+  backgroundTracks: SongTrack[];
+  backgroundShuffle: boolean;
+  backgroundVolume: number;
+  /** Show the background video on stream; off = audio only. */
+  backgroundShowVideo: boolean;
+  /** YouTube mixes / playlists by mood; the chosen one replaces the streamer's own playlist. */
+  jams: SongJam[];
+  /** Jam playing as background music. Empty = the streamer's own playlist. */
+  backgroundJamId: string;
+}
+
+export interface SongJam {
+  id: string;
+  name: string;
+  /** YouTube `list=` id: a mix (RD…) or a public playlist (PL…). */
+  listId: string;
+  /** Video the mix starts from; also gives the cover. */
+  videoId?: string;
+}
+
+/**
+ * A favourite / background track. `videoId` is the key: a YouTube id, `ym:<trackId>` for Yandex Music
+ * (plays in the streamer's Yandex Music app) or `local:<file>` for a file added from the computer.
+ */
+export interface SongTrack {
+  videoId: string;
+  title?: string;
+  kind?: 'yandex' | 'local';
+  /** Local file name in the app's `media/songs` folder. */
+  file?: string;
+  cover?: string;
+  albumId?: string;
+  durationMs?: number;
 }
 
 /** viewers = stream only, both = stream + streamer's headphones, me = headphones only. */
@@ -601,6 +668,8 @@ export type SongListen = 'viewers' | 'both' | 'me';
 export interface SongRequestState {
   queue: SongRequest[];
   current: SongRequest | null;
+  /** Background playlist track playing while there is no request. */
+  background?: SongTrack | null;
   /** The playing track is paused by the streamer. */
   paused: boolean;
   /** Result of applying `listen` to the Song Request sources in OBS. */
@@ -1347,6 +1416,215 @@ export interface ShieldState {
   error: string | null;
 }
 
+// ---------- Focus timer (pomodoro) ----------
+
+export type FocusPhase = 'focus' | 'break' | 'long';
+
+export interface FocusSettings {
+  focusMin: number;
+  breakMin: number;
+  longBreakMin: number;
+  /** A long break after every N focus sessions. 0 = never. */
+  longEvery: number;
+  /** Start the next phase by itself when one ends; otherwise it waits for a click. */
+  autoContinue: boolean;
+  /** What the streamer is working on, shown on the overlay. Template ({game}, {title}...). */
+  task: string;
+  labels: Record<FocusPhase, string>;
+  /** Channel-points reward that adds minutes to the current phase. Empty = off. */
+  rewardTitle: string;
+  rewardMinutes: number;
+  /** How much chat may add to one phase, minutes. */
+  maxExtendMin: number;
+  /** Chat command that tells the time left. Empty = off. */
+  command: string;
+  /** Announce phase changes and extensions in chat. */
+  announce: boolean;
+  /** OBS scene for breaks; the previous scene comes back afterwards. Empty = don't switch. */
+  breakScene: string;
+  /** A short chime on the overlay when a phase changes. */
+  chime: boolean;
+  layout: 'ring' | 'bar';
+  showCycles: boolean;
+  accentColor: string;
+  breakColor: string;
+  fontFamily: string;
+}
+
+export interface FocusState {
+  status: 'idle' | 'running' | 'paused';
+  phase: FocusPhase;
+  endsAt: number | null;
+  /** Time left while paused. */
+  leftMs: number;
+  /** Length of the current phase including what chat added, for the progress ring. */
+  durationMs: number;
+  /** Focus sessions finished since the start. */
+  done: number;
+  /** Focused time since the start, ms. */
+  focusMs: number;
+  /** Minutes chat added to the current phase. */
+  extendedMin: number;
+  lastExtend: { user: string; minutes: number; at: number } | null;
+}
+
+// ---------- Raid shoutout card ----------
+
+export interface ShoutoutSettings {
+  /** Shout out incoming raiders automatically. */
+  onRaid: boolean;
+  /** Smaller raids are ignored. */
+  minViewers: number;
+  /** Show the card when a moderator uses the bot's shoutout command too. */
+  onCommand: boolean;
+  /** Wait after the raid before the shoutout, so the raid alert plays first. */
+  delaySec: number;
+  /** Chat message; {name} {login} {game} {title} {viewers}. Empty = no message. */
+  chatMessage: string;
+  /** Twitch's own /shoutout (live only, Twitch limits how often). */
+  nativeShoutout: boolean;
+  showCard: boolean;
+  playClip: boolean;
+  clipPick: 'top' | 'recent' | 'random';
+  /** Clips longer than this are cut short, seconds. */
+  clipMaxSec: number;
+  clipMuted: boolean;
+  /** How long a card without a clip stays on screen, seconds. */
+  cardSec: number;
+  accentColor: string;
+  fontFamily: string;
+}
+
+export interface ShoutoutClip {
+  id: string;
+  title: string;
+  durationSec: number;
+  views: number;
+  thumbnailUrl: string;
+}
+
+export interface ShoutoutCard {
+  id: string;
+  /** Twitch user id of the channel ('' for the test card). */
+  userId: string;
+  login: string;
+  displayName: string;
+  avatarUrl: string;
+  game: string;
+  title: string;
+  /** Raid size; null when it isn't a raid. */
+  viewers: number | null;
+  reason: 'raid' | 'command' | 'manual' | 'test';
+  clip: ShoutoutClip | null;
+  at: number;
+}
+
+export interface ShoutoutState {
+  current: ShoutoutCard | null;
+  /** When the current card leaves the screen. */
+  endsAt: number | null;
+  /** Logins waiting for their turn. */
+  queue: string[];
+  history: ShoutoutCard[];
+  error: string | null;
+}
+
+// ---------- Text to speech ----------
+
+/** Built-in voices: a Windows voice of some gender with its own pitch, speed and sound effect. */
+export type TtsVoiceId = 'female' | 'male' | 'chipmunk' | 'giant' | 'robot' | 'radio' | 'fast' | 'lich';
+export type TtsEffect = 'none' | 'robot' | 'radio' | 'echo';
+
+/** Who may have their messages read aloud. */
+export interface TtsRoles {
+  broadcaster: boolean;
+  moderator: boolean;
+  vip: boolean;
+  subscriber: boolean;
+  /** Everyone else in chat. */
+  viewer: boolean;
+}
+
+export interface TtsSettings {
+  enabled: boolean;
+  /** `all`: every chat message (commands are skipped); `prefix`: only messages starting with `trigger`. */
+  mode: 'all' | 'prefix';
+  /** What starts a message to be read in `prefix` mode, e.g. "!!!". */
+  trigger: string;
+  /** Viewers pick their voice with it ("!tts robot"); the choice is remembered per viewer. */
+  command: string;
+  roles: TtsRoles;
+  /** Channel points reward whose text is read for anyone who redeems it. Empty = off. */
+  rewardTitle: string;
+  /** For viewers who haven't picked a voice. */
+  voice: TtsVoiceId;
+  /** Voices viewers can pick with "!tts robot". */
+  voices: TtsVoiceId[];
+  /** Exact Windows voices for the female / male voices; empty = picked by the message language. */
+  femaleVoice: string;
+  maleVoice: string;
+  /** 0–100. */
+  volume: number;
+  /** Speed on top of each voice's own, percent (50–200). */
+  ratePercent: number;
+  /** Longer messages are cut, characters. */
+  maxLength: number;
+  /** Per-viewer pause between read messages, seconds (the streamer has none). */
+  cooldownSec: number;
+  /** More waiting messages than this are dropped. */
+  queueMax: number;
+  /** "Name says: …" before the message. */
+  readNames: boolean;
+  skipEmotes: boolean;
+  skipLinks: boolean;
+  /** Messages with these words are never read. */
+  blockedWords: string[];
+  /** Messages with swearing (Russian and English) are never read. */
+  profanityFilter: boolean;
+  /** The chat bot's banned words (Moderation) also block reading. */
+  useBotWords: boolean;
+}
+
+/** A Windows voice. `onecore` voices come from Settings → Speech; `sapi` are the older desktop ones. */
+export interface TtsSystemVoice {
+  name: string;
+  lang: string;
+  gender: 'female' | 'male';
+  source: 'onecore' | 'sapi';
+}
+
+export interface TtsItem {
+  id: string;
+  /** Chat message id (null for rewards and tests), so a deleted message is never read. */
+  messageId: string | null;
+  userId: string;
+  userName: string;
+  /** What the viewer wrote, after cleanup. */
+  text: string;
+  voice: TtsVoiceId;
+  reason: 'chat' | 'reward' | 'test';
+  at: number;
+}
+
+export interface TtsPlayback {
+  item: TtsItem;
+  /** Audio URL path on the overlay server. */
+  url: string;
+  effect: TtsEffect;
+  volume: number;
+  durationMs: number;
+}
+
+export interface TtsState {
+  current: TtsItem | null;
+  queue: TtsItem[];
+  history: TtsItem[];
+  voices: TtsSystemVoice[];
+  /** Viewers with a voice of their own. */
+  remembered: number;
+  error: string | null;
+}
+
 // ---------- Kawaki ----------
 
 export interface KawakiNowWatching {
@@ -1595,6 +1873,9 @@ export interface Settings {
   portal: PortalSettings;
   report: ReportSettings;
   shield: ShieldSettings;
+  focus: FocusSettings;
+  shoutout: ShoutoutSettings;
+  tts: TtsSettings;
   /** Main currency for donation totals (goals, subathon). */
   currency: string;
   minimizeToTray: boolean;
@@ -1642,7 +1923,7 @@ export type ToolModule = 'clipper' | 'ducking' | 'shield' | 'report';
 export type WorkspaceCard = 'stream' | 'obs' | 'actions' | 'bot' | 'twitch' | 'donationalerts' | 'streamlabs' | 'streamelements' | 'streamerbot' | 'discord' | 'subforstream' | ToolModule | OverlayKind;
 
 export type ProfileSettingsKey = 'workspace' | 'bot' | 'alerts' | 'chatOverlay' | 'spotlightOverlay' | 'rewardsOverlay' | 'eventsOverlay' | 'liveOverlay' | 'donationsOverlay' | 'customOverlays' | 'overlayVariants' | 'collabOverlay' | 'musicOverlay' | 'songRequests' | 'goals' | 'timers' | 'actions' | 'banners' | 'ads' | 'labels' | 'emoteRain' | 'wheels' | 'poll' | 'giveaway' | 'quiz' | 'boss' | 'kawaki' | 'viewerQueue' | 'guess' | 'counterOverlays' | 'hype' | 'leadersOverlay'
-  | 'clipper' | 'curses' | 'duel' | 'melody' | 'ducking' | 'market' | 'portal' | 'report' | 'shield';
+  | 'clipper' | 'curses' | 'duel' | 'melody' | 'ducking' | 'market' | 'portal' | 'report' | 'shield' | 'focus' | 'shoutout' | 'tts';
 export type ProfileConfig = Pick<Settings, ProfileSettingsKey>;
 export interface StreamProfile { id: string; name: string; config: ProfileConfig; overlays: OverlayKind[] }
 
@@ -1651,7 +1932,7 @@ export type SettingsKey = keyof Settings;
 // ---------- Overlay wire protocol ----------
 
 export type OverlayKind = 'chat' | 'alerts' | 'goal' | 'timer' | 'events' | 'rewards' | 'collab' | 'music' | 'song' | 'banner' | 'ad' | 'label' | 'emotes' | 'wheel' | 'poll' | 'giveaway' | 'kawaki' | 'quiz' | 'boss' | 'live' | 'spotlight' | 'queue' | 'guess' | 'counter' | 'hype' | 'leaders'
-  | 'curse' | 'duel' | 'melody' | 'stocks' | 'portal' | 'donations' | 'custom';
+  | 'curse' | 'duel' | 'melody' | 'stocks' | 'portal' | 'donations' | 'custom' | 'focus' | 'shoutout' | 'tts';
 
 export interface RenderedBanner extends Omit<Banner, 'slides'> {
   slides: { id: string; text: string; image: string | null }[];
@@ -1700,7 +1981,7 @@ export type OverlayMessage =
   | { type: 'collab'; config: CollabOverlaySettings; raids: StreamEventOf<'raid'>[]; lang: Language }
   | { type: 'collabRaid'; event: StreamEventOf<'raid'> }
   | { type: 'music'; track: MusicTrack | null; config: MusicOverlaySettings; lang: Language }
-  | { type: 'song'; request: SongRequest | null; nonce: string | null; paused: boolean; config: SongRequestSettings; queue: SongRequest[]; lang: Language }
+  | { type: 'song'; request: SongRequest | null; background?: boolean; nonce: string | null; paused: boolean; config: SongRequestSettings; queue: SongRequest[]; lang: Language }
   | { type: 'banner'; banner: RenderedBanner | null }
   | { type: 'ad'; campaign: AdCampaign | null; endsAt: number | null }
   | { type: 'boss'; boss: BossState; style: BossSettings; lang: Language; prefix: string }
@@ -1731,6 +2012,12 @@ export type OverlayMessage =
   | { type: 'portal'; message: PortalMessage }
   | { type: 'portalDelete'; id: string }
   | { type: 'donations'; board: DonationsBoard; style: DonationsOverlaySettings; lang: Language }
+  | { type: 'focus'; focus: FocusState; style: FocusSettings; task: string; now: number; lang: Language }
+  /** The phase just changed: overlays connected right now play the chime. */
+  | { type: 'focusChime'; phase: FocusPhase }
+  | { type: 'shoutout'; card: ShoutoutCard | null; endsAt: number | null; style: ShoutoutSettings; now: number; lang: Language }
+  | { type: 'tts'; play: TtsPlayback }
+  | { type: 'ttsStop' }
   | { type: 'custom'; overlay: RenderedCustomOverlay | null }
   | { type: 'reload' };
 
@@ -1759,7 +2046,7 @@ export interface IpcInvoke {
   'twitch:updateStream': (patch: { title?: string; categoryId?: string; tags?: string[] }) => void;
   'twitch:searchCategories': (query: string) => Category[];
   'twitch:rewards': () => { id: string; title: string; inputRequired: boolean; enabled: boolean; manageable: boolean }[];
-  'twitch:createSongReward': (title: string, cost: number) => { id: string; title: string };
+  'twitch:createSongReward': (title: string, cost: number, kind?: 'request' | 'skip') => { id: string; title: string };
   'chat:send': (text: string, replyTo?: string) => void;
   'chat:delete': (messageId: string) => void;
   'chat:timeout': (userId: string, seconds: number) => void;
@@ -1793,6 +2080,9 @@ export interface IpcInvoke {
   'actions:run': (actionId: string) => void;
   'timer:control': (timerId: string, op: 'start' | 'pause' | 'reset' | 'add', seconds?: number) => void;
   'banner:showNow': (bannerId: string) => void;
+  'yandex:login': () => void;
+  'yandex:setToken': (token: string) => void;
+  'yandex:logout': () => void;
   'song:add': (url: string) => void;
   'song:play': (id?: string) => void;
   'song:skip': () => void;
@@ -1800,6 +2090,20 @@ export interface IpcInvoke {
   'song:pause': (paused: boolean) => void;
   /** Move a queued (not playing) request to `index` among the upcoming ones. */
   'song:move': (id: string, index: number) => void;
+  /** Ban a viewer from requesting; their queued requests are removed and refunded. */
+  'song:banUser': (userName: string) => void;
+  /** Ban a video by link or id; it leaves the queue. */
+  'song:banVideo': (url: string) => void;
+  'song:backgroundAdd': (url: string) => void;
+  /** Add or remove the request / playing track with this id in the favourites; returns whether it is a favourite now. */
+  'song:favorite': (id: string) => boolean;
+  'song:favoriteRemove': (videoId: string) => void;
+  /** Play this favourite now as background music. */
+  'song:favoritePlay': (videoId: string) => void;
+  /** Pick audio files on the computer and add them to the favourites; returns how many were added. */
+  'song:importLocal': () => number;
+  /** Add a YouTube mix / playlist as a background jam; an empty name takes the playlist title. */
+  'song:jamAdd': (url: string, name: string) => void;
   'music:control': (source: MusicSourceKind, action: 'play' | 'pause' | 'next') => void;
   'subs:check': () => void;
   'subs:clear': () => void;
@@ -1878,6 +2182,24 @@ export interface IpcInvoke {
   'report:discord': (id: string) => void;
   'shield:activate': () => void;
   'shield:release': () => void;
+  /** Idle → start, running → pause, paused → resume. */
+  'focus:toggle': () => void;
+  'focus:skip': () => void;
+  'focus:stop': () => void;
+  'focus:add': (minutes: number) => void;
+  /** A full shoutout (chat message, Twitch shoutout, card) for a channel. */
+  'shoutout:show': (login: string) => void;
+  'shoutout:test': () => void;
+  'shoutout:skip': () => void;
+  /** Read a sample with this voice (the default one when omitted). */
+  'tts:test': (voice?: TtsVoiceId) => void;
+  /** Stop the message being read; the next one follows. */
+  'tts:skip': () => void;
+  'tts:clear': () => void;
+  /** Forget the voices viewers picked. */
+  'tts:forgetVoices': () => void;
+  /** Re-read the installed Windows voices. */
+  'tts:voices': () => TtsSystemVoice[];
   'media:import': () => MediaFile | null;
   'media:list': () => MediaFile[];
   'shell:openExternal': (url: string) => void;
