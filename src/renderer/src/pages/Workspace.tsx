@@ -69,6 +69,7 @@ export function Workspace() {
   const t = useT();
   const workspace = useApp((d) => d.settings!.workspace);
   const profileId = useApp((d) => d.settings!.activeProfileId);
+  const remote = useApp((d) => !!d.remote);
   const previousProfile = useRef(profileId);
   const nav = useNav();
   const [query, setQuery] = useState('');
@@ -108,7 +109,7 @@ export function Workspace() {
         <span className="workspace-rail-label">{t('workspace.modules')} <b>{cards.length}</b></span>
         <div className="workspace-module-list">{cards.map((id) => <button key={id} data-module={id} className={`workspace-module ${editor === id && !catalog ? 'active' : ''}`} aria-current={editor === id && !catalog ? 'page' : undefined} onClick={() => openModule(id)}><Icon name={moduleDef(id).icon} size={18} /><span>{name(id)}</span><Icon name="chevron" size={13} /></button>)}</div>
         <button className="workspace-rail-add" onClick={openCatalog}><Icon name="plus" size={16} />{t('workspace.add')}</button>
-        <p className="muted small">{t('workspace.setupHint')}</p>
+        {!remote && <p className="muted small">{t('workspace.setupHint')}</p>}
       </aside>
       <section className="workspace-canvas">
         {catalog ? <div className="workspace-catalog" data-testid="module-catalog">

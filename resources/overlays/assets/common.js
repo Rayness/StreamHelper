@@ -9,7 +9,7 @@
   /** Connect to the app, reconnecting forever: the app may start after OBS. */
   function connect(kind, onMessage) {
     const id = params.get('id');
-    const url = `ws://${location.host}/ws?kind=${kind}${id ? `&id=${encodeURIComponent(id)}` : ''}${preview ? '&preview=1' : ''}`;
+    const url = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws?kind=${kind}${id ? `&id=${encodeURIComponent(id)}` : ''}${preview ? '&preview=1' : ''}`;
     let ws;
     let retry;
     let stopped = false;

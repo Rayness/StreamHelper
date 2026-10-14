@@ -4,6 +4,7 @@ import { reconcile } from '@shared/reconcile';
 import { variantDiff, withVariant } from '@shared/variants';
 import { resolveModuleAccess, workspaceTarget, isWorkspaceModule } from '@shared/workspace';
 import type { WorkspaceCard } from '@shared/types';
+import type { RemoteSession } from '@shared/remote';
 
 export interface Toast {
   id: number;
@@ -22,11 +23,13 @@ export interface AppData {
   chat: ChatMessage[];
   events: StreamEvent[];
   toasts: Toast[];
+  /** Set when this UI runs in a moderator's browser over remote access. */
+  remote: RemoteSession | null;
 }
 
 const CHAT_LIMIT = 500;
 
-let data: AppData = { ready: false, version: '', windowMaterial: false, settings: null, state: null, chat: [], events: [], toasts: [] };
+let data: AppData = { ready: false, version: '', windowMaterial: false, settings: null, state: null, chat: [], events: [], toasts: [], remote: null };
 const listeners = new Set<() => void>();
 const subscribe = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; };
 
@@ -131,7 +134,19 @@ let deferredSettings: Settings | null = null;
 const queuedSaves = new Map<string, () => Promise<void>>();
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 
-function applySettings(settings: Settings): void {
+/** A moderator's own look for the app: kept in their browser, never sent to the streamer. */
+function localLook(settings: Settings): Settings {
+  if (!data.remote) return settings;
+  try {
+    const look = JSON.parse(localStorage.getItem('remoteAppearance') ?? 'null');
+    return look ? { ...settings, appearance: look } : settings;
+  } catch {
+    return settings;
+  }
+}
+
+function applySettings(incoming: Settings): void {
+  const settings = localLook(incoming);
   confirmed = settings;
   set({ settings: data.settings ? reconcile(data.settings, settings) : settings });
 }
@@ -153,6 +168,11 @@ export function saveSettings<K extends SettingsKey>(key: K, value: Settings[K]):
     if (!variants.some((v) => v.id === id)) return;
     const overrides = variantDiff(data.settings[key], value);
     saveSettings('overlayVariants', variants.map((v) => (v.id === id ? { ...v, overrides } : v)));
+    return;
+  }
+  if (data.remote && key === 'appearance') {
+    try { localStorage.setItem('remoteAppearance', JSON.stringify(value)); } catch { /* private mode */ }
+    set({ settings: { ...data.settings, [key]: value } });
     return;
   }
   const profileId = data.settings.activeProfileId;
@@ -302,6 +322,8 @@ export async function init(): Promise<void> {
   window.api.on('toast', (t) => toast(t.kind, t.key, t.params));
 
   const initial = await window.api.invoke('app:init');
-  confirmed = initial.settings;
-  set({ ready: true, ...initial });
+  data = { ...data, remote: initial.remote ?? null };
+  const settings = localLook(initial.settings);
+  confirmed = settings;
+  set({ ready: true, ...initial, settings, remote: initial.remote ?? null });
 }

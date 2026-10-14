@@ -1882,3 +1882,32 @@ kbd {
     transition: none !important;
   }
 }
+
+/* ---------- remote access ---------- */
+
+.remote-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  color: var(--text);
+  font-size: 12.5px;
+  margin-bottom: 8px;
+}
+.remote-badge span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.remote-badge a { color: var(--accent-text); font-weight: 600; text-decoration: none; }
+.remote-badge a:hover { text-decoration: underline; }
+.remote-address { margin-right: 8px; user-select: all; }
+.remote-help { margin-top: 12px; }
+.remote-help summary { cursor: pointer; font-size: 13px; color: var(--text-2); }
+.remote-list { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 10px; }
+.remote-row { display: grid; gap: 8px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--panel); }
+.remote-row-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.remote-row-head .input { flex: 1 1 160px; min-width: 0; max-width: 260px; }
+.remote-row-head > .muted { flex: 1; }
+.remote-online { background: var(--accent-soft); color: var(--accent-text); border-color: var(--accent); }
+.remote-log { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 13px; max-height: 280px; overflow: auto; }
+.remote-log code { font-size: 12px; color: var(--text-2); }
