@@ -59,6 +59,8 @@ import { REPORT_HEIGHT, REPORT_WIDTH } from './features/reportCard';
 import { ShieldService } from './features/shield';
 import { FocusService } from './features/focus';
 import { ShoutoutService } from './features/shoutout';
+import { TtsService } from './features/tts';
+import { TtsEngine } from './features/ttsEngine';
 import { KawakiService } from './integrations/kawaki/service';
 import { push, registerIpc } from './ipc';
 import { ObsService } from './obs/obs';
@@ -152,6 +154,7 @@ async function bootstrap(): Promise<void> {
   const music = new MusicService(ctx);
 
   let overlay!: OverlayServer;
+  const ttsEngine = new TtsEngine(join(userData, 'tts'));
   const donationalerts = new DonationAlertsService(ctx, () => `http://127.0.0.1:${overlay.port}/auth/donationalerts`);
   const alerts = new AlertQueue(
     ctx,
@@ -183,6 +186,14 @@ async function bootstrap(): Promise<void> {
         // Overlays only fetch web fonts for families that aren't installed.
         res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
         res.end(JSON.stringify(await systemFonts()));
+        return true;
+      }
+      const speech = /^\/tts\/([\w-]+\.wav)$/.exec(url.pathname);
+      if (speech && (req.method === 'GET' || req.method === 'HEAD')) {
+        const file = ttsEngine.path(speech[1]);
+        if (!file || !existsSync(file)) { res.writeHead(404); res.end(); return true; }
+        res.writeHead(200, { 'Content-Type': 'audio/wav', 'Cache-Control': 'no-cache' });
+        if (req.method === 'HEAD') res.end(); else res.end(readFileSync(file));
         return true;
       }
       const card = /^\/reports\/([\w-]+)\.png$/.exec(url.pathname);
@@ -316,6 +327,15 @@ async function bootstrap(): Promise<void> {
     clips: (userId, days) => twitch.channelClips(userId, days),
     native: (userId) => twitch.nativeShoutout(userId),
   });
+  const tts = new TtsService(ctx, {
+    broadcast: (msg) => overlay.broadcast('tts', msg),
+    voices: () => ttsEngine.voices(),
+    speak: async (job) => {
+      const file = await ttsEngine.speak(job);
+      return { url: `/tts/${file}`, wav: readFileSync(ttsEngine.path(file)!) };
+    },
+  });
+  void tts.refreshVoices();
   hub = new OverlayHub(ctx, overlay, chatHistory, {
     alerts: () => alerts,
     text: () => text,
@@ -723,6 +743,10 @@ async function bootstrap(): Promise<void> {
     'shoutout:show': (login) => shoutout.show(login),
     'shoutout:test': () => shoutout.test(),
     'shoutout:skip': () => shoutout.skip(),
+    'tts:test': (voice) => tts.test(voice),
+    'tts:skip': () => tts.skip(),
+    'tts:clear': () => tts.clear(),
+    'tts:voices': () => tts.refreshVoices(),
     'shell:openExternal': (url) => {
       if (/^https?:\/\//.test(url)) void shell.openExternal(url);
     },
@@ -805,6 +829,7 @@ async function bootstrap(): Promise<void> {
     shield.dispose();
     focus.dispose();
     shoutout.dispose();
+    tts.dispose();
     bot.stop();
     void obs.disconnect();
     void overlay.stop();

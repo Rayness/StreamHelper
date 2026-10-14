@@ -12,6 +12,7 @@ import type {
   PortalSettings,
   FocusSettings,
   ShoutoutSettings,
+  TtsSettings,
   ReportSettings,
   ShieldSettings,
   ThemeId,
@@ -693,6 +694,29 @@ export function defaultShoutout(lang: Language): ShoutoutSettings {
   };
 }
 
+export function defaultTts(lang: Language): TtsSettings {
+  return {
+    enabled: false,
+    mode: 'command',
+    command: lang === 'ru' ? 'озвучь' : 'tts',
+    roles: { broadcaster: true, moderator: true, vip: true, subscriber: false, viewer: false },
+    rewardTitle: '',
+    voice: 'female',
+    voices: ['female', 'male', 'chipmunk', 'giant', 'robot', 'radio', 'fast'],
+    femaleVoice: '',
+    maleVoice: '',
+    volume: 80,
+    ratePercent: 100,
+    maxLength: 200,
+    cooldownSec: 15,
+    queueMax: 5,
+    readNames: true,
+    skipEmotes: true,
+    skipLinks: true,
+    blockedWords: [],
+  };
+}
+
 export const DEFAULT_KAWAKI_URL = 'https://kawaki.ru';
 
 export function defaultKawaki(lang: Language): KawakiSettings {
@@ -800,6 +824,7 @@ export function defaultSettings(lang: Language): Settings {
     shield: defaultShield(lang),
     focus: defaultFocus(lang),
     shoutout: defaultShoutout(lang),
+    tts: defaultTts(lang),
     currency: lang === 'ru' ? 'RUB' : 'USD',
     minimizeToTray: true,
     appearance: defaultAppearance(),

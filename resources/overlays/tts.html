@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <title>StreamHelper — TTS</title>
+    <style>
+      html, body { margin: 0; width: 100%; height: 100%; background: transparent; overflow: hidden; }
+    </style>
+  </head>
+  <body>
+    <script src="/overlay/assets/common.js"></script>
+    <script>
+      // Audio only: the app synthesizes speech and sends the file; effects are added here.
+      let ctx = null, audio = null, nodes = [];
+
+      function stop() {
+        if (audio) { audio.pause(); audio.src = ''; audio = null; }
+        for (const n of nodes) { try { n.stop?.(); n.disconnect(); } catch {} }
+        nodes = [];
+      }
+
+      /** Robot: ring modulation. Radio: telephone band with a little grit. */
+      function chain(source, effect, volume) {
+        const out = ctx.createGain();
+        out.gain.value = volume;
+        out.connect(ctx.destination);
+        nodes.push(source, out);
+        if (effect === 'robot') {
+          const ring = ctx.createGain();
+          ring.gain.value = 0;
+          const osc = ctx.createOscillator();
+          osc.frequency.value = 55;
+          osc.connect(ring.gain);
+          osc.start();
+          const dry = ctx.createGain();
+          dry.gain.value = 0.35;
+          source.connect(ring); source.connect(dry);
+          ring.connect(out); dry.connect(out);
+          nodes.push(ring, osc, dry);
+        } else if (effect === 'radio') {
+          const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 450;
+          const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2800;
+          const shape = ctx.createWaveShaper();
+          const curve = new Float32Array(256);
+          for (let i = 0; i < 256; i++) { const x = i / 128 - 1; curve[i] = Math.tanh(x * 3); }
+          shape.curve = curve;
+          source.connect(hp); hp.connect(lp); lp.connect(shape); shape.connect(out);
+          nodes.push(hp, lp, shape);
+        } else {
+          source.connect(out);
+        }
+      }
+
+      function play(p) {
+        stop();
+        // The app's own preview stays silent; the sound belongs to OBS.
+        if (SH.preview) return;
+        audio = new Audio(p.url);
+        try {
+          ctx ??= new AudioContext();
+          if (ctx.state === 'suspended') void ctx.resume();
+          chain(ctx.createMediaElementSource(audio), p.effect, p.volume);
+        } catch {
+          audio.volume = p.volume;
+        }
+        audio.play().catch(() => undefined);
+      }
+
+      SH.connect('tts', (msg) => {
+        if (msg.type === 'tts') play(msg.play);
+        else if (msg.type === 'ttsStop' || (msg.type === 'profileVisibility' && !msg.visible)) stop();
+      });
+    </script>
+  </body>
+</html>

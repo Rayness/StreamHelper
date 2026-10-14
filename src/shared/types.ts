@@ -223,6 +223,7 @@ export interface RuntimeState {
   shield: ShieldState;
   focus: FocusState;
   shoutout: ShoutoutState;
+  tts: TtsState;
 }
 
 // ---------- Settings ----------
@@ -1528,6 +1529,93 @@ export interface ShoutoutState {
   error: string | null;
 }
 
+// ---------- Text to speech ----------
+
+/** Built-in voices: a Windows voice of some gender with its own pitch, speed and sound effect. */
+export type TtsVoiceId = 'female' | 'male' | 'chipmunk' | 'giant' | 'robot' | 'radio' | 'fast';
+export type TtsEffect = 'none' | 'robot' | 'radio';
+
+/** Who may have their messages read aloud. */
+export interface TtsRoles {
+  broadcaster: boolean;
+  moderator: boolean;
+  vip: boolean;
+  subscriber: boolean;
+  /** Everyone else in chat. */
+  viewer: boolean;
+}
+
+export interface TtsSettings {
+  enabled: boolean;
+  /** `command`: only "!tts text"; `all`: every chat message (commands are skipped). */
+  mode: 'command' | 'all';
+  command: string;
+  roles: TtsRoles;
+  /** Channel points reward whose text is read for anyone who redeems it. Empty = off. */
+  rewardTitle: string;
+  /** Used when the viewer doesn't name a voice. */
+  voice: TtsVoiceId;
+  /** Voices viewers can pick with "!tts robot text". */
+  voices: TtsVoiceId[];
+  /** Exact Windows voices for the female / male voices; empty = picked by the message language. */
+  femaleVoice: string;
+  maleVoice: string;
+  /** 0–100. */
+  volume: number;
+  /** Speed on top of each voice's own, percent (50–200). */
+  ratePercent: number;
+  /** Longer messages are cut, characters. */
+  maxLength: number;
+  /** Per-viewer pause between read messages, seconds (the streamer has none). */
+  cooldownSec: number;
+  /** More waiting messages than this are dropped. */
+  queueMax: number;
+  /** "Name says: …" before the message. */
+  readNames: boolean;
+  skipEmotes: boolean;
+  skipLinks: boolean;
+  /** Messages with these words are never read. */
+  blockedWords: string[];
+}
+
+/** A Windows voice. `onecore` voices come from Settings → Speech; `sapi` are the older desktop ones. */
+export interface TtsSystemVoice {
+  name: string;
+  lang: string;
+  gender: 'female' | 'male';
+  source: 'onecore' | 'sapi';
+}
+
+export interface TtsItem {
+  id: string;
+  /** Chat message id (null for rewards and tests), so a deleted message is never read. */
+  messageId: string | null;
+  userId: string;
+  userName: string;
+  /** What the viewer wrote, after cleanup. */
+  text: string;
+  voice: TtsVoiceId;
+  reason: 'chat' | 'reward' | 'test';
+  at: number;
+}
+
+export interface TtsPlayback {
+  item: TtsItem;
+  /** Audio URL path on the overlay server. */
+  url: string;
+  effect: TtsEffect;
+  volume: number;
+  durationMs: number;
+}
+
+export interface TtsState {
+  current: TtsItem | null;
+  queue: TtsItem[];
+  history: TtsItem[];
+  voices: TtsSystemVoice[];
+  error: string | null;
+}
+
 // ---------- Kawaki ----------
 
 export interface KawakiNowWatching {
@@ -1778,6 +1866,7 @@ export interface Settings {
   shield: ShieldSettings;
   focus: FocusSettings;
   shoutout: ShoutoutSettings;
+  tts: TtsSettings;
   /** Main currency for donation totals (goals, subathon). */
   currency: string;
   minimizeToTray: boolean;
@@ -1825,7 +1914,7 @@ export type ToolModule = 'clipper' | 'ducking' | 'shield' | 'report';
 export type WorkspaceCard = 'stream' | 'obs' | 'actions' | 'bot' | 'twitch' | 'donationalerts' | 'streamlabs' | 'streamelements' | 'streamerbot' | 'discord' | 'subforstream' | ToolModule | OverlayKind;
 
 export type ProfileSettingsKey = 'workspace' | 'bot' | 'alerts' | 'chatOverlay' | 'spotlightOverlay' | 'rewardsOverlay' | 'eventsOverlay' | 'liveOverlay' | 'donationsOverlay' | 'customOverlays' | 'overlayVariants' | 'collabOverlay' | 'musicOverlay' | 'songRequests' | 'goals' | 'timers' | 'actions' | 'banners' | 'ads' | 'labels' | 'emoteRain' | 'wheels' | 'poll' | 'giveaway' | 'quiz' | 'boss' | 'kawaki' | 'viewerQueue' | 'guess' | 'counterOverlays' | 'hype' | 'leadersOverlay'
-  | 'clipper' | 'curses' | 'duel' | 'melody' | 'ducking' | 'market' | 'portal' | 'report' | 'shield' | 'focus' | 'shoutout';
+  | 'clipper' | 'curses' | 'duel' | 'melody' | 'ducking' | 'market' | 'portal' | 'report' | 'shield' | 'focus' | 'shoutout' | 'tts';
 export type ProfileConfig = Pick<Settings, ProfileSettingsKey>;
 export interface StreamProfile { id: string; name: string; config: ProfileConfig; overlays: OverlayKind[] }
 
@@ -1834,7 +1923,7 @@ export type SettingsKey = keyof Settings;
 // ---------- Overlay wire protocol ----------
 
 export type OverlayKind = 'chat' | 'alerts' | 'goal' | 'timer' | 'events' | 'rewards' | 'collab' | 'music' | 'song' | 'banner' | 'ad' | 'label' | 'emotes' | 'wheel' | 'poll' | 'giveaway' | 'kawaki' | 'quiz' | 'boss' | 'live' | 'spotlight' | 'queue' | 'guess' | 'counter' | 'hype' | 'leaders'
-  | 'curse' | 'duel' | 'melody' | 'stocks' | 'portal' | 'donations' | 'custom' | 'focus' | 'shoutout';
+  | 'curse' | 'duel' | 'melody' | 'stocks' | 'portal' | 'donations' | 'custom' | 'focus' | 'shoutout' | 'tts';
 
 export interface RenderedBanner extends Omit<Banner, 'slides'> {
   slides: { id: string; text: string; image: string | null }[];
@@ -1918,6 +2007,8 @@ export type OverlayMessage =
   /** The phase just changed: overlays connected right now play the chime. */
   | { type: 'focusChime'; phase: FocusPhase }
   | { type: 'shoutout'; card: ShoutoutCard | null; endsAt: number | null; style: ShoutoutSettings; now: number; lang: Language }
+  | { type: 'tts'; play: TtsPlayback }
+  | { type: 'ttsStop' }
   | { type: 'custom'; overlay: RenderedCustomOverlay | null }
   | { type: 'reload' };
 
@@ -2091,6 +2182,13 @@ export interface IpcInvoke {
   'shoutout:show': (login: string) => void;
   'shoutout:test': () => void;
   'shoutout:skip': () => void;
+  /** Read a sample with this voice (the default one when omitted). */
+  'tts:test': (voice?: TtsVoiceId) => void;
+  /** Stop the message being read; the next one follows. */
+  'tts:skip': () => void;
+  'tts:clear': () => void;
+  /** Re-read the installed Windows voices. */
+  'tts:voices': () => TtsSystemVoice[];
   'media:import': () => MediaFile | null;
   'media:list': () => MediaFile[];
   'shell:openExternal': (url: string) => void;

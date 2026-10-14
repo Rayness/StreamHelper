@@ -250,6 +250,9 @@ export class OverlayHub {
         return [this.sources.focus()];
       case 'shoutout':
         return [this.sources.shoutout()];
+      // Audio only: plays what it's sent, nothing to restore.
+      case 'tts':
+        return [];
     }
   }
 }
