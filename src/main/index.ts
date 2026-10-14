@@ -62,7 +62,8 @@ import { ShoutoutService } from './features/shoutout';
 import { TtsService } from './features/tts';
 import { TtsEngine } from './features/ttsEngine';
 import { KawakiService } from './integrations/kawaki/service';
-import { push, registerIpc } from './ipc';
+import { invokeHandler, onPush, push, registerIpc } from './ipc';
+import { RemoteAccessService } from './remote/service';
 import { ObsService } from './obs/obs';
 import { createAuthRoutes } from './overlay/authPages';
 import { createDockRoutes } from './overlay/dock';
@@ -524,6 +525,13 @@ async function bootstrap(): Promise<void> {
       .filter((f) => [...IMAGE_EXT, ...AUDIO_EXT, ...VIDEO_EXT].includes(extname(f).toLowerCase()))
       .map((name) => mediaInfo(name, overlay.port));
 
+  const remote = new RemoteAccessService(ctx, {
+    rendererDir: join(__dirname, '../renderer'),
+    overlayPort: () => overlay.port,
+    invoke: invokeHandler,
+  });
+  onPush((channel, payload) => remote.push(channel, payload));
+
   registerIpc({
     'app:init': () => ({
       settings: settings.all,
@@ -755,6 +763,13 @@ async function bootstrap(): Promise<void> {
       if (/^https?:\/\//.test(url)) void shell.openExternal(url);
     },
     'clipboard:write': (text) => clipboard.writeText(text),
+    'remote:configure': (enabled, port) => remote.configure(enabled, port),
+    'remote:addModerator': (name, permissions) => remote.addModerator(name, permissions),
+    'remote:updateModerator': (id, patch) => remote.updateModerator(id, patch),
+    'remote:removeModerator': (id) => remote.removeModerator(id),
+    'remote:link': (id, host) => remote.link(id, host),
+    'remote:resetKey': (id) => remote.resetKey(id),
+    'remote:kick': (clientId) => remote.kick(clientId),
   });
 
   // ---------- window & tray ----------
@@ -763,6 +778,7 @@ async function bootstrap(): Promise<void> {
 
   // ---------- start ----------
   await startOverlay();
+  void remote.start();
   text.start();
   ads.start();
   hype.start();
@@ -837,6 +853,7 @@ async function bootstrap(): Promise<void> {
     bot.stop();
     void obs.disconnect();
     void overlay.stop();
+    void remote.stop();
   });
 
   // Keep running in the tray: overlays must stay alive while OBS is open.

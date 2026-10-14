@@ -17,6 +17,7 @@
     "generate:winrt": "dynwinrt-codegen generate --class-name Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager,Windows.Storage.Streams.DataReader --output src/main/winrt/generated",
     "test": "vitest run",
     "test:ui": "npm run build && node scripts/test-ui.cjs",
+    "test:ui:remote": "npm run build && node scripts/test-ui.cjs --remote",
     "test:watch": "vitest",
     "dist": "electron-vite build && electron-builder --win --publish never",
     "postinstall": "electron-builder install-app-deps"

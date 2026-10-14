@@ -46,10 +46,14 @@ function Toasts() {
 }
 export function App() {
   const t = useT();
-  const nav = useNav();
+  const rawNav = useNav();
   const lang = useApp((d) => d.settings!.language);
   const live = useApp((d) => d.state!.stream.live);
   const profileName = useApp((d) => d.settings!.profiles.find((p) => p.id === d.settings!.activeProfileId)?.name ?? '—');
+  const remote = useApp((d) => d.remote);
+  // Connections (logins, tokens) stay on the streamer's computer.
+  const nav = remote && rawNav.page === 'connections' ? { ...rawNav, page: 'workspace' as const } : rawNav;
+  const navItems = remote ? NAV.filter((item) => item.page !== 'connections') : NAV;
   const [palette,setPalette] = useState(false);
   const look = useAppearance();
   useApplyAppearance();
@@ -79,8 +83,9 @@ export function App() {
     <nav className="sidebar" aria-label="StreamHelper"><div className="brand-logo"><span className="logo-mark"><Icon name="broadcast" size={18} /></span><span className="logo-text">StreamHelper</span>{live && <span className="live-pill">LIVE</span>}</div>
       <button className="profile-current" onClick={() => navigate('profiles')} title={t('nav.profiles')}><Icon name="users" size={15} /><span>{profileName}</span><Icon name="chevron" size={14} /></button>
       <button className="search-btn" onClick={() => setPalette(true)}><Icon name="search" size={15} /><span>{t('palette.button')}</span><kbd>Ctrl K</kbd></button>
-      <div className="nav-group"><ul>{NAV.map((item, i) => <li key={item.page}><button className={nav.page === item.page ? 'active' : ''} aria-current={nav.page === item.page ? 'page' : undefined} onClick={() => navigate(item.page)} title={`Ctrl+${i + 1}`} data-kbd={`Ctrl ${i + 1}`}><Icon name={item.icon} size={18} /><span>{t(item.label)}</span></button></li>)}</ul></div>
-      <div className="workspace-side-footer"><SideStatus /><div className="sidebar-quick"><button className="workspace-preferences" onClick={() => navigate('settings')} title={`${t('workspace.preferences')} (Ctrl+,)`}><Icon name="settings" size={16} /><span>{t('workspace.preferences')}</span></button><IconButton icon={look.theme === 'light' ? 'moon' : 'sun'} label={`${t('look.toggleTheme')} (Ctrl+Shift+L)`} onClick={toggleTheme} /><IconButton icon="palette" label={t('look.title')} onClick={() => navigate('settings','look')} /></div></div>
+      {remote && <div className="remote-badge" title={t('remote.badgeHint')}><Icon name="link" size={14} /><span>{t('remote.badge', { name: remote.name })}</span><a href="/logout">{t('remote.signOut')}</a></div>}
+      <div className="nav-group"><ul>{navItems.map((item, i) => <li key={item.page}><button className={nav.page === item.page ? 'active' : ''} aria-current={nav.page === item.page ? 'page' : undefined} onClick={() => navigate(item.page)} title={`Ctrl+${i + 1}`} data-kbd={`Ctrl ${i + 1}`}><Icon name={item.icon} size={18} /><span>{t(item.label)}</span></button></li>)}</ul></div>
+      <div className="workspace-side-footer">{!remote && <SideStatus />}<div className="sidebar-quick"><button className="workspace-preferences" onClick={() => navigate('settings')} title={`${t('workspace.preferences')} (Ctrl+,)`}><Icon name="settings" size={16} /><span>{t('workspace.preferences')}</span></button><IconButton icon={look.theme === 'light' ? 'moon' : 'sun'} label={`${t('look.toggleTheme')} (Ctrl+Shift+L)`} onClick={toggleTheme} /><IconButton icon="palette" label={t('look.title')} onClick={() => navigate('settings','look')} /></div></div>
     </nav>
     <main className="content"><ErrorBoundary key={nav.page}><Suspense fallback={<div className="page" role="status">…</div>}>{nav.page === 'dashboard' ? <Monitor /> : nav.page === 'connections' ? <Connections /> : nav.page === 'variables' ? <Variables /> : nav.page === 'designer' ? <Designer /> : <Workspace />}</Suspense></ErrorBoundary></main>
     {nav.dialog && <div className="workspace-dialog-backdrop" onMouseDown={closeDialog}><section className="workspace-dialog" role="dialog" aria-modal="true" aria-label={t(nav.dialog === 'profiles' ? 'nav.profiles' : 'workspace.preferences')} onMouseDown={(e) => e.stopPropagation()}><div className="workspace-dialog-close"><IconButton icon="x" label={t('common.cancel')} onClick={closeDialog} /></div><ErrorBoundary key={nav.dialog}><Suspense fallback={<span role="status">…</span>}>{nav.dialog === 'profiles' ? <Profiles /> : <Preferences />}</Suspense></ErrorBoundary></section></div>}

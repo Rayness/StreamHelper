@@ -1,5 +1,7 @@
 // Contracts shared by the main process, the renderer UI and (as plain JSON) the overlays.
 
+import type { RemoteModerator, RemotePermission, RemoteSession, RemoteState } from './remote';
+
 export type Platform = 'twitch' | 'youtube' | 'vkplay' | 'kick';
 export type DonationSource = 'donationalerts' | 'streamlabs' | 'streamelements';
 export type EventSource = Platform | DonationSource | 'test';
@@ -224,6 +226,8 @@ export interface RuntimeState {
   focus: FocusState;
   shoutout: ShoutoutState;
   tts: TtsState;
+  /** Remote access for moderators (only the streamer's own window sees the details). */
+  remote: RemoteState;
 }
 
 // ---------- Settings ----------
@@ -2031,7 +2035,8 @@ export interface MediaFile {
 
 /** Request/response calls from renderer to main. */
 export interface IpcInvoke {
-  'app:init': () => { settings: Settings; state: RuntimeState; chat: ChatMessage[]; events: StreamEvent[]; version: string; windowMaterial: boolean };
+  /** `remote`: set when the UI runs in a moderator's browser over remote access. */
+  'app:init': () => { settings: Settings; state: RuntimeState; chat: ChatMessage[]; events: StreamEvent[]; version: string; windowMaterial: boolean; remote?: RemoteSession };
   /** `base` is the value the editor started from, so changes made by the app meanwhile survive the save. */
   'settings:set': <K extends SettingsKey>(key: K, value: Settings[K], profileId?: string, base?: Settings[K]) => Settings;
   'settings:reset': (key: SettingsKey) => Settings;
@@ -2204,6 +2209,16 @@ export interface IpcInvoke {
   'media:list': () => MediaFile[];
   'shell:openExternal': (url: string) => void;
   'clipboard:write': (text: string) => void;
+  /** Turn remote access on or off and pick its port. */
+  'remote:configure': (enabled: boolean, port: number) => void;
+  'remote:addModerator': (name: string, permissions: RemotePermission[]) => RemoteModerator;
+  'remote:updateModerator': (id: string, patch: { name?: string; permissions?: RemotePermission[] }) => void;
+  'remote:removeModerator': (id: string) => void;
+  /** Invite link with the moderator's key, on `host` (one of the addresses, or a tunnel / public host). */
+  'remote:link': (id: string, host?: string) => string;
+  /** New key for the moderator: the old link stops working and open sessions are closed. */
+  'remote:resetKey': (id: string) => void;
+  'remote:kick': (clientId: string) => void;
 }
 
 /** Push notifications from main to renderer. */
