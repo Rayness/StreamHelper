@@ -14,7 +14,7 @@ function left(ms: number): string {
 }
 
 /** Command input with the bot prefix in front. */
-function CommandInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+export function CommandInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const prefix = useApp((d) => d.settings!.bot.prefix);
   return (
     <div className="trigger">
@@ -25,7 +25,7 @@ function CommandInput({ value, onChange }: { value: string; onChange: (v: string
 }
 
 /** Accent + font: the same pair every overlay has. */
-function LookFields({ accent, font, onAccent, onFont }: { accent: string; font: string; onAccent: (v: string) => void; onFont: (v: string) => void }) {
+export function LookFields({ accent, font, onAccent, onFont }: { accent: string; font: string; onAccent: (v: string) => void; onFont: (v: string) => void }) {
   const t = useT();
   return (
     <>

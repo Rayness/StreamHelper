@@ -11,7 +11,7 @@ const PERMISSIONS: Permission[] = ['everyone', 'subscriber', 'vip', 'moderator',
 const NONE: string[] = [];
 
 /** Shown when the saved Twitch login predates a permission this module needs. */
-function ScopeCallout({ scopes }: { scopes: string[] }) {
+export function ScopeCallout({ scopes }: { scopes: string[] }) {
   const t = useT();
   const missing = useApp((d) => d.state!.twitch.missingScopes ?? NONE);
   const connected = useApp((d) => d.state!.twitch.status === 'connected');

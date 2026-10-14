@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <title>StreamHelper — Focus timer</title>
+    <style>
+      :root { --accent: #ff6b5a; }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; width: 100%; height: 100%; background: transparent; overflow: hidden; color: #fff; }
+      #focus { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; opacity: 0; transform: translateY(14px); transition: opacity 0.45s ease, transform 0.55s cubic-bezier(0.22, 1, 0.36, 1); }
+      #focus.on { opacity: 1; transform: none; }
+      #focus.bar { align-items: flex-start; padding-top: 10px; }
+
+      /* ring */
+      .ring { position: relative; display: flex; flex-direction: column; align-items: center; gap: 14px; }
+      .dial { position: relative; width: 340px; height: 340px; border-radius: 50%; background: radial-gradient(circle, rgba(14, 12, 20, 0.92) 58%, rgba(14, 12, 20, 0.6) 72%, transparent 73%); filter: drop-shadow(0 16px 36px rgba(0, 0, 0, 0.45)); }
+      .dial svg { position: absolute; inset: 0; transform: rotate(-90deg); }
+      .dial circle { fill: none; stroke-width: 16; }
+      .dial .bg { stroke: rgba(255, 255, 255, 0.1); }
+      .dial .fg { stroke: var(--accent); stroke-linecap: round; transition: stroke-dashoffset 0.9s linear, stroke 0.6s; filter: drop-shadow(0 0 10px color-mix(in srgb, var(--accent) 60%, transparent)); }
+      .inner { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+      .phase { font-size: 19px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); transition: color 0.6s; }
+      .time { font-size: 76px; font-weight: 900; line-height: 1.05; font-variant-numeric: tabular-nums; }
+      .cycles { display: flex; gap: 8px; min-height: 14px; margin-top: 6px; }
+      .cycles i { width: 13px; height: 13px; border-radius: 50%; background: rgba(255, 255, 255, 0.16); }
+      .cycles i.done { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+      .cycles b { font-size: 16px; opacity: 0.8; }
+      .task { max-width: 420px; padding: 9px 18px; border-radius: 14px; background: rgba(14, 12, 20, 0.86); font-size: 20px; font-weight: 700; text-align: center; overflow-wrap: anywhere; box-shadow: 0 10px 26px rgba(0, 0, 0, 0.35); }
+      .task:empty { display: none; }
+
+      /* bar */
+      .barcard { display: none; width: calc(100% - 20px); max-width: 640px; padding: 14px 20px 16px; border-radius: 16px; background: rgba(14, 12, 20, 0.88); box-shadow: 0 14px 34px rgba(0, 0, 0, 0.4); }
+      #focus.bar .ring { display: none; }
+      #focus.bar .barcard { display: block; }
+      .barhead { display: flex; align-items: baseline; gap: 12px; }
+      .barhead .phase { font-size: 17px; }
+      .barhead .task { flex: 1; max-width: none; padding: 0; background: none; box-shadow: none; text-align: left; font-size: 18px; opacity: 0.9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .barhead .time { font-size: 38px; }
+      .track { position: relative; height: 12px; margin-top: 10px; border-radius: 6px; background: rgba(255, 255, 255, 0.1); overflow: hidden; }
+      .fill { position: absolute; inset: 0 auto 0 0; border-radius: 6px; background: var(--accent); transition: width 0.9s linear, background 0.6s; }
+      .barcard .cycles { margin-top: 10px; }
+
+      #focus.paused .time { animation: blink 1.6s ease-in-out infinite; }
+      .extend { position: absolute; top: 18px; left: 50%; transform: translate(-50%, -12px); padding: 8px 16px; border-radius: 999px; background: var(--accent); color: #fff; font-size: 19px; font-weight: 800; white-space: nowrap; opacity: 0; transition: opacity 0.35s, transform 0.45s cubic-bezier(0.22, 1, 0.36, 1); box-shadow: 0 8px 22px rgba(0, 0, 0, 0.4); }
+      .extend.on { opacity: 1; transform: translate(-50%, 0); }
+      #focus.bar .extend { top: auto; bottom: 8px; }
+      @keyframes blink { 50% { opacity: 0.35; } }
+      body.reduced #focus.paused .time { animation: none; opacity: 0.6; }
+    </style>
+  </head>
+  <body>
+    <div id="focus">
+      <div class="ring">
+        <div class="dial">
+          <svg viewBox="0 0 340 340"><circle class="bg" cx="170" cy="170" r="150" /><circle class="fg" cx="170" cy="170" r="150" /></svg>
+          <div class="inner"><div class="phase"></div><div class="time">25:00</div><div class="cycles"></div></div>
+        </div>
+        <div class="task"></div>
+      </div>
+      <div class="barcard">
+        <div class="barhead"><span class="phase"></span><span class="task"></span><span class="time">25:00</span></div>
+        <div class="track"><div class="fill"></div></div>
+        <div class="cycles"></div>
+      </div>
+      <div class="extend"></div>
+    </div>
+    <script src="/overlay/assets/common.js"></script>
+    <script>
+      const root = document.getElementById('focus');
+      const fg = root.querySelector('.fg');
+      const extendEl = root.querySelector('.extend');
+      const all = (sel) => root.querySelectorAll(sel);
+      const CIRC = 2 * Math.PI * 150;
+      fg.style.strokeDasharray = String(CIRC);
+      if (SH.reducedMotion) document.body.classList.add('reduced');
+      let msg = null, skew = 0, extendTimer = null, shownExtend = 0;
+
+      function sample(lang) {
+        const now = Date.now();
+        return { type: 'focus', now, lang, task: msg?.task || SH.tr(lang, 'Пишу код для StreamHelper', 'Coding StreamHelper'), style: msg.style,
+          focus: { status: 'running', phase: 'focus', endsAt: now + 17 * 60_000 + 42_000, leftMs: 0, durationMs: 25 * 60_000, done: 2, focusMs: 0, extendedMin: 0, lastExtend: null } };
+      }
+
+      function left() {
+        const f = msg.focus;
+        if (f.status === 'running' && f.endsAt) return Math.max(0, f.endsAt - (Date.now() + skew));
+        return f.status === 'paused' ? f.leftMs : 0;
+      }
+
+      function clock(ms) {
+        const t = Math.max(0, Math.ceil(ms / 1000));
+        const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), s = String(t % 60).padStart(2, '0');
+        return h ? `${h}:${String(m).padStart(2, '0')}:${s}` : `${m}:${s}`;
+      }
+
+      function cycles(cfg, f) {
+        const nodes = [];
+        if (!cfg.showCycles) return nodes;
+        if (cfg.longEvery > 0 && cfg.longEvery <= 12) {
+          // Sessions towards the next long break; right after one, the row is full.
+          const inRound = f.done % cfg.longEvery || (f.done && f.phase === 'long' ? cfg.longEvery : 0);
+          for (let i = 0; i < cfg.longEvery; i++) nodes.push(SH.el('i', i < inRound ? 'done' : ''));
+        } else if (f.done) nodes.push(SH.el('b', '', `🍅 × ${f.done}`));
+        return nodes;
+      }
+
+      function render() {
+        if (!msg) return;
+        const cfg = msg.style, f = msg.focus;
+        const visible = f.status !== 'idle';
+        root.classList.toggle('on', visible);
+        root.classList.toggle('paused', f.status === 'paused');
+        root.classList.toggle('bar', cfg.layout === 'bar');
+        root.style.setProperty('--accent', f.phase === 'focus' ? cfg.accentColor : cfg.breakColor);
+        const label = (cfg.labels && cfg.labels[f.phase]) || f.phase;
+        const pausedWord = SH.tr(msg.lang, 'пауза', 'paused');
+        all('.phase').forEach((n) => { n.textContent = f.status === 'paused' ? `${label} · ${pausedWord}` : label; });
+        all('.task').forEach((n) => { n.textContent = msg.task || ''; });
+        const rest = left();
+        all('.time').forEach((n) => { n.textContent = clock(rest); });
+        const ratio = f.durationMs > 0 ? Math.min(1, Math.max(0, rest / f.durationMs)) : 0;
+        fg.style.strokeDashoffset = String(CIRC * (1 - ratio));
+        root.querySelector('.fill').style.width = `${ratio * 100}%`;
+        all('.cycles').forEach((n) => n.replaceChildren(...cycles(cfg, f)));
+      }
+
+      function showExtend() {
+        const e = msg.focus.lastExtend;
+        if (!e || e.at === shownExtend || Date.now() + skew - e.at > 8000) return;
+        shownExtend = e.at;
+        extendEl.textContent = SH.tr(msg.lang, `+${e.minutes} мин · ${e.user}`, `+${e.minutes} min · ${e.user}`);
+        extendEl.classList.add('on');
+        clearTimeout(extendTimer);
+        extendTimer = setTimeout(() => extendEl.classList.remove('on'), 6000);
+      }
+
+      let audio = null;
+      function chime(phase) {
+        if (!msg || !msg.style.chime || SH.preview) return;
+        try {
+          audio = audio || new AudioContext();
+          const notes = phase === 'focus' ? [660, 880] : [880, 660, 520];
+          notes.forEach((hz, i) => {
+            const t = audio.currentTime + i * 0.22;
+            const osc = audio.createOscillator(), gain = audio.createGain();
+            osc.type = 'sine'; osc.frequency.value = hz;
+            gain.gain.setValueAtTime(0.0001, t);
+            gain.gain.exponentialRampToValueAtTime(0.25, t + 0.02);
+            gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.5);
+            osc.connect(gain).connect(audio.destination);
+            osc.start(t); osc.stop(t + 0.55);
+          });
+        } catch { /* no audio in this browser source */ }
+      }
+
+      SH.connect('focus', (m) => {
+        if (m.type === 'focusChime') return chime(m.phase);
+        if (m.type !== 'focus') return;
+        msg = m;
+        skew = m.now - Date.now();
+        SH.useFont(root, m.style.fontFamily);
+        if (SH.preview && m.focus.status === 'idle') { msg = sample(m.lang); skew = 0; }
+        render();
+        showExtend();
+      });
+      setInterval(render, 500);
+    </script>
+  </body>
+</html>

@@ -100,13 +100,13 @@ export class MusicService {
   private lastPublishAt = 0;
   private unsubscribe: () => void;
 
-  /** Pause the active Windows media session and return its app ID for later resumption. */
-  async pauseCurrent(): Promise<string | null> {
+  /** Pause the active Windows media session and return its app ID for later resumption. `except` stays playing. */
+  async pauseCurrent(except?: MusicSourceKind): Promise<string | null> {
     if (!this.manager) return null;
     const scope = this.bindings?.createProjectedLifetimeScope();
     try {
       const preferred = this.ctx.state.current.music.track?.source;
-      const sessions = Array.from(this.manager.getSessions() ?? []);
+      const sessions = Array.from(this.manager.getSessions() ?? []).filter((session) => !except || musicSourceKind(session.sourceAppUserModelId) !== except);
       const playing = sessions.filter((session) =>
         session.getPlaybackInfo().playbackStatus === this.bindings?.GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing);
       const session = playing.find((item) => musicSourceKind(item.sourceAppUserModelId) === preferred) ?? playing[0];

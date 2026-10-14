@@ -5,6 +5,7 @@ export const ALL_OVERLAY_KINDS: readonly OverlayKind[] = [
   'banner', 'ad', 'label', 'emotes', 'wheel', 'poll', 'giveaway', 'kawaki', 'quiz',
   'boss', 'live', 'spotlight', 'queue', 'guess', 'counter', 'hype', 'leaders',
   'curse', 'duel', 'melody', 'stocks', 'portal', 'donations', 'custom',
+  'focus', 'shoutout',
 ];
 
 /**
@@ -25,6 +26,7 @@ export const PROFILE_KEYS: readonly ProfileSettingsKey[] = [
   'emoteRain', 'wheels', 'poll', 'giveaway', 'quiz', 'boss', 'kawaki',
   'viewerQueue', 'guess', 'counterOverlays', 'hype', 'leadersOverlay',
   'clipper', 'curses', 'duel', 'melody', 'ducking', 'market', 'portal', 'report', 'shield',
+  'focus', 'shoutout',
 ];
 
 /** Profiles store independent copies; live settings remain the source used by existing services. */

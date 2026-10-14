@@ -20,6 +20,7 @@ import { StateHub } from './core/state';
 import { SettingsStore } from './core/store';
 import { DonationAlertsService } from './donations/donationalerts';
 import { StreamlabsService } from './donations/streamlabs';
+import { YandexMusicService, tokenFromRedirect } from './integrations/yandexMusic';
 import { StreamElementsService } from './donations/streamelements';
 import { StreamerBotService } from './integrations/streamerbot';
 import { DiscordService } from './integrations/discord';
@@ -54,6 +55,8 @@ import { PortalService } from './features/portal';
 import { ReportService } from './features/report';
 import { REPORT_HEIGHT, REPORT_WIDTH } from './features/reportCard';
 import { ShieldService } from './features/shield';
+import { FocusService } from './features/focus';
+import { ShoutoutService } from './features/shoutout';
 import { KawakiService } from './integrations/kawaki/service';
 import { push, registerIpc } from './ipc';
 import { ObsService } from './obs/obs';
@@ -134,6 +137,7 @@ async function bootstrap(): Promise<void> {
   platforms.register(twitch);
   const obs = new ObsService(ctx);
   const streamlabs = new StreamlabsService(ctx);
+  const yandexMusic = new YandexMusicService(ctx, undefined, openYandexLogin);
   const streamelements = new StreamElementsService(ctx);
   const streamerbot = new StreamerBotService(ctx);
   const discord = new DiscordService(ctx);
@@ -217,6 +221,7 @@ async function bootstrap(): Promise<void> {
 
   songRequests = new SongRequestService(ctx, music, (message) => overlay.broadcast('song', message), (text, replyTo) => twitch.sendMessage(text, replyTo), {
     rewards: { settle: (rewardId, redemptionId, status) => twitch.settleRedemption(rewardId, redemptionId, status) },
+    remote: yandexMusic,
   });
 
   const sendToAllChats = async (text: string) => {
@@ -260,7 +265,7 @@ async function bootstrap(): Promise<void> {
   });
   const duel = new DuelService(ctx, stage, {
     upcoming: () => state.current.songRequests.queue,
-    hasCurrent: () => !!state.current.songRequests.current,
+    hasCurrent: () => !!(state.current.songRequests.current ?? state.current.songRequests.background),
     isPaused: () => state.current.songRequests.paused,
     pause: (paused) => songRequests.pause(paused),
     move: (id, index) => songRequests.move(id, index),
@@ -294,6 +299,18 @@ async function bootstrap(): Promise<void> {
     accountAges: (ids) => twitch.getAccountAges(ids),
     say: (msg) => sendToAllChats(msg),
   }, join(userData, 'shield-known.json'));
+  const focus = new FocusService(ctx, {
+    ...stage,
+    currentScene: () => (state.current.obs.status === 'connected' ? state.current.obs.currentScene : ''),
+    setScene: (scene) => obs.setScene(scene),
+  });
+  const shoutout = new ShoutoutService(ctx, {
+    broadcast: (msg) => overlay.broadcast('shoutout', msg),
+    say: (msg) => sendToAllChats(msg).catch((err) => console.warn('[shoutout] chat', String(err?.message ?? err))),
+    channel: (login) => twitch.channelCard(login),
+    clips: (userId, days) => twitch.channelClips(userId, days),
+    native: (userId) => twitch.nativeShoutout(userId),
+  });
   hub = new OverlayHub(ctx, overlay, chatHistory, {
     alerts: () => alerts,
     text: () => text,
@@ -313,6 +330,8 @@ async function bootstrap(): Promise<void> {
     melody: () => melody.overlayMessage(),
     stocks: () => market.overlayMessage(),
     portal: () => portal.configMessage(),
+    focus: () => focus.overlayMessage(),
+    shoutout: () => shoutout.overlayMessage(),
   });
 
   const bot = new BotService(ctx, platforms, twitch, songRequests);
@@ -336,6 +355,7 @@ async function bootstrap(): Promise<void> {
     clipMoment: () => clipper.clipNow(),
     shieldToggle: () => shield.toggle(),
     curseVote: () => curses.startVote(),
+    focusToggle: () => focus.toggle(),
     setVariable: (name, value) => {
       const key = name.trim().toLowerCase();
       if (!VARIABLE_NAME.test(key)) return;
@@ -378,7 +398,7 @@ async function bootstrap(): Promise<void> {
         case 'adShow': if (id) return ads.show(id); break;
         case 'adHide': return ads.hide();
         case 'songPlay': return songRequests.play(id);
-        case 'songAdd': if (id) return songRequests.add(id); break;
+        case 'songAdd': if (id) return songRequests.addManual(id); break;
         case 'songSkip': return songRequests.skip();
         case 'songRemove': if (id) return songRequests.remove(id); break;
         case 'songVideoLayout': if (id === 'full' || id === 'compact' || id === 'queue') return void settings.set('songRequests', { ...settings.get('songRequests'), videoLayout: id }); break;
@@ -405,6 +425,10 @@ async function bootstrap(): Promise<void> {
         case 'guessStart': return guess.start();
         case 'guessStop': return guess.stop();
         case 'hypeReset': return hype.reset();
+        case 'focusToggle': return focus.toggle();
+        case 'focusSkip': return focus.skip();
+        case 'focusStop': return focus.stop();
+        case 'shoutoutSkip': return shoutout.skip();
         case 'counterAdd': if (id) { const [name, delta] = id.split(':'); if (name && /^-?\d{1,4}$/.test(delta ?? '')) return void bot.addCounter(name, Number(delta)); } break;
       }
       throw new Error('Unknown dock action');
@@ -497,9 +521,9 @@ async function bootstrap(): Promise<void> {
     'twitch:updateStream': (patch) => twitch.updateStream(patch),
     'twitch:searchCategories': (q) => twitch.searchCategories(q),
     'twitch:rewards': () => twitch.listRewards(),
-    'twitch:createSongReward': async (title, cost) => {
+    'twitch:createSongReward': async (title, cost, kind) => {
       try {
-        return await twitch.createSongReward(title, cost);
+        return await twitch.createSongReward(title, cost, kind === 'skip' ? 'skip' : 'request');
       } catch (error) {
         const status = (error as { status?: number }).status;
         const ru = settings.get('language') === 'ru';
@@ -520,6 +544,9 @@ async function bootstrap(): Promise<void> {
     'chat:test': () => bus.emit('chat:message', sampleChatMessage(settings.get('language'))),
     'da:login': () => donationalerts.login(),
     'da:logout': () => donationalerts.logout(),
+    'yandex:login': () => yandexMusic.login(),
+    'yandex:setToken': (token) => yandexMusic.setToken(token),
+    'yandex:logout': () => yandexMusic.logout(),
     'streamlabs:connect': (token) => streamlabs.connect(token),
     'streamlabs:disconnect': () => streamlabs.disconnect(),
     'streamelements:connect': (channelId, token) => streamelements.connect(channelId, token),
@@ -551,6 +578,10 @@ async function bootstrap(): Promise<void> {
     'song:remove': (id) => songRequests.remove(id),
     'song:pause': (paused) => songRequests.pause(paused),
     'song:move': (id, index) => songRequests.move(id, index),
+    'song:banUser': (userName) => songRequests.banUser(userName),
+    'song:banVideo': (url) => songRequests.banVideo(url),
+    'song:backgroundAdd': (url) => songRequests.addBackground(url),
+    'song:jamAdd': (url, name) => songRequests.addJam(url, name),
     'music:control': (source, action) => music.control(source, action),
     'subs:check': () => subForStream.check(),
     'subs:clear': () => subForStream.clear(),
@@ -647,6 +678,13 @@ async function bootstrap(): Promise<void> {
     'report:discord': (id) => report.resend(id),
     'shield:activate': () => shield.activate(),
     'shield:release': async () => { await shield.release(); },
+    'focus:toggle': () => focus.toggle(),
+    'focus:skip': () => focus.skip(),
+    'focus:stop': () => focus.stop(),
+    'focus:add': (minutes) => void focus.add(minutes),
+    'shoutout:show': (login) => shoutout.show(login),
+    'shoutout:test': () => shoutout.test(),
+    'shoutout:skip': () => shoutout.skip(),
     'shell:openExternal': (url) => {
       if (/^https?:\/\//.test(url)) void shell.openExternal(url);
     },
@@ -670,6 +708,7 @@ async function bootstrap(): Promise<void> {
   void twitch.start();
   void donationalerts.start();
   streamlabs.start();
+  yandexMusic.start();
   streamelements.start();
   streamerbot.start();
   discord.start();
@@ -680,15 +719,15 @@ async function bootstrap(): Promise<void> {
   report.start();
   shield.start();
 
-  // OBS and chat changes that must be undone before quitting (curse, ducked music, locked chat).
+  // OBS and chat changes that must be undone before quitting (curse, ducked music, locked chat, break scene).
   // Their requests need OBS and Twitch still connected, so quitting waits for them (a few seconds at most).
   let undoneBeforeQuit = false;
   app.on('before-quit', (event) => {
     quitting = true;
-    if (!undoneBeforeQuit && (curses.needsShutdown || ducking.needsShutdown || shield.needsShutdown)) {
+    if (!undoneBeforeQuit && (curses.needsShutdown || ducking.needsShutdown || shield.needsShutdown || focus.needsShutdown)) {
       undoneBeforeQuit = true;
       event.preventDefault();
-      const done = Promise.allSettled([curses.shutdown(), ducking.shutdown(), shield.shutdown()]);
+      const done = Promise.allSettled([curses.shutdown(), ducking.shutdown(), shield.shutdown(), focus.shutdown()]);
       void Promise.race([done, new Promise((r) => setTimeout(r, 4000))]).finally(() => app.quit());
       return;
     }
@@ -699,6 +738,8 @@ async function bootstrap(): Promise<void> {
     twitch.stop();
     donationalerts.stop();
     streamlabs.stop();
+    yandexMusic.release(true);
+    yandexMusic.stop();
     streamelements.stop();
     streamerbot.stop();
     subForStream.stop();
@@ -724,6 +765,8 @@ async function bootstrap(): Promise<void> {
     portal.stop();
     report.dispose();
     shield.dispose();
+    focus.dispose();
+    shoutout.dispose();
     bot.stop();
     void obs.disconnect();
     void overlay.stop();
@@ -810,6 +853,39 @@ async function bootstrap(): Promise<void> {
     );
     tray.on('click', () => showWindow());
   }
+}
+
+/**
+ * Yandex sign-in in its own window. Yandex sends the token to the page it redirects to (URL fragment);
+ * the window uses a throwaway session so no Yandex cookies stay behind.
+ */
+function openYandexLogin(url: string): Promise<string | null> {
+  return new Promise((resolve) => {
+    const win = new BrowserWindow({
+      width: 520,
+      height: 720,
+      parent: mainWindow ?? undefined,
+      modal: !!mainWindow,
+      autoHideMenuBar: true,
+      title: 'Яндекс ID',
+      webPreferences: { partition: `yandex-login-${Date.now()}`, sandbox: true, contextIsolation: true, nodeIntegration: false },
+    });
+    let done = false;
+    const finish = (token: string | null) => {
+      if (done) return;
+      done = true;
+      resolve(token);
+      if (!win.isDestroyed()) win.close();
+    };
+    const check = (target: string) => { const token = tokenFromRedirect(target); if (token) finish(token); };
+    win.webContents.on('will-redirect', (_e, target) => check(target));
+    win.webContents.on('will-navigate', (_e, target) => check(target));
+    win.webContents.on('did-navigate', (_e, target) => check(target));
+    win.webContents.on('did-navigate-in-page', (_e, target) => check(target));
+    win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+    win.on('closed', () => finish(null));
+    void win.loadURL(url);
+  });
 }
 
 /** Render a self-contained HTML page to PNG in an invisible window (the stream recap card). */

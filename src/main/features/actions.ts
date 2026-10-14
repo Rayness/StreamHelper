@@ -22,6 +22,7 @@ export interface ActionTargets {
   clipMoment(): Promise<unknown>;
   shieldToggle(): Promise<void>;
   curseVote(): void;
+  focusToggle(): void;
   setVariable(name: string, value: string): void;
 }
 
@@ -102,6 +103,8 @@ export class ActionRunner {
         return t.shieldToggle();
       case 'curseVote':
         return t.curseVote();
+      case 'focusToggle':
+        return t.focusToggle();
       case 'variable':
         return t.setVariable(s.name, s.value);
       case 'wait':

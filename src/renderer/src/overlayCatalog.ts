@@ -47,6 +47,8 @@ export const OVERLAYS: OverlayDef[] = [
   { kind: 'stocks', icon: 'trend', group: 'fun', size: [1920, 80] },
   { kind: 'portal', icon: 'portal', group: 'screen', size: [1280, 720] },
   { kind: 'donations', icon: 'coin', group: 'main', size: [560, 380] },
+  { kind: 'focus', icon: 'tomato', group: 'screen', size: [600, 480] },
+  { kind: 'shoutout', icon: 'megaphone', group: 'screen', size: [1280, 720] },
   // Made in the Designer tab; its size comes from the overlay itself.
   { kind: 'custom', icon: 'designer', group: 'screen', size: [1920, 1080] },
 ];

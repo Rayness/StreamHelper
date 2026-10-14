@@ -30,6 +30,8 @@ const ClipperModule = lazy(() => import('./FeaturesTools').then((m) => ({ defaul
 const DuckingModule = lazy(() => import('./FeaturesTools').then((m) => ({ default: m.DuckingModule })));
 const ShieldModule = lazy(() => import('./FeaturesTools').then((m) => ({ default: m.ShieldModule })));
 const ReportModule = lazy(() => import('./FeaturesTools').then((m) => ({ default: m.ReportModule })));
+const FocusModule = lazy(() => import('./FeaturesStream').then((m) => ({ default: m.FocusModule })));
+const ShoutoutModule = lazy(() => import('./FeaturesStream').then((m) => ({ default: m.ShoutoutModule })));
 const RESET_KEYS: Partial<Record<WorkspaceCard, SettingsKey>> = { alerts:'alerts', bot:'bot', chat:'chatOverlay', actions:'actions' };
 const GROUPS: ('all' | ModuleGroup)[] = ['all','channel','display','fun','automation'];
 
@@ -55,6 +57,8 @@ function ModuleEditor({ id }: { id: WorkspaceCard }) {
     case 'ducking': return <DuckingModule />;
     case 'shield': return <ShieldModule />;
     case 'report': return <ReportModule />;
+    case 'focus': return <FocusModule />;
+    case 'shoutout': return <ShoutoutModule />;
   }
   return <Overlay kind={id as OverlayKind} />;
 }

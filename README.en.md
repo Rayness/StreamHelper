@@ -64,7 +64,7 @@ Each overlay is a separate OBS Browser Source. Each added widget module shows it
 | Channel rewards | Recent Twitch custom reward redemptions with viewer, title, cost, and optional response. |
 | Collab | A manually entered list of co-stream guest channels and incoming raids. |
 | Now Playing | Track, artist, artwork, album, and progress from Windows media sessions. Supports Spotify, the Yandex Music app, and browser players. |
-| Song requests | A YouTube player and queue for channel rewards, donations, and manual requests. |
+| Song requests | A queue from YouTube, YouTube Music, and Yandex Music for channel rewards, donations, chat commands, and manual requests — by link or “artist - song”. YouTube plays in OBS, Yandex Music plays in your Yandex Music app or site. |
 | Ticker | Scheduled text, card, or lower third. |
 | Banner | Sponsor images and videos with a separate schedule and 14 entrance effects. |
 | Live status and chat spotlight | Title, category, viewers, uptime, or one selected chat message. |
@@ -72,6 +72,8 @@ Each overlay is a separate OBS Browser Source. Each added widget module shows it
 | Counter | A bot counter (deaths, wins...) as a card, text, or badge. |
 | Hype meter | Fills up from follows, subs, bits, donations, raids, rewards, and chat, cools down over time, with levels. |
 | Top chatters | The most active viewers of the stream; bots are excluded. |
+| Focus timer | Pomodoro: focus, breaks and the current task on screen; chat extends a phase with a reward, breaks can switch to their own OBS scene. |
+| Shoutout | A card for a raider or friend with their avatar, category and one of their clips; chat message and Twitch's built-in shoutout. |
 | Interactive sources | Wheel, poll, giveaway, viewer queue, guess the number, boss, quiz, and emote rain. |
 | Kawaki | Current title, poster, and viewing progress. |
 
@@ -82,6 +84,8 @@ Each overlay is a separate OBS Browser Source. Each added widget module shows it
 **Music:** open **Overlays → Now Playing** and add the source to OBS. Auto mode selects an active session, preferring Spotify, then the Yandex Music app, then a browser. You can pin a source and adjust the horizontal or vertical layout, artwork and title size, background opacity, accent color, source label, album, and progress. The card hides on pause by default. StreamHelper reads local Windows media sessions, so no Spotify or Yandex sign-in is needed. Yandex Music in Chrome or Edge appears as “Browser” because Windows does not provide the tab URL. If several tabs in one browser play at once, a specific tab cannot be selected.
 
 **Song requests:** open **Overlays → Song requests**, add its separate OBS Browser Source, and enable viewer requests. Set the exact title of a custom Twitch reward; viewers enter a link to an individual YouTube video. For donations, set a minimum in the main currency; the donation message must contain the link. DonationAlerts, Streamlabs, and StreamElements are supported. The queue survives restarts and can advance automatically or be controlled from the app and OBS dock. Choose full-size video, compact visible video beside request details, or queue-only mode with no YouTube video or audio in OBS. Adjust volume, player controls, requester and title labels, queue count, compact video position and size, accent color, and background opacity. YouTube playback requires a visible video; queue-only mode keeps requests ready until you switch back or play them in another player. StreamHelper can pause the active Windows media session and resume it after the queue. The YouTube video must allow embedding and be reachable from the OBS computer.
+
+**Yandex Music requests:** in the Yandex Music card, sign in with Yandex ID (or paste an OAuth token) and open the Yandex Music app or site with the same account. Yandex Music track links and “artist - song” requests (searched in Yandex Music first, then YouTube) play right in that app through “Play on device” (Ynison): StreamHelper starts the track, notices its end, plays the next one, and after the queue returns your previous music at the same position. The OBS source shows the cover and title while the sound comes from the Yandex Music app — capture it in OBS. Without Yandex Plus the app may play only previews. Ynison is an internal Yandex service with no public API, so a Yandex update can break this control; then turn off “Play requests in Yandex Music” and tracks will be found on YouTube.
 
 Links are checked with YouTube before queueing: removed, private and embed-blocked videos are rejected, and the viewer gets a chat reply with their queue position or the reason. A video that still fails to play is skipped. Manage the queue in the module: drag to reorder, Play now, Play next, pause.
 

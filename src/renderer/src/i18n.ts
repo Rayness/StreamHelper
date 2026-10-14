@@ -5,6 +5,7 @@ import { enMore, ruMore } from './i18n.more';
 import { enWorkspace, ruWorkspace } from './i18n.workspace';
 import { enFeatures, ruFeatures } from './i18n.features';
 import { enStudio, ruStudio } from './i18n.studio';
+import { enStream, ruStream } from './i18n.stream';
 import { useApp } from './store';
 
 const ruBase = {
@@ -417,7 +418,7 @@ const ruBase = {
   'toast.twitchSessionExpired': 'Сессия Twitch истекла — войдите снова',
 };
 
-const ru = { ...ruBase, ...ruExtra, ...ruMore, ...ruWorkspace, ...ruFeatures, ...ruStudio };
+const ru = { ...ruBase, ...ruExtra, ...ruMore, ...ruWorkspace, ...ruFeatures, ...ruStudio, ...ruStream };
 export type TKey = keyof typeof ru;
 
 const enBase: Record<keyof typeof ruBase, string> = {
@@ -830,7 +831,7 @@ const enBase: Record<keyof typeof ruBase, string> = {
   'toast.twitchSessionExpired': 'Twitch session expired — please log in again',
 };
 
-const en: Record<TKey, string> = { ...enBase, ...enExtra, ...enMore, ...enWorkspace, ...enFeatures, ...enStudio };
+const en: Record<TKey, string> = { ...enBase, ...enExtra, ...enMore, ...enWorkspace, ...enFeatures, ...enStudio, ...enStream };
 
 const DICTS = { ru, en } as const;
 type Params = Record<string, string | number>;
