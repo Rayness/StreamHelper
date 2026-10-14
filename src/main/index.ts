@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { copyFile, stat, unlink } from 'node:fs/promises';
 import { basename, extname, join } from 'node:path';
 import { randomBytes } from 'node:crypto';
@@ -334,6 +334,9 @@ async function bootstrap(): Promise<void> {
       const file = await ttsEngine.speak(job);
       return { url: `/tts/${file}`, wav: readFileSync(ttsEngine.path(file)!) };
     },
+    say: (msg) => sendToAllChats(msg).catch((err) => console.warn('[tts] chat', String(err?.message ?? err))),
+    loadUserVoices: () => JSON.parse(readFileSync(join(userData, 'tts-voices.json'), 'utf8')),
+    saveUserVoices: (voices) => writeFileSync(join(userData, 'tts-voices.json'), JSON.stringify(voices)),
   });
   void tts.refreshVoices();
   hub = new OverlayHub(ctx, overlay, chatHistory, {
@@ -746,6 +749,7 @@ async function bootstrap(): Promise<void> {
     'tts:test': (voice) => tts.test(voice),
     'tts:skip': () => tts.skip(),
     'tts:clear': () => tts.clear(),
+    'tts:forgetVoices': () => tts.forgetVoices(),
     'tts:voices': () => tts.refreshVoices(),
     'shell:openExternal': (url) => {
       if (/^https?:\/\//.test(url)) void shell.openExternal(url);

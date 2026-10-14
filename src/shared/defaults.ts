@@ -694,15 +694,16 @@ export function defaultShoutout(lang: Language): ShoutoutSettings {
   };
 }
 
-export function defaultTts(lang: Language): TtsSettings {
+export function defaultTts(_lang: Language): TtsSettings {
   return {
     enabled: false,
-    mode: 'command',
-    command: lang === 'ru' ? 'озвучь' : 'tts',
+    mode: 'prefix',
+    trigger: '!!!',
+    command: 'tts',
     roles: { broadcaster: true, moderator: true, vip: true, subscriber: false, viewer: false },
     rewardTitle: '',
     voice: 'female',
-    voices: ['female', 'male', 'chipmunk', 'giant', 'robot', 'radio', 'fast'],
+    voices: ['female', 'male', 'chipmunk', 'giant', 'robot', 'radio', 'fast', 'lich'],
     femaleVoice: '',
     maleVoice: '',
     volume: 80,
@@ -714,6 +715,8 @@ export function defaultTts(lang: Language): TtsSettings {
     skipEmotes: true,
     skipLinks: true,
     blockedWords: [],
+    profanityFilter: true,
+    useBotWords: true,
   };
 }
 

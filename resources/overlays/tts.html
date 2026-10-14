@@ -19,7 +19,7 @@
         nodes = [];
       }
 
-      /** Robot: ring modulation. Radio: telephone band with a little grit. */
+      /** Robot: ring modulation. Radio: telephone band with a little grit. Echo: repeats. */
       function chain(source, effect, volume) {
         const out = ctx.createGain();
         out.gain.value = volume;
@@ -46,6 +46,14 @@
           shape.curve = curve;
           source.connect(hp); hp.connect(lp); lp.connect(shape); shape.connect(out);
           nodes.push(hp, lp, shape);
+        } else if (effect === 'echo') {
+          // A cold hall: the dry voice plus fading repeats.
+          const delay = ctx.createDelay(1); delay.delayTime.value = 0.16;
+          const feedback = ctx.createGain(); feedback.gain.value = 0.42;
+          const wet = ctx.createGain(); wet.gain.value = 0.55;
+          source.connect(out);
+          source.connect(delay); delay.connect(feedback); feedback.connect(delay); delay.connect(wet); wet.connect(out);
+          nodes.push(delay, feedback, wet);
         } else {
           source.connect(out);
         }

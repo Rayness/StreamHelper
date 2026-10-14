@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { TtsRoles, TtsSettings, TtsVoiceId } from '@shared/types';
-import { TTS_VOICES } from '@shared/tts';
+import { TTS_VOICES, voiceAlias } from '@shared/tts';
 import { OverlayBar } from '../components/overlay';
 import { Button, Card, Empty, Field, IconButton, LinesInput, Select, TextInput, Toggle } from '../components/ui';
 import { useT } from '../i18n';
@@ -31,9 +31,8 @@ export function TtsModule() {
     { value: '', label: t('tts.autoVoice') },
     ...s.voices.filter((v) => v.gender === gender || v.name === current).map((v) => ({ value: v.name, label: `${v.name} · ${v.lang}` })),
   ];
-  /** What viewers type to pick the voice, in the app's language. */
-  const alias = (id: TtsVoiceId) => TTS_VOICES.find((v) => v.id === id)!.aliases.find((a) => /[а-яё]/i.test(a) === ru) ?? id;
-  const example = `${prefix}${cfg.command || 'tts'} ${alias('robot')} ${t('tts.sample')}`;
+  const alias = (id: TtsVoiceId) => voiceAlias(id, ru);
+  const pick = `${prefix}${cfg.command || 'tts'}`;
   return (
     <div className="fun-split">
       <div className="fun-main">
@@ -62,13 +61,14 @@ export function TtsModule() {
         </Card>
         <Card title={t('tts.trigger')}>
           <div className="form">
-            <Field label={t('tts.mode')}><Select value={cfg.mode} onChange={(mode) => set({ mode })} options={(['command', 'all'] as const).map((v) => ({ value: v, label: t(`ttsMode.${v}`) }))} /></Field>
-            {cfg.mode === 'command' && <Field label={t('tts.command')} hint={t('tts.commandHint', { example })}><CommandInput value={cfg.command} onChange={(command) => set({ command })} /></Field>}
+            <Field label={t('tts.mode')} hint={t(`ttsModeHint.${cfg.mode}`, { trigger: cfg.trigger || '!!!' })}><Select value={cfg.mode} onChange={(mode) => set({ mode })} options={(['prefix', 'all'] as const).map((v) => ({ value: v, label: t(`ttsMode.${v}`, { trigger: cfg.trigger || '!!!' }) }))} /></Field>
+            {cfg.mode === 'prefix' && <Field label={t('tts.triggerField')} hint={t('tts.triggerHint', { example: `${cfg.trigger || '!!!'} ${t('tts.sample')}` })}><TextInput value={cfg.trigger} onChange={(trigger) => set({ trigger: trigger.trim() })} placeholder="!!!" /></Field>}
             <Field label={t('tts.reward')} hint={t('tts.rewardHint')} wide><TextInput value={cfg.rewardTitle} onChange={(rewardTitle) => set({ rewardTitle })} /></Field>
           </div>
         </Card>
         <Card title={t('tts.voices')}>
           <div className="form">
+            <Field label={t('tts.command')} hint={t('tts.commandHint', { example: `${pick} ${alias('lich')}`, reset: `${pick} ${ru ? 'сброс' : 'reset'}` })}><CommandInput value={cfg.command} onChange={(command) => set({ command })} /></Field>
             <Field label={t('tts.voice')}><Select value={cfg.voice} onChange={(voice) => set({ voice, voices: [...new Set([...cfg.voices, voice])] })} options={TTS_VOICES.map((v) => ({ value: v.id, label: t(`ttsVoice.${v.id}`) }))} /></Field>
             <Field label={t('tts.voices')} hint={t('tts.voicesHint')} wide>
               <div className="stack">
@@ -82,6 +82,10 @@ export function TtsModule() {
             </Field>
             <Field label={t('tts.femaleVoice')}><Select value={cfg.femaleVoice} onChange={(femaleVoice) => set({ femaleVoice })} options={systemOptions('female', cfg.femaleVoice)} /></Field>
             <Field label={t('tts.maleVoice')}><Select value={cfg.maleVoice} onChange={(maleVoice) => set({ maleVoice })} options={systemOptions('male', cfg.maleVoice)} /></Field>
+          </div>
+          <div className="row-gap wrap">
+            <p className="muted small">{t('tts.remembered', { n: s.remembered })}</p>
+            <Button size="sm" icon="trash" disabled={!s.remembered} onClick={() => { if (window.confirm(t('tts.forgetConfirm'))) void call('tts:forgetVoices'); }}>{t('tts.forget')}</Button>
           </div>
           <div className="row-gap wrap">
             <p className="muted small">{s.voices.length ? t('tts.systemHint', { n: s.voices.length }) : t('tts.noVoices')}</p>
@@ -104,6 +108,12 @@ export function TtsModule() {
                 <Toggle checked={cfg.readNames} onChange={(readNames) => set({ readNames })} label={t('tts.readNames')} />
                 <Toggle checked={cfg.skipEmotes} onChange={(skipEmotes) => set({ skipEmotes })} label={t('tts.skipEmotes')} />
                 <Toggle checked={cfg.skipLinks} onChange={(skipLinks) => set({ skipLinks })} label={t('tts.skipLinks')} />
+              </div>
+            </Field>
+            <Field label={t('tts.filters')} wide>
+              <div className="stack">
+                <Toggle checked={cfg.profanityFilter} onChange={(profanityFilter) => set({ profanityFilter })} label={t('tts.profanity')} />
+                <Toggle checked={cfg.useBotWords} onChange={(useBotWords) => set({ useBotWords })} label={t('tts.botWords')} />
               </div>
             </Field>
             <Field label={t('tts.blocked')} hint={t('tts.blockedHint')} wide><LinesInput value={cfg.blockedWords} onChange={(blockedWords) => set({ blockedWords })} rows={3} /></Field>

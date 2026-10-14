@@ -1532,8 +1532,8 @@ export interface ShoutoutState {
 // ---------- Text to speech ----------
 
 /** Built-in voices: a Windows voice of some gender with its own pitch, speed and sound effect. */
-export type TtsVoiceId = 'female' | 'male' | 'chipmunk' | 'giant' | 'robot' | 'radio' | 'fast';
-export type TtsEffect = 'none' | 'robot' | 'radio';
+export type TtsVoiceId = 'female' | 'male' | 'chipmunk' | 'giant' | 'robot' | 'radio' | 'fast' | 'lich';
+export type TtsEffect = 'none' | 'robot' | 'radio' | 'echo';
 
 /** Who may have their messages read aloud. */
 export interface TtsRoles {
@@ -1547,15 +1547,18 @@ export interface TtsRoles {
 
 export interface TtsSettings {
   enabled: boolean;
-  /** `command`: only "!tts text"; `all`: every chat message (commands are skipped). */
-  mode: 'command' | 'all';
+  /** `all`: every chat message (commands are skipped); `prefix`: only messages starting with `trigger`. */
+  mode: 'all' | 'prefix';
+  /** What starts a message to be read in `prefix` mode, e.g. "!!!". */
+  trigger: string;
+  /** Viewers pick their voice with it ("!tts robot"); the choice is remembered per viewer. */
   command: string;
   roles: TtsRoles;
   /** Channel points reward whose text is read for anyone who redeems it. Empty = off. */
   rewardTitle: string;
-  /** Used when the viewer doesn't name a voice. */
+  /** For viewers who haven't picked a voice. */
   voice: TtsVoiceId;
-  /** Voices viewers can pick with "!tts robot text". */
+  /** Voices viewers can pick with "!tts robot". */
   voices: TtsVoiceId[];
   /** Exact Windows voices for the female / male voices; empty = picked by the message language. */
   femaleVoice: string;
@@ -1576,6 +1579,10 @@ export interface TtsSettings {
   skipLinks: boolean;
   /** Messages with these words are never read. */
   blockedWords: string[];
+  /** Messages with swearing (Russian and English) are never read. */
+  profanityFilter: boolean;
+  /** The chat bot's banned words (Moderation) also block reading. */
+  useBotWords: boolean;
 }
 
 /** A Windows voice. `onecore` voices come from Settings → Speech; `sapi` are the older desktop ones. */
@@ -1613,6 +1620,8 @@ export interface TtsState {
   queue: TtsItem[];
   history: TtsItem[];
   voices: TtsSystemVoice[];
+  /** Viewers with a voice of their own. */
+  remembered: number;
   error: string | null;
 }
 
@@ -2187,6 +2196,8 @@ export interface IpcInvoke {
   /** Stop the message being read; the next one follows. */
   'tts:skip': () => void;
   'tts:clear': () => void;
+  /** Forget the voices viewers picked. */
+  'tts:forgetVoices': () => void;
   /** Re-read the installed Windows voices. */
   'tts:voices': () => TtsSystemVoice[];
   'media:import': () => MediaFile | null;

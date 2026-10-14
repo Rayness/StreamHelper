@@ -20,6 +20,7 @@ export const TTS_VOICES: readonly TtsVoiceDef[] = [
   { id: 'robot', gender: 'male', rate: 0.9, pitch: 0.6, effect: 'robot', aliases: ['robot', 'робот'] },
   { id: 'radio', gender: 'male', rate: 1.1, pitch: 1, effect: 'radio', aliases: ['radio', 'рация', 'радио'] },
   { id: 'fast', gender: 'female', rate: 2.2, pitch: 1.1, effect: 'none', aliases: ['fast', 'тараторка', 'быстрый'] },
+  { id: 'lich', gender: 'male', rate: 0.75, pitch: 0, effect: 'echo', aliases: ['keltuzad', 'kelthuzad', 'lich', 'келтузад', 'кельтузад', 'лич'] },
 ];
 
 export const ttsVoice = (id: TtsVoiceId): TtsVoiceDef => TTS_VOICES.find((v) => v.id === id) ?? TTS_VOICES[0];
@@ -31,23 +32,64 @@ export function ttsAllowed(roles: ChatRoles, allowed: TtsRoles): boolean {
 }
 
 /**
- * What to read from a chat message, or null when it isn't for TTS. In command mode a voice name
- * may follow the command ("!tts robot hi"); voices the streamer turned off are read as text.
+ * What to read from a chat message, or null when it isn't for TTS. `all` reads every message except
+ * commands; `prefix` only messages starting with the trigger ("!!! hello"), without it.
  */
-export function parseTtsMessage(text: string, cfg: Pick<TtsSettings, 'mode' | 'command' | 'voice' | 'voices'>, prefix: string): { text: string; voice: TtsVoiceId } | null {
+export function parseTtsMessage(text: string, cfg: Pick<TtsSettings, 'mode' | 'trigger'>, prefix: string): string | null {
   const trimmed = text.trim();
-  if (cfg.mode === 'all') {
-    if (prefix && trimmed.startsWith(prefix)) return null;
-    return trimmed ? { text: trimmed, voice: cfg.voice } : null;
-  }
+  const trigger = cfg.trigger.trim();
+  if (trigger && trimmed.startsWith(trigger)) return trimmed.slice(trigger.length).trim() || null;
+  if (cfg.mode === 'prefix') return null;
+  if (prefix && trimmed.startsWith(prefix)) return null;
+  return trimmed || null;
+}
+
+const RESET_WORDS = ['reset', 'default', 'сброс', 'сбросить', 'обычный'];
+
+export type TtsVoiceCommand =
+  | { kind: 'show' }
+  | { kind: 'set'; voice: TtsVoiceId }
+  | { kind: 'reset' }
+  | { kind: 'unknown'; word: string };
+
+/** "!tts" (show), "!tts robot" (pick), "!tts reset" (forget); null when it's not the voice command. */
+export function parseVoiceCommand(text: string, cfg: Pick<TtsSettings, 'command' | 'voices' | 'voice'>, prefix: string): TtsVoiceCommand | null {
   const command = cfg.command.trim().toLowerCase();
   if (!command) return null;
-  const [first = '', ...rest] = trimmed.split(/\s+/);
+  const [first = '', ...rest] = text.trim().split(/\s+/);
   if (first.toLowerCase() !== `${prefix}${command}`) return null;
-  const word = (rest[0] ?? '').toLowerCase().replace(/[:,]$/, '');
-  const picked = TTS_VOICES.find((v) => v.aliases.includes(word) && cfg.voices.includes(v.id));
-  const body = (picked ? rest.slice(1) : rest).join(' ').trim();
-  return body ? { text: body, voice: picked?.id ?? cfg.voice } : null;
+  const word = rest.join('').toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
+  if (!word) return { kind: 'show' };
+  if (RESET_WORDS.includes(word)) return { kind: 'reset' };
+  const voice = TTS_VOICES.find((v) => v.aliases.includes(word) && (cfg.voices.includes(v.id) || cfg.voice === v.id));
+  return voice ? { kind: 'set', voice: voice.id } : { kind: 'unknown', word };
+}
+
+/** What viewers type to pick a voice, in the given language. */
+export function voiceAlias(id: TtsVoiceId, ru: boolean): string {
+  const v = ttsVoice(id);
+  return v.aliases.find((a) => /[а-яё]/i.test(a) === ru) ?? v.aliases[0];
+}
+
+// Roots of Russian and English swearing. Russian roots are matched at the start of a word (after
+// a usual prefix) so "хлеба", "оскорблять" or "употреблять" are not caught.
+const RU_PREFIX = '(?:за|от|у|вы|до|на|по|при|раз|рас|под|про|пере|съ|из|недо|об|с|в|о|ни)?';
+const PROFANITY = [
+  new RegExp(`(?:^|[^а-я])${RU_PREFIX}(?:ху[йеияю]|пизд|п[иеё]д[оа]р|еб[аёлнуиыщ]|ебе[тш]|уеб|бля|муда|муди|гандон|залуп|шлюх|сук[аиу]|сучк|дроч)`, 'u'),
+  /\b(?:fuck|shit|bitch|cunt|nigg|fag+ot|whore|dickhead|asshole|motherf)/,
+];
+/** Latin look-alikes people type to slip past filters ("xyй"). */
+const LOOKALIKE: Record<string, string> = { a: 'а', e: 'е', o: 'о', p: 'р', c: 'с', x: 'х', y: 'у', k: 'к', m: 'м', t: 'т', b: 'в', h: 'н', '0': 'о', '3': 'з', '6': 'б', 'ё': 'е' };
+
+export function hasProfanity(text: string): boolean {
+  const lower = text.toLowerCase().replace(/ё/g, 'е');
+  if (PROFANITY[1].test(lower)) return true;
+  // Words mixing scripts are read as Cyrillic; separators inside a word ("х.у.й") are dropped.
+  const words = lower.split(/\s+/).map((w) => {
+    const joined = w.replace(/[.\-_*]+/g, '');
+    return /[а-я]/.test(joined) ? [...joined].map((ch) => LOOKALIKE[ch] ?? ch).join('') : joined;
+  });
+  return words.some((w) => PROFANITY[0].test(w));
 }
 
 const LINK = /\bhttps?:\/\/\S+|\bwww\.\S+|\b[\w-]+\.(?:com|ru|tv|net|org|io|gg|me|ly|be)(?:\/\S*)?/gi;

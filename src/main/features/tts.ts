@@ -1,5 +1,6 @@
 import type { ChatMessage, OverlayMessage, StreamEvent, TtsItem, TtsPlayback, TtsSettings, TtsState, TtsSystemVoice, TtsVoiceId } from '@shared/types';
-import { hasBlockedWord, parseTtsMessage, pickSystemVoice, spokenName, textLang, ttsAllowed, ttsText, ttsVoice, wavDurationMs } from '@shared/tts';
+import { hasBlockedWord, hasProfanity, parseTtsMessage, parseVoiceCommand, pickSystemVoice, spokenName, textLang, ttsAllowed, ttsText, ttsVoice, voiceAlias, wavDurationMs } from '@shared/tts';
+import { matchesBannedWord } from '../bot/moderation';
 import { errorMessage, type AppContext } from '../core/context';
 import type { SpeakJob } from './ttsEngine';
 
@@ -12,6 +13,11 @@ export interface TtsDeps {
   voices(): Promise<TtsSystemVoice[]>;
   /** Synthesize; resolves with the audio URL path and the WAV bytes (for the duration). */
   speak(job: SpeakJob): Promise<{ url: string; wav: Uint8Array }>;
+  /** Reply in chat. Never throws. */
+  say(text: string): Promise<void>;
+  /** Voices viewers picked, by user id, kept between runs. */
+  loadUserVoices(): Record<string, TtsVoiceId>;
+  saveUserVoices(voices: Record<string, TtsVoiceId>): void;
 }
 
 /**
@@ -27,12 +33,17 @@ export class TtsService {
   private lastSpoken = new Map<string, number>();
   private systemVoices: Promise<TtsSystemVoice[]> | null = null;
   private disposed = false;
+  private userVoices: Map<string, TtsVoiceId>;
 
   constructor(
     private ctx: AppContext,
     private deps: TtsDeps,
     private now: () => number = Date.now,
   ) {
+    let stored: Record<string, TtsVoiceId> = {};
+    try { stored = deps.loadUserVoices() ?? {}; } catch { /* first run */ }
+    this.userVoices = new Map(Object.entries(stored).filter(([, v]) => typeof v === 'string'));
+    this.patch({ remembered: this.userVoices.size });
     ctx.bus.on('chat:message', (m) => this.onChat(m));
     ctx.bus.on('event', (e) => this.onEvent(e));
     ctx.bus.on('chat:delete', ({ id }) => this.cancel((item) => item.messageId === id));
@@ -57,18 +68,75 @@ export class TtsService {
   private onChat(m: ChatMessage): void {
     const cfg = this.cfg;
     if (!cfg.enabled || m.fromSelf || !ttsAllowed(m.roles, cfg.roles)) return;
-    const parsed = parseTtsMessage(m.text, cfg, this.ctx.settings.get('bot').prefix);
-    if (!parsed) return;
+    const prefix = this.ctx.settings.get('bot').prefix;
+    const command = parseVoiceCommand(m.text, cfg, prefix);
+    if (command) return this.onVoiceCommand(m, command);
+    const body = parseTtsMessage(m.text, cfg, prefix);
+    if (!body) return;
     // The streamer never waits; everyone else has a personal cooldown.
     if (!m.roles.broadcaster && cfg.cooldownSec > 0) {
       const last = this.lastSpoken.get(m.userId) ?? 0;
       if (this.now() - last < cfg.cooldownSec * 1000) return;
     }
-    const text = ttsText(m, parsed.text, cfg, this.ru);
-    if (!text || hasBlockedWord(text, cfg.blockedWords)) return;
-    if (this.enqueue({ id: this.nextId(), messageId: m.id, userId: m.userId, userName: m.userName, text, voice: parsed.voice, reason: 'chat', at: this.now() })) {
+    const text = ttsText(m, body, cfg, this.ru);
+    if (!text || this.blocked(text)) return;
+    if (this.enqueue({ id: this.nextId(), messageId: m.id, userId: m.userId, userName: m.userName, text, voice: this.voiceOf(m.userId), reason: 'chat', at: this.now() })) {
       this.lastSpoken.set(m.userId, this.now());
     }
+  }
+
+  /** Banned words of TTS and of the bot's moderation, and swearing. */
+  private blocked(text: string): boolean {
+    const cfg = this.cfg;
+    if (hasBlockedWord(text, cfg.blockedWords)) return true;
+    if (cfg.profanityFilter && hasProfanity(text)) return true;
+    const words = this.ctx.settings.get('bot').moderation?.words;
+    return cfg.useBotWords && !!words?.list.length && matchesBannedWord(text, words.list);
+  }
+
+  /** The viewer's own voice while the streamer still offers it, otherwise the default. */
+  voiceOf(userId: string): TtsVoiceId {
+    const cfg = this.cfg;
+    const own = this.userVoices.get(userId);
+    return own && (cfg.voices.includes(own) || own === cfg.voice) ? own : cfg.voice;
+  }
+
+  private onVoiceCommand(m: ChatMessage, command: NonNullable<ReturnType<typeof parseVoiceCommand>>): void {
+    const ru = this.ru;
+    const cfg = this.cfg;
+    const name = (id: TtsVoiceId) => voiceAlias(id, ru);
+    const list = [...new Set([cfg.voice, ...cfg.voices])].map(name).join(', ');
+    const pick = `${this.ctx.settings.get('bot').prefix}${cfg.command}`;
+    let reply: string;
+    if (command.kind === 'set') {
+      this.userVoices.set(m.userId, command.voice);
+      this.saveVoices();
+      reply = ru ? `@${m.userName}, теперь твои сообщения читает голос «${name(command.voice)}»` : `@${m.userName}, your messages are now read by "${name(command.voice)}"`;
+    } else if (command.kind === 'reset') {
+      this.userVoices.delete(m.userId);
+      this.saveVoices();
+      reply = ru ? `@${m.userName}, вернул голос по умолчанию: «${name(cfg.voice)}»` : `@${m.userName}, back to the default voice: "${name(cfg.voice)}"`;
+    } else if (command.kind === 'unknown') {
+      reply = ru ? `@${m.userName}, голоса «${command.word}» нет. Доступны: ${list}` : `@${m.userName}, there's no "${command.word}" voice. Available: ${list}`;
+    } else {
+      const own = name(this.voiceOf(m.userId));
+      reply = ru ? `@${m.userName}, твой голос: «${own}». Сменить: ${pick} <голос> — ${list}` : `@${m.userName}, your voice: "${own}". Change it: ${pick} <voice> — ${list}`;
+    }
+    void this.deps.say(reply);
+  }
+
+  private saveVoices(): void {
+    this.patch({ remembered: this.userVoices.size });
+    try {
+      this.deps.saveUserVoices(Object.fromEntries(this.userVoices));
+    } catch (err) {
+      console.warn('[tts] save voices', errorMessage(err));
+    }
+  }
+
+  forgetVoices(): void {
+    this.userVoices.clear();
+    this.saveVoices();
   }
 
   private onEvent(e: StreamEvent): void {
@@ -76,7 +144,7 @@ export class TtsService {
     if (!cfg.enabled || e.type !== 'redemption' || !cfg.rewardTitle.trim()) return;
     if (e.rewardTitle.trim().toLowerCase() !== cfg.rewardTitle.trim().toLowerCase()) return;
     const text = ttsText({ fragments: [] }, e.input ?? '', cfg, this.ru);
-    if (!text || hasBlockedWord(text, cfg.blockedWords)) return;
+    if (!text || this.blocked(text)) return;
     this.enqueue({ id: this.nextId(), messageId: null, userId: '', userName: e.userName, text, voice: cfg.voice, reason: 'reward', at: this.now() });
   }
 

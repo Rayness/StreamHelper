@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { defaultTts } from '@shared/defaults';
 import { ALL_OVERLAY_KINDS } from '@shared/profiles';
-import { hasBlockedWord, parseTtsMessage, pickSystemVoice, spokenName, textLang, ttsAllowed, ttsText, wavDurationMs } from '@shared/tts';
+import { hasBlockedWord, hasProfanity, parseTtsMessage, parseVoiceCommand, pickSystemVoice, spokenName, textLang, ttsAllowed, ttsText, wavDurationMs } from '@shared/tts';
 import type { ChatMessage, ChatRoles, OverlayMessage, TtsSystemVoice } from '@shared/types';
 import type { AppContext } from '../src/main/core/context';
 import { EventBus } from '../src/main/core/eventBus';
@@ -51,17 +51,36 @@ describe('tts helpers', () => {
     expect(ttsAllowed({ ...NONE, vip: true }, { ...roles, vip: false })).toBe(false);
   });
 
-  it('parses the command and an optional voice', () => {
-    const cfg = { ...defaultTts('ru'), command: 'tts' };
-    expect(parseTtsMessage('!tts привет', cfg, '!')).toEqual({ text: 'привет', voice: 'female' });
-    expect(parseTtsMessage('!TTS робот привет', cfg, '!')).toEqual({ text: 'привет', voice: 'robot' });
-    expect(parseTtsMessage('!tts robot: hi', cfg, '!')).toEqual({ text: 'hi', voice: 'robot' });
-    expect(parseTtsMessage('!tts робот привет', { ...cfg, voices: ['female'] }, '!')).toEqual({ text: 'робот привет', voice: 'female' });
-    expect(parseTtsMessage('!tts', cfg, '!')).toBeNull();
-    expect(parseTtsMessage('!ttsx hi', cfg, '!')).toBeNull();
+  it('reads messages with the prefix, or every message but commands', () => {
+    const cfg = defaultTts('ru');
+    expect(parseTtsMessage('!!! привет', cfg, '!')).toBe('привет');
+    expect(parseTtsMessage('!!!привет', cfg, '!')).toBe('привет');
+    expect(parseTtsMessage('!!!', cfg, '!')).toBeNull();
     expect(parseTtsMessage('просто текст', cfg, '!')).toBeNull();
-    expect(parseTtsMessage('просто текст', { ...cfg, mode: 'all' }, '!')).toEqual({ text: 'просто текст', voice: 'female' });
-    expect(parseTtsMessage('!uptime', { ...cfg, mode: 'all' }, '!')).toBeNull();
+    const all = { ...cfg, mode: 'all' as const };
+    expect(parseTtsMessage('просто текст', all, '!')).toBe('просто текст');
+    expect(parseTtsMessage('!!! с префиксом', all, '!')).toBe('с префиксом');
+    expect(parseTtsMessage('!uptime', all, '!')).toBeNull();
+  });
+
+  it('parses the voice command', () => {
+    const cfg = defaultTts('ru');
+    expect(parseVoiceCommand('!tts keltuzad', cfg, '!')).toEqual({ kind: 'set', voice: 'lich' });
+    expect(parseVoiceCommand("!TTS Кел'Тузад", cfg, '!')).toEqual({ kind: 'set', voice: 'lich' });
+    expect(parseVoiceCommand('!tts робот', cfg, '!')).toEqual({ kind: 'set', voice: 'robot' });
+    expect(parseVoiceCommand('!tts', cfg, '!')).toEqual({ kind: 'show' });
+    expect(parseVoiceCommand('!tts сброс', cfg, '!')).toEqual({ kind: 'reset' });
+    expect(parseVoiceCommand('!tts шрек', cfg, '!')).toEqual({ kind: 'unknown', word: 'шрек' });
+    expect(parseVoiceCommand('!tts робот', { ...cfg, voices: ['female'] }, '!')).toEqual({ kind: 'unknown', word: 'робот' });
+    expect(parseVoiceCommand('!ttsx', cfg, '!')).toBeNull();
+    expect(parseVoiceCommand('!!! привет', cfg, '!')).toBeNull();
+  });
+
+  it('catches swearing without false alarms', () => {
+    for (const bad of ['ну ты сука', 'Бля, опять', 'пиздец', 'нахуй', 'ХУЙ', 'xyй', 'х.у.й', 'заебал', 'уебок', 'what the fuck', 'Fucking hell', 'mudak мудак'])
+      expect(hasProfanity(bad), bad).toBe(true);
+    for (const ok of ['хлеба купи', 'себе и тебе', 'оскорблять нельзя', 'употреблять', 'бледный', 'мандарин', 'небо', 'художник', 'хуже некуда', 'Scunthorpe', 'мудрый', 'сукно', 'ребята привет', 'потребитель'])
+      expect(hasProfanity(ok), ok).toBe(false);
   });
 
   it('cleans the text', () => {
@@ -115,17 +134,24 @@ describe('TtsService', () => {
       return { url: '/tts/x.wav', wav: wav(1000) };
     });
     const voices = vi.fn(async (): Promise<TtsSystemVoice[]> => [{ name: 'Microsoft Pavel', lang: 'ru-RU', gender: 'male', source: 'onecore' }]);
-    const svc = new TtsService(env.ctx, { broadcast: (m) => sent.push(m), speak, voices });
+    const said: string[] = [];
+    let stored: Record<string, string> = {};
+    const svc = new TtsService(env.ctx, {
+      broadcast: (m) => sent.push(m), speak, voices,
+      say: async (text) => { said.push(text); },
+      loadUserVoices: () => stored as never,
+      saveUserVoices: (v) => { stored = { ...v }; },
+    });
     const flush = async () => { for (let i = 0; i < 5; i++) await Promise.resolve(); };
-    return { ...env, svc, sent, speak, flush, done: async () => { await flush(); release?.(); await flush(); } };
+    return { ...env, svc, sent, speak, flush, said, stored: () => stored, done: async () => { await flush(); release?.(); await flush(); } };
   }
 
   it('reads allowed roles only and plays one message at a time', async () => {
     vi.useFakeTimers();
     const { bus, svc, sent, speak, done, state } = setup();
-    bus.emit('chat:message', chat('!tts от зрителя'));
-    bus.emit('chat:message', chat('!tts от випа', { vip: true }, 'v'));
-    bus.emit('chat:message', chat('!tts от модера', { moderator: true }, 'm'));
+    bus.emit('chat:message', chat('!!! от зрителя'));
+    bus.emit('chat:message', chat('!!! от випа', { vip: true }, 'v'));
+    bus.emit('chat:message', chat('!!! от модера', { moderator: true }, 'm'));
     await done();
     expect(speak).toHaveBeenCalledTimes(1);
     expect(speak.mock.calls[0][0]).toMatchObject({ text: 'User v пишет: от випа' });
@@ -146,20 +172,20 @@ describe('TtsService', () => {
 
   it('applies the per-viewer cooldown but not to the streamer', async () => {
     const { bus, state } = setup({ cooldownSec: 60, queueMax: 10 });
-    bus.emit('chat:message', chat('!tts раз', { vip: true }, 'v'));
-    bus.emit('chat:message', chat('!tts два', { vip: true }, 'v'));
-    bus.emit('chat:message', chat('!tts три', { broadcaster: true }, 's'));
-    bus.emit('chat:message', chat('!tts четыре', { broadcaster: true }, 's'));
+    bus.emit('chat:message', chat('!!! раз', { vip: true }, 'v'));
+    bus.emit('chat:message', chat('!!! два', { vip: true }, 'v'));
+    bus.emit('chat:message', chat('!!! три', { broadcaster: true }, 's'));
+    bus.emit('chat:message', chat('!!! четыре', { broadcaster: true }, 's'));
     const texts = [state.current.tts.current, ...state.current.tts.queue].map((i) => i?.text);
     expect(texts).toEqual(['раз', 'три', 'четыре']);
   });
 
   it('drops a deleted message and respects the queue limit', async () => {
     const { bus, state } = setup({ queueMax: 1 });
-    bus.emit('chat:message', chat('!tts первое', { vip: true }, 'a'));
-    const second = chat('!tts второе', { vip: true }, 'b');
+    bus.emit('chat:message', chat('!!! первое', { vip: true }, 'a'));
+    const second = chat('!!! второе', { vip: true }, 'b');
     bus.emit('chat:message', second);
-    bus.emit('chat:message', chat('!tts третье', { vip: true }, 'c'));
+    bus.emit('chat:message', chat('!!! третье', { vip: true }, 'c'));
     expect(state.current.tts.queue.map((q) => q.text)).toEqual(['второе']);
     bus.emit('chat:delete', { id: second.id });
     expect(state.current.tts.queue).toEqual([]);
@@ -167,7 +193,7 @@ describe('TtsService', () => {
 
   it('skips the current message and stops the overlay', async () => {
     const { bus, svc, sent, state } = setup();
-    bus.emit('chat:message', chat('!tts первое', { vip: true }, 'a'));
+    bus.emit('chat:message', chat('!!! первое', { vip: true }, 'a'));
     expect(state.current.tts.current?.text).toBe('первое');
     svc.skip();
     expect(sent).toContainEqual({ type: 'ttsStop' });
@@ -180,9 +206,53 @@ describe('TtsService', () => {
     expect(state.current.tts.current).toMatchObject({ text: 'Всем привет', reason: 'reward' });
   });
 
+  it('remembers the voice a viewer picked and uses it for their messages', () => {
+    const { bus, state, said, stored, svc } = setup({ queueMax: 10 });
+    bus.emit('chat:message', chat('!tts keltuzad', { vip: true }, 'v'));
+    expect(said[0]).toContain('келтузад');
+    expect(stored()).toEqual({ v: 'lich' });
+    expect(state.current.tts.remembered).toBe(1);
+    // The command itself is not read.
+    expect(state.current.tts.current).toBeNull();
+    bus.emit('chat:message', chat('!!! я лич', { vip: true }, 'v'));
+    bus.emit('chat:message', chat('!!! а я обычный', { moderator: true }, 'm'));
+    expect([state.current.tts.current, ...state.current.tts.queue].map((i) => [i?.text, i?.voice])).toEqual([['я лич', 'lich'], ['а я обычный', 'female']]);
+    svc.dispose();
+  });
+
+  it('keeps the choice between runs and forgets it on reset', () => {
+    const env = setup();
+    env.bus.emit('chat:message', chat('!tts робот', { vip: true }, 'v'));
+    expect(env.svc.voiceOf('v')).toBe('robot');
+    env.settings.set('tts', { ...env.settings.get('tts'), voices: ['female'] });
+    expect(env.svc.voiceOf('v')).toBe('female');
+    env.bus.emit('chat:message', chat('!tts сброс', { vip: true }, 'v'));
+    expect(env.stored()).toEqual({});
+    env.settings.set('tts', { ...env.settings.get('tts'), voices: ['giant'] });
+    const again = new TtsService(env.ctx, { broadcast: () => 0, speak: env.speak, voices: async () => [], say: async () => undefined, loadUserVoices: () => ({ x: 'giant' }), saveUserVoices: () => undefined });
+    expect(again.voiceOf('x')).toBe('giant');
+  });
+
+  it("doesn't let viewers without a role pick voices", () => {
+    const { bus, said, stored } = setup();
+    bus.emit('chat:message', chat('!tts робот'));
+    expect(said).toEqual([]);
+    expect(stored()).toEqual({});
+  });
+
+  it('skips swearing and the bot banned words', () => {
+    const { bus, settings, state } = setup({ mode: 'all', queueMax: 10 });
+    const bot = settings.get('bot');
+    settings.set('bot', { ...bot, moderation: { ...bot.moderation, words: { ...bot.moderation.words, list: ['казино'] } } });
+    bus.emit('chat:message', chat('ну ты сука', { vip: true }, 'a'));
+    bus.emit('chat:message', chat('заходи в казино', { vip: true }, 'b'));
+    bus.emit('chat:message', chat('всем привет', { vip: true }, 'c'));
+    expect([state.current.tts.current, ...state.current.tts.queue].map((i) => i?.text)).toEqual(['всем привет']);
+  });
+
   it('does nothing while switched off', () => {
     const { bus, state } = setup({ enabled: false });
-    bus.emit('chat:message', chat('!tts привет', { broadcaster: true }));
+    bus.emit('chat:message', chat('!!! привет', { broadcaster: true }));
     expect(state.current.tts.current).toBeNull();
   });
 });
