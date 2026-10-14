@@ -85,6 +85,53 @@ describe('Ynison', () => {
   });
 });
 
+describe('Ynison resilience', () => {
+  it('reconnects after a silent drop, a bad hub address or a hung redirector, and survives a throwing listener', () => {
+    vi.useFakeTimers();
+    const { sockets, factory } = fakeNetwork();
+    const pinged: FakeSocket[] = [];
+    const withPing = (url: string, protocols: string[]) => { const socket = factory(url, protocols) as FakeSocket & { ping?: () => void }; socket.ping = () => { pinged.push(socket); }; return socket; };
+    const onState = vi.fn(() => { throw new Error('listener bug'); });
+    const client = new YnisonClient('token123', 'me', { onState }, withPing);
+    client.start();
+    // A host that can't be a host is refused without throwing.
+    expect(() => sockets[0].message({ host: 'bad host/ x', redirect_ticket: 't' })).not.toThrow();
+    vi.advanceTimersByTime(2_000);
+    // The next redirector never answers.
+    expect(sockets).toHaveLength(2);
+    vi.advanceTimersByTime(15_000 + 5_000);
+    expect(sockets).toHaveLength(3);
+    sockets[2].message({ host: 'hub.example', redirect_ticket: 't', session_id: 's' });
+    const hub = sockets[3];
+    hub.open();
+    expect(() => hub.message(state('1'))).not.toThrow();
+    expect(onState).toHaveBeenCalled();
+    // Partial / unknown messages are ignored.
+    expect(() => hub.message({ player_state: { status: {} } })).not.toThrow();
+    // No pong for a whole heartbeat: the socket is given up and a new connection starts.
+    vi.advanceTimersByTime(25_000);
+    expect(pinged).toHaveLength(1);
+    vi.advanceTimersByTime(25_000);
+    expect(client.connected).toBe(false);
+    vi.advanceTimersByTime(2_000);
+    expect(sockets.length).toBeGreaterThan(4);
+    client.stop();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('stops for good after the login is refused', () => {
+    vi.useFakeTimers();
+    const { sockets, factory } = fakeNetwork();
+    let client!: YnisonClient;
+    client = new YnisonClient('token123', 'me', { onStatus: (_status, error) => { if (error === 'unauthorized') client.stop(); } }, factory);
+    client.start();
+    sockets[0].message({ error: { grpc_code: 16, http_code: 401, message: 'UNAUTHENTICATED' } });
+    expect(vi.getTimerCount()).toBe(0);
+    vi.advanceTimersByTime(120_000);
+    expect(sockets).toHaveLength(1);
+  });
+});
+
 describe('Yandex Music remote', () => {
   function setup() {
     vi.useFakeTimers();

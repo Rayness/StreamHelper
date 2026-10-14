@@ -568,8 +568,8 @@ export interface SongRequest {
   redemption?: { id: string; rewardId: string };
   /** Background jam: the player runs this whole YouTube mix / playlist instead of one video. */
   playlistId?: string;
-  /** `yandex`: plays in the streamer's Yandex Music app / site; `videoId` is then `ym:<trackId>`. */
-  provider?: 'yandex';
+  /** `yandex`: plays in the streamer's Yandex Music app / site (`videoId` = `ym:<trackId>`); `local`: a file from the computer. */
+  provider?: 'yandex' | 'local';
   yandexTrackId?: string;
   yandexAlbumId?: string;
   cover?: string;
@@ -646,9 +646,19 @@ export interface SongJam {
   videoId?: string;
 }
 
+/**
+ * A favourite / background track. `videoId` is the key: a YouTube id, `ym:<trackId>` for Yandex Music
+ * (plays in the streamer's Yandex Music app) or `local:<file>` for a file added from the computer.
+ */
 export interface SongTrack {
   videoId: string;
   title?: string;
+  kind?: 'yandex' | 'local';
+  /** Local file name in the app's `media/songs` folder. */
+  file?: string;
+  cover?: string;
+  albumId?: string;
+  durationMs?: number;
 }
 
 /** viewers = stream only, both = stream + streamer's headphones, me = headphones only. */
@@ -1985,6 +1995,13 @@ export interface IpcInvoke {
   /** Ban a video by link or id; it leaves the queue. */
   'song:banVideo': (url: string) => void;
   'song:backgroundAdd': (url: string) => void;
+  /** Add or remove the request / playing track with this id in the favourites; returns whether it is a favourite now. */
+  'song:favorite': (id: string) => boolean;
+  'song:favoriteRemove': (videoId: string) => void;
+  /** Play this favourite now as background music. */
+  'song:favoritePlay': (videoId: string) => void;
+  /** Pick audio files on the computer and add them to the favourites; returns how many were added. */
+  'song:importLocal': () => number;
   /** Add a YouTube mix / playlist as a background jam; an empty name takes the playlist title. */
   'song:jamAdd': (url: string, name: string) => void;
   'music:control': (source: MusicSourceKind, action: 'play' | 'pause' | 'next') => void;

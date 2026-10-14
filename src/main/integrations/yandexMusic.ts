@@ -63,6 +63,10 @@ export class YandexMusicService implements RemotePlayer {
   private savedVolume: number | null = null;
   /** Requests took the player over and it was not handed back yet: the snapshot is taken once per run. */
   private running = false;
+  private loginPending: Promise<void> | null = null;
+  /** Volume slider drags send dozens of changes a second: only the last one in a moment goes out. */
+  private volumeTimer: NodeJS.Timeout | null = null;
+  private pendingVolume: number | null = null;
 
   constructor(private ctx: AppContext, private factory?: SocketFactory, private openLogin?: (url: string) => Promise<string | null>) {
     ctx.bus.on('settings:changed', (key) => { if (key === 'songRequests') this.applySetting(); });
@@ -78,7 +82,9 @@ export class YandexMusicService implements RemotePlayer {
   }
 
   private emit(event: RemotePlayerEvent): void {
-    for (const listener of this.listeners) listener(event);
+    for (const listener of this.listeners) {
+      try { listener(event); } catch (error) { console.warn('[yandex] listener failed', error); }
+    }
   }
 
   start(): void {
@@ -90,6 +96,9 @@ export class YandexMusicService implements RemotePlayer {
 
   stop(): void {
     this.clearTimers();
+    if (this.volumeTimer) clearTimeout(this.volumeTimer);
+    this.volumeTimer = null;
+    this.pendingVolume = null;
     this.client?.stop();
     this.client = null;
   }
@@ -119,11 +128,15 @@ export class YandexMusicService implements RemotePlayer {
   private get ru(): boolean { return this.ctx.settings.get('language') === 'ru'; }
 
   /** Sign in through Yandex in a separate window; the token never touches settings.json. */
-  async login(): Promise<void> {
-    if (!this.openLogin) throw new Error('Login window unavailable');
-    const token = await this.openLogin(YANDEX_OAUTH_URL);
-    if (!token) throw new Error(this.ru ? 'Вход в Яндекс отменён.' : 'Yandex sign-in was cancelled.');
-    await this.setToken(token);
+  login(): Promise<void> {
+    // A second click must not open a second window.
+    this.loginPending ??= (async () => {
+      if (!this.openLogin) throw new Error('Login window unavailable');
+      const token = await this.openLogin(YANDEX_OAUTH_URL);
+      if (!token) throw new Error(this.ru ? 'Вход в Яндекс отменён.' : 'Yandex sign-in was cancelled.');
+      await this.setToken(token);
+    })().finally(() => { this.loginPending = null; });
+    return this.loginPending;
   }
 
   async setToken(token: string): Promise<void> {
@@ -200,7 +213,7 @@ export class YandexMusicService implements RemotePlayer {
     this.emit({ type: 'ended', trackId });
   }
 
-  async play(track: YnisonTrack): Promise<void> {
+  async play(track: YnisonTrack & { volume?: number }): Promise<void> {
     const client = this.client;
     if (!this.ready || !client?.state) throw new Error(this.ru ? 'Яндекс Музыка не подключена.' : 'Yandex Music is not connected.');
     if (!playerDevices(client.state, client.deviceId).length) {
@@ -221,7 +234,8 @@ export class YandexMusicService implements RemotePlayer {
       this.expected = null;
       throw new Error(this.ru ? 'Нет связи с Яндекс Музыкой.' : 'No connection to Yandex Music.');
     }
-    this.applyVolume();
+    if (track.volume !== undefined) this.setVolume(track.volume);
+    else this.applyVolume();
     this.startTimer = setTimeout(() => {
       if (!this.expected || this.expected.trackId !== track.trackId || this.expected.confirmed) return;
       this.expected = null;
@@ -264,7 +278,15 @@ export class YandexMusicService implements RemotePlayer {
   }
 
   setVolume(percent: number): void {
-    this.client?.setVolume(Math.max(0, Math.min(100, percent)) / 100);
+    if (!Number.isFinite(percent)) return;
+    this.pendingVolume = Math.max(0, Math.min(100, percent)) / 100;
+    if (this.volumeTimer) return;
+    this.client?.setVolume(this.pendingVolume);
+    this.pendingVolume = null;
+    this.volumeTimer = setTimeout(() => {
+      this.volumeTimer = null;
+      if (this.pendingVolume !== null) { this.client?.setVolume(this.pendingVolume); this.pendingVolume = null; }
+    }, 200);
   }
 
   private applyVolume(): void {

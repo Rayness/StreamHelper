@@ -1,4 +1,5 @@
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync } from 'node:fs';
+import { copyFile, stat, unlink } from 'node:fs/promises';
 import { basename, extname, join } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { app, BrowserWindow, clipboard, ClipboardItem, dialog, Menu, nativeImage, nativeTheme, shell, Tray } from 'electron';
@@ -21,6 +22,7 @@ import { SettingsStore } from './core/store';
 import { DonationAlertsService } from './donations/donationalerts';
 import { StreamlabsService } from './donations/streamlabs';
 import { YandexMusicService, tokenFromRedirect } from './integrations/yandexMusic';
+import { LOCAL_SONGS_DIR } from './features/songRequests';
 import { StreamElementsService } from './donations/streamelements';
 import { StreamerBotService } from './integrations/streamerbot';
 import { DiscordService } from './integrations/discord';
@@ -63,12 +65,15 @@ import { ObsService } from './obs/obs';
 import { createAuthRoutes } from './overlay/authPages';
 import { createDockRoutes } from './overlay/dock';
 import { OverlayHub } from './overlay/hub';
-import { OverlayServer } from './overlay/server';
+import { OverlayServer, safeJoin } from './overlay/server';
 import { TwitchService } from './platforms/twitch/service';
 import { PlatformRegistry } from './platforms/types';
 
 const IMAGE_EXT = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'];
 const AUDIO_EXT = ['.mp3', '.ogg', '.wav', '.m4a'];
+/** Songs from the computer: what Chromium in OBS can play. */
+const SONG_EXT = ['.mp3', '.ogg', '.oga', '.opus', '.wav', '.m4a', '.aac', '.flac', '.webm'];
+const MAX_SONG_BYTES = 300 * 1024 * 1024;
 const VIDEO_EXT = ['.webm', '.mp4'];
 
 let mainWindow: BrowserWindow | null = null;
@@ -581,6 +586,39 @@ async function bootstrap(): Promise<void> {
     'song:banUser': (userName) => songRequests.banUser(userName),
     'song:banVideo': (url) => songRequests.banVideo(url),
     'song:backgroundAdd': (url) => songRequests.addBackground(url),
+    'song:favorite': (id) => songRequests.toggleFavorite(id),
+    'song:favoriteRemove': (videoId) => {
+      const track = songRequests.removeFavorite(videoId);
+      // A song copied from the computer has no other use: its copy goes too.
+      const file = track?.kind === 'local' && track.file ? safeJoin(join(mediaDir, LOCAL_SONGS_DIR), encodeURIComponent(track.file)) : null;
+      if (file) void unlink(file).catch(() => undefined);
+    },
+    'song:favoritePlay': (videoId) => songRequests.playFavorite(videoId),
+    'song:importLocal': async () => {
+      const res = await dialog.showOpenDialog(mainWindow!, {
+        title: settings.get('language') === 'ru' ? 'Песни для избранного' : 'Songs for the favourites',
+        properties: ['openFile', 'multiSelections'],
+        filters: [{ name: 'Audio', extensions: SONG_EXT.map((e) => e.slice(1)) }],
+      });
+      if (res.canceled || !res.filePaths.length) return 0;
+      const dir = join(mediaDir, LOCAL_SONGS_DIR);
+      mkdirSync(dir, { recursive: true });
+      const added: { file: string; title: string }[] = [];
+      for (const src of res.filePaths.slice(0, 500)) {
+        const ext = extname(src).toLowerCase();
+        // A stray video or disk image is no song: skip anything huge.
+        const size = (await stat(src).catch(() => null))?.size ?? 0;
+        if (!SONG_EXT.includes(ext) || size > MAX_SONG_BYTES) continue;
+        const title = basename(src, extname(src)).replace(/_/g, ' ').replace(/\s+/g, ' ').trim() || 'Track';
+        const stem = basename(src, extname(src)).replace(/[^\p{L}\p{N} _.()-]+/gu, '_').trim().slice(0, 80) || 'song';
+        let file = `${stem}${ext}`;
+        for (let i = 1; existsSync(join(dir, file)); i++) file = `${stem}_${i}${ext}`;
+        // One unreadable file (permissions, full disk) must not lose the others.
+        try { await copyFile(src, join(dir, file)); } catch { continue; }
+        added.push({ file, title });
+      }
+      return songRequests.addLocal(added);
+    },
     'song:jamAdd': (url, name) => songRequests.addJam(url, name),
     'music:control': (source, action) => music.control(source, action),
     'subs:check': () => subForStream.check(),

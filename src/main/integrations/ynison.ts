@@ -13,6 +13,10 @@ const REDIRECTOR = `wss://${HOST}/redirector.YnisonRedirectService/GetRedirectTo
 const HUB_PATH = '/ynison_state.YnisonStateService/PutYnisonState';
 const ORIGIN = 'https://music.yandex.ru';
 const RECONNECT_MS = [2_000, 5_000, 15_000, 30_000, 60_000];
+/** A silent network drop leaves the socket "open" forever: ping, and give up when nothing comes back. */
+const HEARTBEAT_MS = 25_000;
+/** The redirector answers at once; a hung handshake or answer must not stall the connection. */
+const ANSWER_TIMEOUT_MS = 15_000;
 
 export interface YnisonVersion { device_id: string; version: number; timestamp_ms: number }
 export interface YnisonPlayable {
@@ -56,13 +60,23 @@ export interface YnisonSocket {
   on(event: 'message', listener: (data: unknown) => void): unknown;
   on(event: 'close', listener: (code: number, reason: unknown) => void): unknown;
   on(event: 'error', listener: (error: Error) => void): unknown;
+  on(event: 'pong', listener: () => void): unknown;
   send(data: string): void;
   close(): void;
+  /** `ws` sockets have it; without it there is no heartbeat. */
+  ping?(): void;
   readonly readyState: number;
 }
 export type SocketFactory = (url: string, protocols: string[]) => YnisonSocket;
 
-const defaultFactory: SocketFactory = (url, protocols) => new WebSocket(url, protocols, { headers: { Origin: ORIGIN } }) as unknown as YnisonSocket;
+const defaultFactory: SocketFactory = (url, protocols) => new WebSocket(url, protocols, { headers: { Origin: ORIGIN }, handshakeTimeout: ANSWER_TIMEOUT_MS, maxPayload: 16 * 1024 * 1024 }) as unknown as YnisonSocket;
+
+/** A full player state: anything else (a partial or unknown message) is ignored. */
+function validState(value: unknown): value is YnisonPlayerState {
+  const state = value as YnisonPlayerState | undefined;
+  return !!state && typeof state === 'object' && !!state.status && typeof state.status === 'object'
+    && !!state.player_queue && typeof state.player_queue === 'object' && Array.isArray(state.player_queue.playable_list);
+}
 
 /** Version stamps tell Ynison which change is newer; the web player uses random 63-bit numbers. */
 const version = (deviceId: string): YnisonVersion => ({ device_id: deviceId, version: Math.floor(Math.random() * Number.MAX_SAFE_INTEGER), timestamp_ms: 0 });
@@ -101,6 +115,8 @@ export function playerDevices(state: YnisonState | null, ownId: string): YnisonD
 export class YnisonClient {
   private socket: YnisonSocket | null = null;
   private timer: NodeJS.Timeout | null = null;
+  /** Answer timeout of the redirector, then the heartbeat of the hub. */
+  private watchdog: NodeJS.Timeout | null = null;
   private attempt = 0;
   private stopped = true;
   private sessionId = String(Math.floor(Math.random() * 1e18)).padStart(18, '1').slice(0, 18);
@@ -136,9 +152,16 @@ export class YnisonClient {
   }
 
   private drop(): void {
+    if (this.watchdog) { clearTimeout(this.watchdog); clearInterval(this.watchdog); }
+    this.watchdog = null;
     const socket = this.socket;
     this.socket = null;
     try { socket?.close(); } catch { /* already closed */ }
+  }
+
+  /** A listener bug must never take the app down from inside a socket event. */
+  private notify<T extends unknown[]>(listener: ((...args: T) => void) | undefined, ...args: T): void {
+    try { listener?.(...args); } catch (error) { console.warn('[ynison] listener failed', error); }
   }
 
   private deviceHeaders(): Record<string, string> {
@@ -152,14 +175,17 @@ export class YnisonClient {
   private retry(error?: string): void {
     this.drop();
     if (this.stopped) return;
-    this.events.onStatus?.(error ? 'error' : 'connecting', error);
+    this.notify(this.events.onStatus, error ? 'error' : 'connecting', error);
+    // The listener may have stopped us (an expired login).
+    if (this.stopped) return;
     const delay = RECONNECT_MS[Math.min(this.attempt++, RECONNECT_MS.length - 1)];
     if (this.timer) clearTimeout(this.timer);
     this.timer = setTimeout(() => { this.timer = null; if (!this.stopped) this.openRedirector(); }, delay);
   }
 
   private openRedirector(): void {
-    this.events.onStatus?.('connecting');
+    this.notify(this.events.onStatus, 'connecting');
+    if (this.stopped) return;
     let socket: YnisonSocket;
     try {
       socket = this.factory(REDIRECTOR, protocols({ ...this.deviceHeaders(), 'Ynison-Session-Id': this.sessionId }));
@@ -167,16 +193,16 @@ export class YnisonClient {
       return this.retry(String((error as Error).message ?? error));
     }
     this.socket = socket;
+    this.watchdog = setTimeout(() => { if (this.socket === socket) this.retry('Ynison: no answer'); }, ANSWER_TIMEOUT_MS);
     let answered = false;
     socket.on('message', (data) => {
       if (this.socket !== socket) return;
       answered = true;
       let reply: { host?: string; redirect_ticket?: string; session_id?: string; error?: { message?: string; details?: unknown } };
       try { reply = JSON.parse(String(data)); } catch { return this.retry('Ynison: bad redirector answer'); }
-      if (reply.error || !reply.host || !reply.redirect_ticket) return this.retry(errorText(reply.error));
-      this.socket = null;
-      try { socket.close(); } catch { /* done with it */ }
-      this.openHub(reply.host, reply.redirect_ticket, reply.session_id ?? this.sessionId);
+      if (reply.error || typeof reply.host !== 'string' || typeof reply.redirect_ticket !== 'string' || !/^[\w.:-]+$/.test(reply.host)) return this.retry(errorText(reply.error));
+      this.drop();
+      this.openHub(reply.host, reply.redirect_ticket, typeof reply.session_id === 'string' ? reply.session_id : this.sessionId);
     });
     socket.on('error', (error) => { if (this.socket === socket) this.retry(error.message); });
     socket.on('close', (code) => { if (this.socket === socket && !answered) this.retry(code === 1006 ? undefined : `Ynison closed (${code})`); });
@@ -184,25 +210,42 @@ export class YnisonClient {
 
   private openHub(host: string, ticket: string, sessionId: string): void {
     if (this.stopped) return;
-    const socket = this.factory(`wss://${host}${HUB_PATH}`, protocols({ ...this.deviceHeaders(), 'Ynison-Redirect-Ticket': ticket, 'Ynison-Session-Id': sessionId }));
+    let socket: YnisonSocket;
+    try {
+      socket = this.factory(`wss://${host}${HUB_PATH}`, protocols({ ...this.deviceHeaders(), 'Ynison-Redirect-Ticket': ticket, 'Ynison-Session-Id': sessionId }));
+    } catch (error) {
+      return this.retry(String((error as Error).message ?? error));
+    }
     this.socket = socket;
+    let alive = true;
+    this.watchdog = setTimeout(() => { if (this.socket === socket && !this.state) this.retry('Ynison: no answer'); }, ANSWER_TIMEOUT_MS);
     socket.on('open', () => {
       if (this.socket !== socket) return;
       this.sendRaw({ update_full_state: this.fullState(), rid: rid(), player_action_timestamp_ms: 0, activity_interception_type: 'DO_NOT_INTERCEPT_BY_DEFAULT' });
+      if (typeof socket.ping !== 'function') return;
+      if (this.watchdog) clearTimeout(this.watchdog);
+      this.watchdog = setInterval(() => {
+        if (this.socket !== socket) return;
+        if (!alive) return this.retry('Ynison: connection lost');
+        alive = false;
+        try { socket.ping!(); } catch { this.retry('Ynison: connection lost'); }
+      }, HEARTBEAT_MS);
     });
+    socket.on('pong', () => { alive = true; });
     socket.on('message', (data) => {
       if (this.socket !== socket) return;
+      alive = true;
       let message: (Partial<YnisonState> & { error?: { message?: string } }) | null = null;
       try { message = JSON.parse(String(data)); } catch { return; }
-      if (!message) return;
+      if (!message || typeof message !== 'object') return;
       if (message.error) return this.retry(errorText(message.error));
-      if (!message.player_state) return;
+      if (!validState(message.player_state)) return;
       this.attempt = 0;
       const first = !this.state;
-      this.state = { player_state: message.player_state, devices: message.devices ?? this.state?.devices ?? [], active_device_id_optional: message.active_device_id_optional ?? null };
+      this.state = { player_state: message.player_state, devices: Array.isArray(message.devices) ? message.devices : this.state?.devices ?? [], active_device_id_optional: message.active_device_id_optional ?? null };
       this.stateAt = Date.now();
-      if (first) this.events.onStatus?.('connected');
-      this.events.onState?.(this.state);
+      if (first) this.notify(this.events.onStatus, 'connected');
+      if (this.state) this.notify(this.events.onState, this.state);
     });
     socket.on('error', (error) => { if (this.socket === socket) this.retry(error.message); });
     socket.on('close', () => { if (this.socket === socket) { this.state = null; this.retry(); } });
@@ -234,8 +277,12 @@ export class YnisonClient {
 
   private sendRaw(message: object): boolean {
     if (!this.socket || this.socket.readyState !== WebSocket.OPEN) return false;
-    this.socket.send(JSON.stringify(message));
-    return true;
+    try {
+      this.socket.send(JSON.stringify(message));
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   private send(body: object): boolean {

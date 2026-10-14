@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ChatMessage } from '@shared/types';
 import { defaultSettings } from '@shared/defaults';
 import { EventBus } from '../src/main/core/eventBus';
@@ -10,7 +10,14 @@ import { SongRequestService, musicLinkInText, searchHits, yandexTrackId, youtube
 const first = 'M7lc1UVf-VE';
 const second = 'dQw4w9WgXcQ';
 
+afterEach(() => { vi.restoreAllMocks(); });
+
 function setup(extra: { remote?: RemotePlayer } = {}) {
+  // Background tracks that end at once count as broken: `later()` lets "time pass" before a track ends.
+  let offset = 0;
+  const realNow = Date.now.bind(Date);
+  vi.spyOn(Date, 'now').mockImplementation(() => realNow() + offset);
+  const later = (ms = 5_000) => { offset += ms; };
   const bus = new EventBus();
   const state = new StateHub(bus);
   let settings = defaultSettings('en');
@@ -34,7 +41,7 @@ function setup(extra: { remote?: RemotePlayer } = {}) {
   const yandexFind = vi.fn(async (_query: string): Promise<YandexTrack[] | null> => []);
   const details = vi.fn(async (_id: string): Promise<VideoDetails | null> => null);
   const service = new SongRequestService(ctx, music, broadcast, reply, { lookup, rewards: { settle }, search, yandexTrack: yandex, yandexSearch: yandexFind, details, ...extra });
-  return { ctx, service, music, broadcast, reply, lookup, settle, search, yandex, yandexFind, details };
+  return { ctx, service, music, broadcast, reply, lookup, settle, search, yandex, yandexFind, details, later };
 }
 
 describe('song requests', () => {
@@ -303,7 +310,7 @@ describe('song requests', () => {
   });
 
   it('plays the background playlist between requests and gives way to a request', async () => {
-    const { ctx, service, music } = setup();
+    const { ctx, service, music , later } = setup();
     type Song = Extract<typeof service.overlayMessage, { type: 'song' }>;
     const message = () => service.overlayMessage as Song;
     ctx.settings.set('songRequests', { ...ctx.settings.get('songRequests'), backgroundEnabled: true, backgroundShuffle: false,
@@ -314,6 +321,7 @@ describe('song requests', () => {
     expect(message()).toMatchObject({ background: true, request: { videoId: 'aaaaaaaaaaa' }, config: { backgroundTracks: [], bannedUsers: [] } });
     expect(music.pauseCurrent).not.toHaveBeenCalled();
     // A finished background track moves on to the next entry.
+    later();
     expect(await service.playerFinished(message().request!.id, message().nonce!)).toBe(true);
     expect(ctx.state.current.songRequests.background?.videoId).toBe('bbbbbbbbbbb');
     const stale = message();
@@ -337,6 +345,7 @@ describe('song requests', () => {
     // An entry YouTube refuses is left out; removing the playing one or switching off stops it.
     expect(await service.playerFinished(message().request!.id, message().nonce!, 'blocked (150)', 'video')).toBe(true);
     expect(ctx.state.current.songRequests.background?.videoId).toBe('aaaaaaaaaaa');
+    later();
     expect(await service.playerFinished(message().request!.id, message().nonce!)).toBe(true);
     expect(ctx.state.current.songRequests.background?.videoId).toBe('aaaaaaaaaaa');
     ctx.settings.set('songRequests', { ...ctx.settings.get('songRequests'), backgroundEnabled: false });
@@ -530,7 +539,7 @@ describe('song requests', () => {
     ctx.bus.emit('event', { id: 'r1', source: 'twitch', timestamp: 1, userName: 'Ann', type: 'redemption', rewardId: 'song-reward', rewardTitle: 'Song', cost: 500, input: 'https://music.yandex.ru/album/7/track/42' });
     await vi.waitFor(() => expect(ctx.state.current.songRequests.current?.videoId).toBe('ym:42'));
     expect(ctx.state.current.songRequests.current).toMatchObject({ provider: 'yandex', yandexTrackId: '42', url: 'https://music.yandex.ru/album/7/track/42', title: 'Artist - Track' });
-    expect(remote.play).toHaveBeenCalledWith({ trackId: '42', albumId: '7', title: 'Artist - Track', cover: 'avatars.yandex.net/x/%%', durationMs: 200_000 });
+    expect(remote.play).toHaveBeenCalledWith({ trackId: '42', albumId: '7', title: 'Artist - Track', cover: 'avatars.yandex.net/x/%%', durationMs: 200_000, volume: 100 });
     expect(search).not.toHaveBeenCalled();
     expect(broadcast.mock.calls.at(-1)![0]).toMatchObject({ type: 'song', request: { provider: 'yandex' } });
     service.pause(true);
@@ -573,5 +582,89 @@ describe('song requests', () => {
     // Not connected: Yandex links go through YouTube instead, and queued Yandex tracks can't be started.
     (remote as { ready: boolean }).ready = false;
     await expect(service.play()).rejects.toThrow('Yandex Music is not connected');
+  });
+  it('keeps favourites from requests and plays them, local files included, as background music', async () => {
+    const { ctx, service, broadcast , later } = setup();
+    type Song = Extract<typeof service.overlayMessage, { type: 'song' }>;
+    const message = () => service.overlayMessage as Song;
+    service.add(`https://youtu.be/${first}`, 'Ann', 'manual', 'a', { title: 'Liked' });
+    expect(service.toggleFavorite('a')).toBe(true);
+    expect(ctx.settings.get('songRequests').backgroundTracks).toEqual([{ videoId: first, title: 'Liked' }]);
+    expect(service.toggleFavorite('a')).toBe(false);
+    expect(service.toggleFavorite('a')).toBe(true);
+    expect(() => service.toggleFavorite('missing')).toThrow();
+    expect(service.addLocal([{ file: 'My song.mp3', title: 'My song' }, { file: 'My song.mp3', title: 'dup' }])).toBe(1);
+    expect(service.addLocal([{ file: 'My song.mp3', title: 'again' }])).toBe(0);
+    service.remove('a');
+    ctx.settings.set('songRequests', { ...ctx.settings.get('songRequests'), backgroundEnabled: true, backgroundShuffle: false });
+    // "Listen now" on the local song: it plays from the app's media folder in the OBS source.
+    service.setPlayerConnected(true);
+    await vi.waitFor(() => expect(message().background).toBe(true));
+    service.playFavorite('local:My song.mp3');
+    await vi.waitFor(() => expect(message().request).toMatchObject({ provider: 'local', url: '/media/songs/My%20song.mp3', title: 'My song' }));
+    expect(ctx.state.current.songRequests.background).toMatchObject({ videoId: 'local:My song.mp3', kind: 'local' });
+    expect(broadcast.mock.calls.at(-1)![0]).toMatchObject({ background: true });
+    // The overlay reports the end: the next favourite follows.
+    later();
+    expect(await service.playerFinished(message().request!.id, message().nonce!)).toBe(true);
+    expect(message().request).toMatchObject({ videoId: first });
+    expect(service.removeFavorite('local:My song.mp3')).toMatchObject({ kind: 'local', file: 'My song.mp3' });
+    expect(service.removeFavorite('local:My song.mp3')).toBeNull();
+    expect(() => service.playFavorite('nope')).toThrow('not in the favourites');
+  });
+
+  it('plays Yandex Music favourites in the Yandex Music app as background music and hands the app back', async () => {
+    let listener: (event: RemotePlayerEvent) => void = () => undefined;
+    const remote = { ready: true, play: vi.fn(async () => undefined), pause: vi.fn(), release: vi.fn(), hold: vi.fn(), setVolume: vi.fn(), onEvent: vi.fn((fn: (event: RemotePlayerEvent) => void) => { listener = fn; return () => undefined; }) };
+    const { ctx, service, yandex , later } = setup({ remote });
+    yandex.mockResolvedValueOnce({ trackId: '42', albumId: '7', title: 'Fav', durationMs: 1000, available: true });
+    await service.addBackground('https://music.yandex.ru/album/7/track/42');
+    expect(ctx.settings.get('songRequests').backgroundTracks).toEqual([{ videoId: 'ym:42', kind: 'yandex', title: 'Fav', albumId: '7', durationMs: 1000 }]);
+    await expect(service.addBackground('https://music.yandex.ru/track/42')).rejects.toThrow('already');
+    // No OBS source needed for it; background volume goes to the app.
+    ctx.settings.set('songRequests', { ...ctx.settings.get('songRequests'), backgroundEnabled: true, backgroundVolume: 30 });
+    await vi.waitFor(() => expect(remote.play).toHaveBeenCalledWith(expect.objectContaining({ trackId: '42', volume: 30 })));
+    expect(ctx.state.current.songRequests.background).toMatchObject({ videoId: 'ym:42', kind: 'yandex' });
+    service.pause(true);
+    expect(remote.pause).toHaveBeenCalledWith(true);
+    // It ended: the only favourite plays again.
+    later();
+    listener({ type: 'ended', trackId: '42' });
+    expect(remote.play).toHaveBeenCalledTimes(2);
+    // Switching background off gives the app back.
+    ctx.settings.set('songRequests', { ...ctx.settings.get('songRequests'), backgroundEnabled: false });
+    expect(ctx.state.current.songRequests.background).toBeNull();
+    expect(remote.release).toHaveBeenCalledWith(true);
+  });
+  it('limits chat lookups so !sr spam cannot flood the network', async () => {
+    const { service, search, reply } = setup();
+    const waiting: (() => void)[] = [];
+    search.mockImplementation(() => new Promise((done) => { waiting.push(() => done([])); }));
+    const roles = { broadcaster: false, moderator: false, vip: false, subscriber: false };
+    const chat = (id: string, userId: string) => service.handleChat({ id, platform: 'twitch', userId, userName: userId, text: '!sr some song', roles } as ChatMessage);
+    const pending = [chat('m1', 'u1'), chat('m2', 'u1'), chat('m3', 'u2'), chat('m4', 'u3'), chat('m5', 'u4'), chat('m6', 'u5')];
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    // One lookup per viewer, four at a time; the fifth viewer is told to wait.
+    expect(search).toHaveBeenCalledTimes(4);
+    expect(reply).toHaveBeenCalledWith(expect.stringMatching(/Busy/), 'm6');
+    for (const done of waiting) done();
+    await Promise.all(pending);
+    // A failed try gets a short pause.
+    await chat('m7', 'u1');
+    expect(search).toHaveBeenCalledTimes(4);
+  });
+
+  it('skips a background track that ends right after it starts instead of looping on it', async () => {
+    const { ctx, service } = setup();
+    type Song = Extract<typeof service.overlayMessage, { type: 'song' }>;
+    const message = () => service.overlayMessage as Song;
+    service.addLocal([{ file: 'broken.mp3', title: 'Broken' }]);
+    ctx.settings.set('songRequests', { ...ctx.settings.get('songRequests'), backgroundEnabled: true });
+    service.setPlayerConnected(true);
+    await vi.waitFor(() => expect(message().request).toMatchObject({ provider: 'local' }));
+    expect(await service.playerFinished(message().request!.id, message().nonce!)).toBe(true);
+    // The only favourite is left out instead of restarting endlessly.
+    expect(message().request).toBeNull();
+    expect(ctx.state.current.songRequests.lastError).toContain('right after it started');
   });
 });

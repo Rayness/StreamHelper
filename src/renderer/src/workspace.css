@@ -211,6 +211,9 @@
 .song-eyebrow { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--accent-text); }
 .song-now-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
 .song-volume { width: 100%; }
+.song-fav.active { color: var(--accent); }
+.song-fav.active svg { fill: currentColor; }
+.song-own-title { display: inline-flex; align-items: center; gap: 6px; }
 .song-volume > svg { flex: none; color: var(--text-2); }
 .song-now-card + .song-volume { margin: -4px 0 12px; padding: 0 10px; }
 @media (max-width: 760px) { .song-now-card { grid-template-columns: 96px minmax(0, 1fr); } .song-now-card img { width: 96px; } .song-now-actions { grid-column: 1 / -1; justify-content: flex-start; } }

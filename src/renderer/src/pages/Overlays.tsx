@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react';
 import { defaultAd, defaultBanner, defaultGoal, defaultLabel, defaultTimer, uid } from '@shared/defaults';
 import { timerValue } from '@shared/timer';
 import { formatClock } from '@shared/template';
-import type { SongListen as SongListenMode } from '@shared/types';
+import type { SongListen as SongListenMode, SongRequest, SongTrack } from '@shared/types';
 import type { AdCampaign, AdEntrance, AlertType, Banner, BannerLayout, ChatBackgroundStyle, ChatEnterAnimation, ChatExitAnimation, EmoteRainStyle, Goal, GoalKind, Label, MusicSourceKind, OverlayKind, OverlayTimer } from '@shared/types';
 import { Icon } from '../components/icons';
 import { MediaPicker } from '../components/MediaPicker';
@@ -294,7 +294,23 @@ function VolumeSlider({ value, label, onChange }: { value: number; label: string
   );
 }
 
-const thumb = (videoId: string, cover?: string) => cover ?? (videoId.startsWith('ym:') ? '' : `https://i.ytimg.com/vi/${videoId}/mqdefault.jpg`);
+const thumb = (videoId: string, cover?: string) => cover ?? (/^(ym|local):/.test(videoId) ? '' : `https://i.ytimg.com/vi/${videoId}/mqdefault.jpg`);
+
+/** Cover of a track: the YouTube thumbnail, the Yandex Music cover, or a note for a song from the computer. */
+function TrackCover({ videoId, cover, lazy }: { videoId: string; cover?: string; lazy?: boolean }) {
+  const src = thumb(videoId, cover);
+  return src ? <img src={src} alt="" loading={lazy ? 'lazy' : undefined} onError={hideBroken} /> : <span className="song-jam-cover"><Icon name={videoId.startsWith('local:') ? 'music' : 'disc'} size={18} /></span>;
+}
+
+/** The heart next to a request or the playing track: add it to / take it out of the favourites. */
+function FavoriteButton({ item }: { item: Pick<SongRequest, 'id' | 'videoId'> }) {
+  const t = useT();
+  const on = useApp((d) => (d.settings!.songRequests.backgroundTracks ?? []).some((track) => track.videoId === item.videoId));
+  return <IconButton icon="heart" className={`song-fav ${on ? 'active' : ''}`} label={t(on ? 'song.fav.remove' : 'song.fav.add')} onClick={() => void callOk('song:favorite', item.id)} />;
+}
+
+const trackSource = (track: SongTrack) => track.kind === 'local' ? 'song.fav.local' : track.kind === 'yandex' ? 'song.ym.title' : 'song.fav.youtube';
+const trackUrl = (track: SongTrack) => track.kind === 'yandex' ? `https://music.yandex.ru/track/${track.videoId.slice(3)}` : `https://www.youtube.com/watch?v=${track.videoId}`;
 /** Offline or blocked cover: keep the empty frame instead of a broken-image icon. */
 const hideBroken = (e: React.SyntheticEvent<HTMLImageElement>) => { e.currentTarget.style.visibility = 'hidden'; };
 type SongSource = 'redemption' | 'donation' | 'chat' | 'manual';
@@ -345,7 +361,7 @@ function SongQueue() {
   const yandexReady = useApp((d) => d.state!.yandexMusic.status === 'connected') && cfg.yandexPlayback !== false;
   const youtubeReady = state.playerConnected && cfg.videoLayout !== 'queue';
   // YouTube plays in the OBS source; Yandex Music tracks play in the connected Yandex Music app.
-  const playable = (item: { provider?: 'yandex' }) => item.provider === 'yandex' ? yandexReady : youtubeReady;
+  const playable = (item: { provider?: SongRequest['provider'] }) => item.provider === 'yandex' ? yandexReady : youtubeReady;
   const canPlay = !!state.queue[0] && playable(state.queue[0]);
   const current = state.current;
   const source = (s: SongSource) => t(`song.src.${s}`);
@@ -367,7 +383,7 @@ function SongQueue() {
       {state.lastRejected && <p className="muted small">{t('song.lastRejected', { user: state.lastRejected.userName, reason: state.lastRejected.reason })}</p>}
       {current ? (
         <div className={`song-now-card ${state.paused ? 'paused' : ''}`}>
-          <img src={thumb(current.videoId, current.cover)} alt="" onError={hideBroken} />
+          <TrackCover videoId={current.videoId} cover={current.cover} />
           <div className="song-now-info">
             <span className="song-eyebrow">{state.paused ? t('song.pausedNow') : t('song.now')}{current.provider === 'yandex' ? ` · ${t('song.ym.title')}` : ''}</span>
             <strong title={current.url}>{current.title ?? current.url}</strong>
@@ -376,15 +392,16 @@ function SongQueue() {
           <div className="song-now-actions">
             <Button variant="primary" icon={state.paused ? 'play' : 'pause'} onClick={() => void call('song:pause', !state.paused)}>{state.paused ? t('song.resume') : t('song.pause')}</Button>
             <Button icon="skip" onClick={() => void call('song:skip')}>{t('song.skip')}</Button>
+            <FavoriteButton item={current} />
             <IconButton icon="lock" label={t('song.banTrack')} onClick={() => void call('song:banVideo', current.videoId)} />
             {current.source !== 'manual' && <IconButton icon="ban" label={t('song.banUser', { user: current.userName })} onClick={() => void call('song:banUser', current.userName)} />}
           </div>
         </div>
       ) : state.background ? (
         <div className={`song-now-card ${state.paused ? 'paused' : ''}`} data-song-background={state.background.videoId}>
-          <img src={thumb(state.background.videoId)} alt="" onError={hideBroken} />
+          <TrackCover videoId={state.background.videoId} cover={state.background.cover} />
           <div className="song-now-info">
-            <span className="song-eyebrow">{state.paused ? t('song.pausedNow') : t('song.bg.now')}</span>
+            <span className="song-eyebrow">{state.paused ? t('song.pausedNow') : t('song.bg.now')}{state.background.kind ? ` · ${t(trackSource(state.background))}` : ''}</span>
             <strong>{state.background.title ?? `https://youtu.be/${state.background.videoId}`}</strong>
             <span className="muted small">{t('song.bg.nowHint')}</span>
           </div>
@@ -414,7 +431,7 @@ function SongQueue() {
             onDoubleClick={() => { if (playable(item)) void call('song:play', item.id); }}>
             <span className="song-grip" aria-hidden><Icon name="grip" size={14} /></span>
             <span className="song-pos">{i + 1}</span>
-            <img src={thumb(item.videoId, item.cover)} alt="" loading="lazy" onError={hideBroken} />
+            <TrackCover videoId={item.videoId} cover={item.cover} lazy />
             <div className="song-item-info">
               <strong title={item.url}>{item.title ?? item.url}</strong>
               <span className="muted small">{item.userName} · {source(item.source)}{item.provider === 'yandex' ? ` · ${t('song.ym.title')}` : ''}</span>
@@ -422,6 +439,7 @@ function SongQueue() {
             <div className="song-item-actions">
               <IconButton icon="play" label={t('song.playNow')} disabled={!playable(item)} onClick={() => void call('song:play', item.id)} />
               <IconButton icon="chevron" className="song-up" label={t('song.playNext')} disabled={i === 0} onClick={() => void call('song:move', item.id, 0)} />
+              <FavoriteButton item={item} />
               <IconButton icon="external" label={t(item.provider === 'yandex' ? 'song.ym.open' : 'song.openYoutube')} onClick={() => void call('shell:openExternal', item.url)} />
               <IconButton icon="lock" label={t('song.banTrack')} onClick={() => void call('song:banVideo', item.videoId)} />
               {item.source !== 'manual' && <IconButton icon="ban" label={t('song.banUser', { user: item.userName })} onClick={() => void call('song:banUser', item.userName)} />}
@@ -500,7 +518,15 @@ function SongBackground() {
   const [jamLink, setJamLink] = useState('');
   const [jamName, setJamName] = useState('');
   const [addingJam, setAddingJam] = useState(false);
+  const [importing, setImporting] = useState(false);
   const tracks = cfg.backgroundTracks ?? [];
+  const importLocal = async () => {
+    if (importing) return;
+    setImporting(true);
+    const added = await call('song:importLocal');
+    setImporting(false);
+    if (added) toast('success', 'song.fav.imported', { n: added });
+  };
   const jams = cfg.jams ?? [];
   const jamId = jams.some((jam) => jam.id === cfg.backgroundJamId) ? cfg.backgroundJamId : '';
   const set = (patch: Partial<typeof cfg>) => saveSettings('songRequests', { ...cfg, ...patch });
@@ -546,18 +572,20 @@ function SongBackground() {
         <TextInput value={jamLink} onChange={setJamLink} placeholder={t('song.jam.linkPlaceholder')} onKeyDown={(e) => { if (e.key === 'Enter') void addJam(); }} />
         <Button icon="plus" disabled={addingJam || !jamLink.trim()} onClick={() => void addJam()}>{t('song.jam.add')}</Button>
       </div>
-      <span className="field-label song-own-title">{t('song.jam.ownTitle')}</span>
+      <span className="field-label song-own-title"><Icon name="heart" size={14} /> {t('song.jam.ownTitle')}</span>
+      <p className="muted small">{t('song.fav.hint')}</p>
       <ol className="song-queue song-tracks">
         {tracks.map((track) => (
-          <li key={track.videoId} data-bg-track={track.videoId} className={playing === track.videoId ? 'playing' : ''}>
-            <img src={thumb(track.videoId)} alt="" loading="lazy" onError={hideBroken} />
+          <li key={track.videoId} data-bg-track={track.videoId} className={playing === track.videoId ? 'playing' : ''} onDoubleClick={() => void callOk('song:favoritePlay', track.videoId)}>
+            <TrackCover videoId={track.videoId} cover={track.cover} lazy />
             <div className="song-item-info">
               <strong>{track.title ?? `https://youtu.be/${track.videoId}`}</strong>
-              {playing === track.videoId && <span className="muted small">{t('song.bg.now')}</span>}
+              <span className="muted small">{playing === track.videoId ? t('song.bg.now') : t(trackSource(track))}</span>
             </div>
             <div className="song-item-actions">
-              <IconButton icon="external" label={t('song.openYoutube')} onClick={() => void call('shell:openExternal', `https://www.youtube.com/watch?v=${track.videoId}`)} />
-              <IconButton icon="x" label={t('common.delete')} onClick={() => set({ backgroundTracks: tracks.filter((item) => item.videoId !== track.videoId) })} />
+              <IconButton icon="play" label={t('song.fav.play')} onClick={() => void callOk('song:favoritePlay', track.videoId)} />
+              {track.kind !== 'local' && <IconButton icon="external" label={t(track.kind === 'yandex' ? 'song.ym.open' : 'song.openYoutube')} onClick={() => void call('shell:openExternal', trackUrl(track))} />}
+              <IconButton icon="x" label={t('common.delete')} onClick={() => void call('song:favoriteRemove', track.videoId)} />
             </div>
           </li>
         ))}
@@ -566,6 +594,7 @@ function SongBackground() {
       <div className="song-add">
         <TextInput value={link} onChange={setLink} placeholder={t('song.bg.placeholder')} onKeyDown={(e) => { if (e.key === 'Enter') void add(); }} />
         <Button icon="plus" disabled={adding || !link.trim()} onClick={() => void add()}>{t('common.add')}</Button>
+        <Button icon="folder" disabled={importing} onClick={() => void importLocal()}>{t('song.fav.import')}</Button>
       </div>
       <div className="form song-bg-options">
         <Field label={t('song.bg.volume')}><VolumeSlider value={cfg.backgroundVolume ?? 40} label={t('song.bg.volume')} onChange={(backgroundVolume) => set({ backgroundVolume })} /></Field>

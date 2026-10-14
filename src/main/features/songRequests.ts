@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import type { ChatMessage, OverlayMessage, SongJam, SongRequest, SongRequestSettings, StreamEvent, StreamEventOf } from '@shared/types';
+import type { ChatMessage, OverlayMessage, SongJam, SongRequest, SongRequestSettings, SongTrack, StreamEvent, StreamEventOf } from '@shared/types';
 import type { AppContext } from '../core/context';
 import type { MusicService } from './music';
 import { hasPermission } from '../bot/permissions';
@@ -196,7 +196,7 @@ export const yandexSearch: YandexSearch = async (query) => {
 export type RemotePlayerEvent = { type: 'ended'; trackId: string } | { type: 'failed'; trackId: string; error: string };
 export interface RemotePlayer {
   readonly ready: boolean;
-  play(track: { trackId: string; albumId?: string; title?: string; cover?: string; durationMs?: number }): Promise<void>;
+  play(track: { trackId: string; albumId?: string; title?: string; cover?: string; durationMs?: number; volume?: number }): Promise<void>;
   pause(paused: boolean): void;
   /** Requests are over: stop ours and (with `restore`) give the streamer's own music back. */
   release(restore: boolean): void;
@@ -207,6 +207,20 @@ export interface RemotePlayer {
 }
 
 export const isRemote = (item: Pick<SongRequest, 'provider'> | null | undefined): boolean => item?.provider === 'yandex';
+
+/** Folder inside the media directory with songs added from the computer. */
+export const LOCAL_SONGS_DIR = 'songs';
+export const localSongUrl = (file: string): string => `/media/${LOCAL_SONGS_DIR}/${encodeURIComponent(file)}`;
+
+/** The favourite a queued or playing item becomes. */
+export function trackOf(item: SongRequest): SongTrack {
+  if (item.provider === 'local') return { videoId: item.videoId, kind: 'local', file: item.videoId.slice('local:'.length), ...(item.title ? { title: item.title } : {}) };
+  if (item.provider === 'yandex') {
+    return { videoId: item.videoId, kind: 'yandex', ...(item.title ? { title: item.title } : {}), ...(item.cover ? { cover: item.cover } : {}),
+      ...(item.yandexAlbumId ? { albumId: item.yandexAlbumId } : {}), ...(item.durationMs ? { durationMs: item.durationMs } : {}) };
+  }
+  return { videoId: item.videoId, ...(item.title ? { title: item.title } : {}) };
+}
 
 export interface SearchHit { videoId: string; title: string }
 /** YouTube search for "artist - song". `null` = YouTube could not be asked. */
@@ -311,6 +325,11 @@ export function songLimits(cfg: Partial<SongRequestSettings>): { perUser: number
 }
 
 type Found = { url: string; videoId: string; title?: string; yandex?: YandexTrack };
+
+const MAX_CHAT_LOOKUPS = 4;
+/** A background track shorter than this is treated as broken, not as finished. */
+const MIN_BACKGROUND_MS = 3_000;
+const FAILED_CHAT_PAUSE_MS = 3_000;
 type Extra = Pick<SongRequest, 'title' | 'redemption' | 'provider' | 'yandexTrackId' | 'yandexAlbumId' | 'cover' | 'durationMs'>;
 
 const yandexUrl = (track: Pick<YandexTrack, 'trackId' | 'albumId'>): string => track.albumId ? `https://music.yandex.ru/album/${track.albumId}/track/${track.trackId}` : `https://music.yandex.ru/track/${track.trackId}`;
@@ -332,6 +351,8 @@ export class SongRequestService {
   private autoBlocked = false;
   private generation = 0;
   private chatCooldowns = new Map<string, number>();
+  /** Chat requests being looked up: one per viewer, a few at a time, so `!sr` spam can't flood the network. */
+  private chatPending = new Set<string>();
   /** Background playlist track playing while no request is; shaped like a request for the overlay. */
   private background: SongRequest | null = null;
   private bgNonce: string | null = null;
@@ -341,6 +362,8 @@ export class SongRequestService {
   /** The Yandex Music app played a request in this run: it gets the streamer's music back at the end. */
   private remoteUsed = false;
   private remoteVolume: number | null = null;
+  /** Favourite the streamer asked to hear right now. */
+  private bgForce: string | null = null;
 
   constructor(
     private ctx: AppContext,
@@ -369,14 +392,14 @@ export class SongRequestService {
     this.ctx.state.patch('songRequests', { playerConnected: connected });
     if (!connected && isRemote(this.current)) {
       // The request plays in the Yandex Music app, not in OBS: only the background music stops.
-      this.stopBackground();
+      if (!isRemote(this.background)) this.stopBackground();
       this.sync();
     } else if (!connected) {
       this.generation++;
       this.current = null;
       this.paused = false;
       this.nonce = null;
-      this.stopBackground();
+      if (!isRemote(this.background)) this.stopBackground();
       this.sync();
       void this.resumeMusic();
     }
@@ -663,7 +686,8 @@ export class SongRequestService {
       if (isRemote(next)) {
         try {
           this.remoteUsed = true;
-          await this.options.remote!.play({ trackId: next.yandexTrackId!, albumId: next.yandexAlbumId, title: next.title, cover: next.cover?.replace(/^https:\/\//, '').replace('200x200', '%%'), durationMs: next.durationMs });
+          this.remoteVolume = this.ctx.settings.get('songRequests').volume;
+          await this.options.remote!.play({ trackId: next.yandexTrackId!, albumId: next.yandexAlbumId, title: next.title, cover: next.cover?.replace(/^https:\/\//, '').replace('200x200', '%%'), durationMs: next.durationMs, volume: this.remoteVolume });
         } catch (error) {
           // Nothing to play on (app closed) or no connection: keep the request for a retry.
           this.autoBlocked = true;
@@ -702,7 +726,7 @@ export class SongRequestService {
   pause(paused: boolean): void {
     if ((!this.current && !this.background) || this.paused === paused) return;
     this.paused = paused;
-    if (isRemote(this.current)) this.options.remote?.pause(paused);
+    if (isRemote(this.current ?? this.background)) this.options.remote?.pause(paused);
     this.sync();
     this.broadcast(this.overlayMessage);
   }
@@ -722,6 +746,25 @@ export class SongRequestService {
 
   /** The Yandex Music app finished our track, or could not start it. */
   private async onRemote(event: RemotePlayerEvent): Promise<void> {
+    try {
+      await this.handleRemote(event);
+    } catch (error) {
+      this.ctx.state.patch('songRequests', { lastError: String((error as Error).message ?? error).slice(0, 240) });
+    }
+  }
+
+  private async handleRemote(event: RemotePlayerEvent): Promise<void> {
+    const background = this.background;
+    if (!this.current && background && isRemote(background) && background.yandexTrackId === event.trackId) {
+      this.stopBackground();
+      const instant = event.type === 'ended' && Date.now() - background.requestedAt < MIN_BACKGROUND_MS;
+      if (event.type === 'failed' || instant) {
+        this.bgFailed.add(background.videoId);
+        this.ctx.state.patch('songRequests', { lastError: (event.type === 'failed' ? event.error : `${background.title ?? background.url}: ended at once`).slice(0, 240) });
+      }
+      this.nextBackground();
+      return;
+    }
     const current = this.current;
     if (!current || !isRemote(current) || current.yandexTrackId !== event.trackId) return;
     if (event.type === 'ended') {
@@ -752,8 +795,11 @@ export class SongRequestService {
     const next = this.ctx.settings.get('songQueue')[0];
     if (next && this.ctx.settings.get('songRequests').autoPlay && this.canStart(next)) {
       await this.play().catch((error) => this.ctx.state.patch('songRequests', { lastError: String((error as Error).message ?? error) }));
-    } else await this.resumeMusic();
-    this.startBackground();
+      this.startBackground();
+    } else {
+      this.startBackground();
+      await this.resumeMusic();
+    }
   }
 
   private activeJam(): SongJam | undefined {
@@ -768,27 +814,64 @@ export class SongRequestService {
     return true;
   }
 
-  /** Fill the silence with the streamer's playlist; any request takes the player over. */
+  /** YouTube and local files play in the OBS source; Yandex Music favourites in the connected Yandex Music app. */
+  private trackReady(track: SongTrack): boolean {
+    if (track.kind === 'yandex') return !!this.options.remote?.ready && this.ctx.settings.get('songRequests').yandexPlayback !== false;
+    return this.ctx.settings.get('songRequests').videoLayout !== 'queue' && this.ctx.state.current.songRequests.playerConnected;
+  }
+
+  private backgroundItem(track: SongTrack): SongRequest {
+    const base = { id: `bg_${randomBytes(6).toString('hex')}`, videoId: track.videoId, userName: '', source: 'manual' as const, requestedAt: Date.now(), ...(track.title ? { title: track.title } : {}) };
+    if (track.kind === 'local') return { ...base, provider: 'local', url: localSongUrl(track.file ?? track.videoId.slice('local:'.length)) };
+    if (track.kind === 'yandex') {
+      const trackId = track.videoId.slice(3);
+      return { ...base, provider: 'yandex', yandexTrackId: trackId, url: yandexUrl({ trackId, albumId: track.albumId }),
+        ...(track.albumId ? { yandexAlbumId: track.albumId } : {}), ...(track.cover ? { cover: track.cover } : {}), ...(track.durationMs ? { durationMs: track.durationMs } : {}) };
+    }
+    return { ...base, url: `https://www.youtube.com/watch?v=${track.videoId}` };
+  }
+
+  /** Nothing plays any more: the Yandex Music app gets the streamer's own music back. */
+  private releaseIdleRemote(): void {
+    if (this.remoteUsed && !this.current && !this.background && !this.starting) {
+      this.remoteUsed = false;
+      this.options.remote?.release(this.ctx.settings.get('songRequests').resumeWindowsMusic);
+    }
+  }
+
+  /** Fill the silence with the streamer's favourites; any request takes the player over. */
   private startBackground(): void {
     const cfg = this.ctx.settings.get('songRequests');
-    if (this.current || this.starting || this.background || this.bgBlocked || this.autoBlocked || !cfg.backgroundEnabled || cfg.videoLayout === 'queue' || !this.ctx.state.current.songRequests.playerConnected) return;
+    if (this.current || this.starting || this.background) return;
+    if (this.bgBlocked || this.autoBlocked || !cfg.backgroundEnabled) return this.releaseIdleRemote();
     const jam = this.activeJam();
     if (jam) {
       // The overlay walks the mix itself and remembers where a request interrupted it.
-      if (this.bgFailed.has(jam.listId)) return;
+      if (this.bgFailed.has(jam.listId) || cfg.videoLayout === 'queue' || !this.ctx.state.current.songRequests.playerConnected) return this.releaseIdleRemote();
       const url = jam.videoId ? `https://www.youtube.com/watch?v=${jam.videoId}&list=${jam.listId}` : `https://www.youtube.com/playlist?list=${jam.listId}`;
       this.background = { id: `bg_${randomBytes(6).toString('hex')}`, videoId: jam.videoId ?? '', playlistId: jam.listId, url, userName: '', source: 'manual', requestedAt: Date.now(), title: jam.name };
     } else {
-      const tracks = (cfg.backgroundTracks ?? []).filter((track) => !this.bgFailed.has(track.videoId));
-      if (!tracks.length) return;
+      const tracks = (cfg.backgroundTracks ?? []).filter((track) => !this.bgFailed.has(track.videoId) && this.trackReady(track));
+      if (!tracks.length) return this.releaseIdleRemote();
       let next = tracks[(tracks.findIndex((track) => track.videoId === this.bgLast) + 1) % tracks.length];
       if (cfg.backgroundShuffle && tracks.length > 1) {
         const pool = tracks.filter((track) => track.videoId !== this.bgLast);
         next = pool[Math.floor(Math.random() * pool.length)];
       }
+      const forced = this.bgForce ? tracks.find((track) => track.videoId === this.bgForce) : undefined;
+      this.bgForce = null;
+      if (forced) next = forced;
       this.bgLast = next.videoId;
-      this.background = { id: `bg_${randomBytes(6).toString('hex')}`, videoId: next.videoId, url: `https://www.youtube.com/watch?v=${next.videoId}`, userName: '', source: 'manual', requestedAt: Date.now(), ...(next.title ? { title: next.title } : {}) };
+      this.background = this.backgroundItem(next);
     }
+    const item = this.background;
+    if (isRemote(item)) {
+      this.remoteUsed = true;
+      const volume = cfg.backgroundVolume ?? 40;
+      this.remoteVolume = volume;
+      this.options.remote!.play({ trackId: item.yandexTrackId!, albumId: item.yandexAlbumId, title: item.title, cover: item.cover?.replace(/^https:\/\//, '').replace('200x200', '%%'), durationMs: item.durationMs, volume })
+        .catch((error) => void this.onRemote({ type: 'failed', trackId: item.yandexTrackId!, error: String((error as Error).message ?? error) }));
+    } else if (this.remoteUsed) this.options.remote?.hold();
     this.bgNonce = randomBytes(20).toString('hex');
     this.paused = false;
     this.sync();
@@ -802,6 +885,7 @@ export class SongRequestService {
     if (!this.background) {
       this.sync();
       this.broadcast(this.overlayMessage);
+      this.releaseIdleRemote();
     }
   }
 
@@ -847,12 +931,75 @@ export class SongRequestService {
     }
   }
 
-  /** Add a video to the background playlist, with the same YouTube checks as a request. */
+  private saveFavorites(update: (tracks: SongTrack[]) => SongTrack[]): void {
+    const cfg = this.ctx.settings.get('songRequests');
+    this.ctx.settings.set('songRequests', { ...cfg, backgroundTracks: update(cfg.backgroundTracks ?? []) });
+  }
+
+  private isFavorite(videoId: string): boolean {
+    return (this.ctx.settings.get('songRequests').backgroundTracks ?? []).some((track) => track.videoId === videoId);
+  }
+
+  /** The heart next to a request or the playing track: add it to the favourites or take it out. */
+  toggleFavorite(id: string): boolean {
+    const item = [this.current, this.background, ...this.ctx.settings.get('songQueue')].find((entry) => entry?.id === id);
+    if (!item || item.playlistId || !item.videoId) throw new Error(this.ru ? 'Этот трек нельзя добавить в избранное.' : 'This track cannot be added to favourites.');
+    if (this.isFavorite(item.videoId)) {
+      this.saveFavorites((tracks) => tracks.filter((track) => track.videoId !== item.videoId));
+      return false;
+    }
+    this.saveFavorites((tracks) => [...tracks, trackOf(item)]);
+    return true;
+  }
+
+  /** Take a favourite out; the caller deletes the file of a local song. */
+  removeFavorite(videoId: string): SongTrack | null {
+    const track = (this.ctx.settings.get('songRequests').backgroundTracks ?? []).find((item) => item.videoId === videoId) ?? null;
+    if (track) this.saveFavorites((tracks) => tracks.filter((item) => item.videoId !== videoId));
+    return track;
+  }
+
+  /** Songs copied from the computer into the app. */
+  addLocal(files: { file: string; title: string }[]): number {
+    const fresh = files.filter((item, i) => !this.isFavorite(`local:${item.file}`) && files.findIndex((other) => other.file === item.file) === i);
+    if (fresh.length) this.saveFavorites((tracks) => [...tracks, ...fresh.map((item) => ({ videoId: `local:${item.file}`, kind: 'local' as const, file: item.file, title: item.title.slice(0, 200) }))]);
+    return fresh.length;
+  }
+
+  /** Hear this favourite now: background music switches to it (and turns on if it was off). */
+  playFavorite(videoId: string): void {
+    const track = (this.ctx.settings.get('songRequests').backgroundTracks ?? []).find((item) => item.videoId === videoId);
+    if (!track) throw new Error(this.ru ? 'Трека нет в избранном.' : 'This track is not in the favourites.');
+    if (this.current) throw new Error(this.ru ? 'Сейчас играет заказ — избранное включится после очереди.' : 'A request is playing; favourites play after the queue.');
+    if (!this.trackReady(track)) {
+      throw new Error(track.kind === 'yandex'
+        ? (this.ru ? 'Яндекс Музыка не подключена.' : 'Yandex Music is not connected.')
+        : (this.ru ? 'Добавьте источник «Заказ музыки» в OBS и включите показ видео.' : 'Add the Song Request source to OBS and turn video on.'));
+    }
+    this.bgForce = videoId;
+    this.bgFailed.delete(videoId);
+    this.bgBlocked = false;
+    const cfg = this.ctx.settings.get('songRequests');
+    this.stopBackground();
+    if (!cfg.backgroundEnabled || cfg.backgroundJamId) this.ctx.settings.set('songRequests', { ...cfg, backgroundEnabled: true, backgroundJamId: '' });
+    else this.nextBackground();
+  }
+
+  /** Add a YouTube video or Yandex Music track to the favourites, with the same checks as a request. */
   async addBackground(url: string): Promise<void> {
+    const yandexId = yandexTrackId(url.trim());
+    if (yandexId) {
+      if (this.isFavorite(`ym:${yandexId}`)) throw new Error(this.ru ? 'Этот трек уже в избранном.' : 'This track is already in the favourites.');
+      const track = await (this.options.yandexTrack ?? yandexTrackInfo)(yandexId);
+      if (!track) throw new Error(this.reason('yandexFailed'));
+      if (this.isFavorite(`ym:${yandexId}`)) return;
+      this.saveFavorites((tracks) => [...tracks, { videoId: `ym:${yandexId}`, kind: 'yandex', title: track.title, ...(track.cover ? { cover: track.cover } : {}), ...(track.albumId ? { albumId: track.albumId } : {}), ...(track.durationMs ? { durationMs: track.durationMs } : {}) }]);
+      return;
+    }
     const videoId = youtubeVideoId(url.trim());
-    if (!videoId) throw new Error(this.ru ? 'Вставьте ссылку на одно видео YouTube.' : 'Paste a single YouTube video link.');
-    const exists = (): boolean => (this.ctx.settings.get('songRequests').backgroundTracks ?? []).some((track) => track.videoId === videoId);
-    if (exists()) throw new Error(this.ru ? 'Это видео уже есть в фоновом плейлисте.' : 'This video is already in the background playlist.');
+    if (!videoId) throw new Error(this.ru ? 'Вставьте ссылку на видео YouTube или трек Яндекс Музыки.' : 'Paste a YouTube video or Yandex Music track link.');
+    const exists = (): boolean => this.isFavorite(videoId);
+    if (exists()) throw new Error(this.ru ? 'Это видео уже в избранном.' : 'This video is already in the favourites.');
     const check = await (this.options.lookup ?? oembedLookup)(videoId);
     if (check && !check.ok) throw new Error(this.reason(check.reason));
     if (exists()) return;
@@ -899,6 +1046,11 @@ export class SongRequestService {
     if (!this.current && this.background && id === this.background.id && nonce === this.bgNonce) {
       const track = this.background;
       this.stopBackground();
+      // A broken file or video that "ends" at once would otherwise restart in a tight loop.
+      if (!error && !track.playlistId && Date.now() - track.requestedAt < MIN_BACKGROUND_MS) {
+        error = this.ru ? 'трек закончился сразу после начала — пропущен.' : 'the track ended right after it started, skipped.';
+        kind = 'video';
+      }
       if (error && kind === 'video') {
         // This playlist entry can't play here; leave it out until the player reconnects.
         this.bgFailed.add(track.playlistId ?? track.videoId);
@@ -937,14 +1089,14 @@ export class SongRequestService {
   private sync(): void {
     this.ctx.state.patch('songRequests', {
       current: this.current,
-      background: !this.current && this.background ? { videoId: this.background.videoId, ...(this.background.title ? { title: this.background.title } : {}) } : null,
+      background: !this.current && this.background ? { ...(this.background.playlistId ? { videoId: this.background.videoId, ...(this.background.title ? { title: this.background.title } : {}) } : trackOf(this.background)) } : null,
       paused: this.paused,
       queue: this.ctx.settings.get('songQueue').filter((item) => item.id !== this.current?.id),
     });
   }
 
   private async resumeMusic(): Promise<void> {
-    if (this.remoteUsed && !isRemote(this.current)) {
+    if (this.remoteUsed && !isRemote(this.current) && !isRemote(this.background)) {
       this.remoteUsed = false;
       this.options.remote?.release(this.ctx.settings.get('songRequests').resumeWindowsMusic);
     }
@@ -965,14 +1117,20 @@ export class SongRequestService {
     const ru = this.ctx.settings.get('language') === 'ru';
     let response: string;
     if (!hasPermission(message.roles, cfg.chatPermission)) response = ru ? 'У вас нет доступа к заказу музыки.' : 'You cannot request songs.';
-    else if ((this.chatCooldowns.get(message.userId) ?? 0) > Date.now()) return true;
+    else if ((this.chatCooldowns.get(message.userId) ?? 0) > Date.now() || this.chatPending.has(message.userId)) return true;
+    else if (this.chatPending.size >= MAX_CHAT_LOOKUPS) response = ru ? 'Сейчас ищу другие заказы — повторите через пару секунд.' : 'Busy with other requests, try again in a few seconds.';
     else {
-      // Replies (queued / rejected) are sent by `request` itself.
-      const result = await this.request(parsed.args.join(' '), message.userName, 'chat', `chat_${message.id}`, undefined, message.id, message.userLogin);
-      if (result.ok) {
+      this.chatPending.add(message.userId);
+      try {
+        // Replies (queued / rejected) are sent by `request` itself.
+        const result = await this.request(parsed.args.join(' '), message.userName, 'chat', `chat_${message.id}`, undefined, message.id, message.userLogin);
+        // A failed try gets a short pause too, so a typo can be fixed but not spammed.
+        const pause = result.ok ? Math.max(0, cfg.chatCooldownSec) * 1000 : FAILED_CHAT_PAUSE_MS;
         this.chatCooldowns.delete(message.userId);
-        this.chatCooldowns.set(message.userId, Date.now() + Math.max(0, cfg.chatCooldownSec) * 1000);
+        this.chatCooldowns.set(message.userId, Date.now() + pause);
         if (this.chatCooldowns.size > 1000) this.chatCooldowns.delete(this.chatCooldowns.keys().next().value!);
+      } finally {
+        this.chatPending.delete(message.userId);
       }
       return true;
     }
@@ -993,16 +1151,19 @@ export class SongRequestService {
     const jam = this.activeJam();
     const stale = jam ? this.background?.playlistId !== jam.listId
       : !!this.background?.playlistId || !(cfg.backgroundTracks ?? []).some((track) => track.videoId === this.background?.videoId);
+    const remoteBg = isRemote(this.background);
     // Background music was switched off, another jam was chosen or the playing entry was removed.
-    if (this.background && (!cfg.backgroundEnabled || cfg.videoLayout === 'queue' || stale)) {
+    if (this.background && (!cfg.backgroundEnabled || (cfg.videoLayout === 'queue' && !remoteBg) || (remoteBg && cfg.yandexPlayback === false) || stale)) {
       this.stopBackground();
       this.paused = false;
       this.sync();
       this.broadcast(this.overlayMessage);
+      this.releaseIdleRemote();
     }
-    if (isRemote(this.current) && cfg.volume !== this.remoteVolume) {
-      this.remoteVolume = cfg.volume;
-      this.options.remote?.setVolume(cfg.volume);
+    const remoteLevel = isRemote(this.current) ? cfg.volume : !this.current && isRemote(this.background) ? cfg.backgroundVolume ?? 40 : null;
+    if (remoteLevel !== null && remoteLevel !== this.remoteVolume) {
+      this.remoteVolume = remoteLevel;
+      this.options.remote?.setVolume(remoteLevel);
     }
     if (isRemote(this.current) && cfg.yandexPlayback === false) {
       // Yandex playback switched off mid-track: the request stays queued.
