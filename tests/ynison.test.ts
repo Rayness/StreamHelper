@@ -198,4 +198,43 @@ describe('Yandex Music remote', () => {
     await expect(service.play({ trackId: '42' })).rejects.toThrow('Open the Yandex Music app or site');
     service.stop();
   });
+
+  it.each(['disable', 'logout'] as const)('restores the previous queue before disconnecting on %s', async (action) => {
+    const { ctx, service, hub } = setup();
+    ctx.settings.set('songRequests', { ...ctx.settings.get('songRequests'), resumeWindowsMusic: true });
+    hub.message(state('own', { progress_ms: 50_000 }));
+    await service.play({ trackId: '42' });
+    hub.message(state('42', {}, 'streamhelper-song-request'));
+    const sentBeforeDisconnect = hub.sent.length;
+    const close = vi.spyOn(hub, 'close');
+    close.mockImplementation(() => {
+      expect(hub.sent.length).toBeGreaterThan(sentBeforeDisconnect);
+      expect(hub.sent.at(-1)!.update_player_state.player_state).toMatchObject({
+        player_queue: { playable_list: [{ playable_id: 'own' }] },
+        status: { paused: false, progress_ms: 50_000 },
+      });
+      hub.readyState = 3;
+    });
+    if (action === 'disable') ctx.settings.set('songRequests', { ...ctx.settings.get('songRequests'), yandexPlayback: false });
+    else service.logout();
+    expect(close).toHaveBeenCalledOnce();
+    expect(service.ready).toBe(false);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('pauses the request before logout when restoring music is disabled', async () => {
+    const { ctx, service, hub } = setup();
+    ctx.settings.set('songRequests', { ...ctx.settings.get('songRequests'), resumeWindowsMusic: false });
+    hub.message(state('own'));
+    await service.play({ trackId: '42' });
+    hub.message(state('42', {}, 'streamhelper-song-request'));
+    const close = vi.spyOn(hub, 'close');
+    close.mockImplementation(() => {
+      expect(hub.sent.at(-1)!.update_playing_status.playing_status.paused).toBe(true);
+      hub.readyState = 3;
+    });
+    service.logout();
+    expect(close).toHaveBeenCalledOnce();
+    expect(vi.getTimerCount()).toBe(0);
+  });
 });

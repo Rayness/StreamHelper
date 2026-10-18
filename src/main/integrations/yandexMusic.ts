@@ -106,7 +106,10 @@ export class YandexMusicService implements RemotePlayer {
   private applySetting(): void {
     const saved = this.ctx.secrets.get('yandexMusic');
     if (!saved?.accessToken || !this.enabled) {
-      if (this.client) this.stop();
+      if (this.client) {
+        this.release(this.ctx.settings.get('songRequests').resumeWindowsMusic);
+        this.stop();
+      }
       if (saved?.accessToken) this.ctx.state.patch('yandexMusic', { status: 'disconnected', device: null, error: undefined });
       return;
     }
@@ -145,6 +148,7 @@ export class YandexMusicService implements RemotePlayer {
     const account = await fetchAccount(clean);
     if (account === 'invalid') throw new Error(this.ru ? 'Яндекс не принял токен. Войдите ещё раз.' : 'Yandex rejected the token. Sign in again.');
     if (!account) throw new Error(this.ru ? 'Не удалось связаться с Яндекс Музыкой. Проверьте интернет.' : 'Could not reach Yandex Music. Check the connection.');
+    this.release(this.ctx.settings.get('songRequests').resumeWindowsMusic);
     this.stop();
     const previous = this.ctx.secrets.get('yandexMusic');
     this.ctx.secrets.set('yandexMusic', { accessToken: clean, deviceId: previous?.deviceId ?? randomBytes(16).toString('hex'), uid: account.uid, login: account.login, displayName: account.displayName });
@@ -155,6 +159,7 @@ export class YandexMusicService implements RemotePlayer {
 
   logout(): void {
     const playing = this.expected;
+    this.release(this.ctx.settings.get('songRequests').resumeWindowsMusic);
     this.stop();
     this.ctx.secrets.set('yandexMusic', undefined);
     this.ctx.state.replace('yandexMusic', { status: 'disconnected' });

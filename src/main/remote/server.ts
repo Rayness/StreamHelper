@@ -46,6 +46,7 @@ export interface RemoteServerOptions {
 interface Client {
   info: RemoteClientInfo;
   ws: WebSocket;
+  keyHash: Buffer;
 }
 
 const hash = (value: string) => createHash('sha256').update(value).digest();
@@ -78,6 +79,7 @@ export class RemoteServer {
   private server: Server | null = null;
   private wss: WebSocketServer | null = null;
   private clients = new Set<Client>();
+  private proxies = new Map<Duplex, { moderatorId: string; close: () => void }>();
   private heartbeat: NodeJS.Timeout | null = null;
   private alive = new WeakSet<WebSocket>();
   private indexHtml: string | null = null;
@@ -121,6 +123,8 @@ export class RemoteServer {
     if (this.heartbeat) clearInterval(this.heartbeat);
     this.heartbeat = null;
     for (const c of this.clients) c.ws.terminate();
+    for (const proxy of this.proxies.values()) proxy.close();
+    this.proxies.clear();
     this.clients.clear();
     this.notify();
     this.wss?.close();
@@ -144,6 +148,7 @@ export class RemoteServer {
   /** Close every session of a moderator (removed, or the key was reset). */
   disconnectModerator(moderatorId: string, code = CLOSE_UNAUTHORIZED): void {
     for (const c of [...this.clients]) if (c.info.moderatorId === moderatorId) c.ws.close(code, 'signed out');
+    for (const proxy of this.proxies.values()) if (proxy.moderatorId === moderatorId) proxy.close();
   }
 
   /** Permissions changed: the moderator's UI reloads to show the new set. */
@@ -152,7 +157,10 @@ export class RemoteServer {
   }
 
   kick(clientId: string): void {
-    for (const c of [...this.clients]) if (c.info.id === clientId) c.ws.close(CLOSE_KICKED, 'kicked');
+    for (const c of [...this.clients]) if (c.info.id === clientId) {
+      c.ws.close(CLOSE_KICKED, 'kicked');
+      for (const proxy of this.proxies.values()) if (proxy.moderatorId === c.info.moderatorId) proxy.close();
+    }
   }
 
   private send(c: Client, data: string): void {
@@ -176,11 +184,10 @@ export class RemoteServer {
   }
 
   private upgrade(wss: WebSocketServer, req: IncomingMessage, socket: Duplex, head: Buffer): void {
-    const url = new URL(req.url ?? '/', 'http://remote');
+    let url: URL;
+    try { url = new URL(req.url ?? '/', 'http://remote'); } catch { socket.destroy(); return; }
     const moderator = this.moderator(readCookie(req.headers.cookie, REMOTE_COOKIE));
     if (!moderator) { socket.write('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n'); socket.destroy(); return; }
-    if (url.pathname === '/ws') { this.proxyUpgrade(req, socket, head); return; }
-    if (url.pathname !== '/remote/ws') { socket.destroy(); return; }
     // Another site's page can't drive the app with the moderator's cookie.
     const origin = req.headers.origin;
     if (origin) {
@@ -188,13 +195,16 @@ export class RemoteServer {
       try { host = new URL(origin).host; } catch { /* invalid origin */ }
       if (host !== req.headers.host) { socket.write('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n'); socket.destroy(); return; }
     }
+    if (url.pathname === '/ws') { this.proxyUpgrade(req, socket, head, moderator.id); return; }
+    if (url.pathname !== '/remote/ws') { socket.destroy(); return; }
     wss.handleUpgrade(req, socket, head, (ws) => this.onConnection(ws, req, moderator));
   }
 
-  private onConnection(ws: WebSocket, req: IncomingMessage, moderator: RemoteModerator): void {
+  private onConnection(ws: WebSocket, req: IncomingMessage, moderator: RemoteModerator & { key: string }): void {
     const forwarded = String(req.headers['x-forwarded-for'] ?? '').split(',')[0]?.trim();
     const client: Client = {
       ws,
+      keyHash: hash(moderator.key),
       info: { id: randomBytes(8).toString('hex'), moderatorId: moderator.id, name: moderator.name, address: forwarded || (req.socket.remoteAddress ?? '').replace(/^::ffff:/, ''), since: Date.now() },
     };
     this.clients.add(client);
@@ -213,19 +223,20 @@ export class RemoteServer {
   }
 
   private async onMessage(client: Client, raw: string): Promise<void> {
+    if (client.ws.readyState !== client.ws.OPEN) return;
     let msg: { t?: unknown; id?: unknown; channel?: unknown; args?: unknown };
     try {
       msg = JSON.parse(raw);
     } catch {
       return;
     }
-    if (msg.t !== 'call' || typeof msg.id !== 'number' || typeof msg.channel !== 'string') return;
+    if (!msg || typeof msg !== 'object' || msg.t !== 'call' || typeof msg.id !== 'number' || typeof msg.channel !== 'string') return;
     const { id, channel } = msg;
     const args = Array.isArray(msg.args) ? msg.args : [];
     const reply = (body: object) => this.send(client, JSON.stringify({ t: 'res', id, ...body }));
     // Fresh lookup: a removed moderator or a revoked permission stops working immediately.
     const moderator = this.opts.moderators().find((m) => m.id === client.info.moderatorId);
-    if (!moderator) { client.ws.close(CLOSE_UNAUTHORIZED, 'signed out'); return; }
+    if (!moderator || !timingSafeEqual(client.keyHash, hash(moderator.key))) { client.ws.close(CLOSE_UNAUTHORIZED, 'signed out'); return; }
     if (!remoteAllowed(moderator.permissions, channel, args)) return reply({ ok: false, error: 'forbidden', denied: true });
     try {
       let value = await this.opts.invoke(channel, args);
@@ -244,7 +255,8 @@ export class RemoteServer {
   }
 
   private async handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
-    const url = new URL(req.url ?? '/', 'http://remote');
+    let url: URL;
+    try { url = new URL(req.url ?? '/', 'http://remote'); } catch { this.text(res, 400, 'Bad URL'); return; }
     try {
       if (req.method !== 'GET' && req.method !== 'HEAD') return this.text(res, 405, 'Method not allowed');
       const key = url.searchParams.get('key');
@@ -319,7 +331,7 @@ export class RemoteServer {
     upstream.end();
   }
 
-  private proxyUpgrade(req: IncomingMessage, socket: Duplex, head: Buffer): void {
+  private proxyUpgrade(req: IncomingMessage, socket: Duplex, head: Buffer, moderatorId: string): void {
     const port = this.opts.overlayPort();
     const upstream: Socket = connect(port, '127.0.0.1', () => {
       const lines = [`GET ${req.url} HTTP/1.1`];
@@ -333,7 +345,8 @@ export class RemoteServer {
       upstream.pipe(socket);
       socket.pipe(upstream);
     });
-    const close = () => { upstream.destroy(); socket.destroy(); };
+    const close = () => { this.proxies.delete(socket); upstream.destroy(); socket.destroy(); };
+    this.proxies.set(socket, { moderatorId, close });
     upstream.on('error', close);
     socket.on('error', close);
     upstream.on('close', close);

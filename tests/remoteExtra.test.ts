@@ -1,5 +1,6 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
+import { request } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { runInNewContext } from 'node:vm';
@@ -89,6 +90,20 @@ function socket(url: string, cookie: string, path = '/remote/ws', headers: Recor
 }
 
 describe('remote server: http', () => {
+  it('rejects malformed request targets without crashing the server', async () => {
+    const h = await server();
+    const status = await new Promise<number | undefined>((resolve, reject) => {
+      const req = request(h.url, { path: 'http://[' }, (res) => {
+        res.resume();
+        res.on('end', () => resolve(res.statusCode));
+      });
+      req.on('error', reject);
+      req.end();
+    });
+    expect(status).toBe(400);
+    expect((await fetch(h.url)).status).toBe(200);
+  });
+
   it('rejects other methods, path traversal and unknown paths', async () => {
     const h = await server();
     const cookie = { Cookie: 'sh_remote=key-anna' };
@@ -150,6 +165,9 @@ describe('remote server: sessions', () => {
     const c = socket(h.url, 'sh_remote=key-anna');
     await c.opened;
     c.ws.send('not json');
+    c.ws.send('null');
+    c.ws.send('false');
+    c.ws.send('[]');
     c.ws.send(JSON.stringify({ t: 'call', id: 'x', channel: 'alerts:pause' }));
     c.ws.send(JSON.stringify({ t: 'other' }));
     c.ws.send(JSON.stringify({ t: 'call', id: 99, channel: 42 }));
@@ -207,6 +225,36 @@ describe('remote server: sessions', () => {
     const c = socket(h.url, 'sh_remote=key-anna', '/other');
     await expect(c.opened).rejects.toThrow();
   });
+
+  it('invalidates an authenticated socket as soon as its key changes', async () => {
+    const invoked: string[] = [];
+    const h = await server({ invoke: async (channel) => { invoked.push(channel); return null; } });
+    const c = socket(h.url, 'sh_remote=key-anna');
+    await c.opened;
+    await c.next((m) => m.t === 'push');
+    h.moderators[0].key = 'rotated-key';
+    c.ws.send(JSON.stringify({ t: 'call', id: 1, channel: 'alerts:pause', args: [true] }));
+    expect(await c.closed).toBe(CLOSE_UNAUTHORIZED);
+    expect(invoked).toEqual([]);
+    expect((await fetch(h.url + '/?key=key-anna', { redirect: 'manual' })).status).toBe(401);
+    expect((await fetch(h.url + '/?key=rotated-key', { redirect: 'manual' })).status).toBe(302);
+  });
+
+  it('does not execute buffered calls after a session is disconnected', async () => {
+    const invoked: string[] = [];
+    const h = await server({ invoke: async (channel) => {
+      invoked.push(channel);
+      h.s.disconnectModerator('m1');
+      return null;
+    } });
+    const c = socket(h.url, 'sh_remote=key-anna');
+    await c.opened;
+    await c.next((m) => m.t === 'push');
+    c.ws.send(JSON.stringify({ t: 'call', id: 1, channel: 'alerts:pause', args: [true] }));
+    c.ws.send(JSON.stringify({ t: 'call', id: 2, channel: 'alerts:pause', args: [false] }));
+    expect(await c.closed).toBe(CLOSE_UNAUTHORIZED);
+    expect(invoked).toEqual(['alerts:pause']);
+  });
 });
 
 describe('remote server: overlay previews', () => {
@@ -239,6 +287,31 @@ describe('remote server: overlay previews', () => {
     expect(msg).toEqual({ type: 'profileVisibility', visible: true });
     const anonymous = socket(h.url, '', '/ws?kind=chat');
     await expect(anonymous.opened).rejects.toThrow();
+  });
+
+  it('rejects a foreign origin on the overlay websocket', async () => {
+    const h = await withOverlay();
+    const c = socket(h.url, 'sh_remote=key-anna', '/ws?kind=chat&preview=1', { Origin: 'https://other.example' });
+    await expect(c.opened).rejects.toThrow('403');
+  });
+
+  it('closes overlay tunnels when the moderator is revoked', async () => {
+    const h = await withOverlay();
+    const c = socket(h.url, 'sh_remote=key-anna', '/ws?kind=chat&preview=1');
+    await c.next(() => true);
+    h.moderators[0].key = 'rotated-key';
+    h.s.disconnectModerator('m1');
+    await c.closed;
+    expect(c.ws.readyState).toBe(WebSocket.CLOSED);
+  });
+
+  it('closes overlay tunnels when the server stops', async () => {
+    const h = await withOverlay();
+    const c = socket(h.url, 'sh_remote=key-anna', '/ws?kind=chat&preview=1');
+    await c.next(() => true);
+    await h.s.stop();
+    await c.closed;
+    expect(c.ws.readyState).toBe(WebSocket.CLOSED);
   });
 
   it('answers 502 when the overlay server is down', async () => {
