@@ -1,0 +1,23 @@
+{
+  "passed": true,
+  "checks": [
+    "sign-in page without a valid key",
+    "app renders from the invite link, key removed from the URL",
+    "moderator badge shown, connections hidden",
+    "allowed call runs, refused calls never reach the app",
+    "settings changes push to the moderator live",
+    "allowed settings section saves",
+    "preferences limited to look and shortcuts, theme stays local",
+    "overlay previews and their websocket work remotely",
+    "permission change reloads the moderator UI and applies",
+    "kicked session shows a banner and stays down",
+    "removed moderator lands on the sign-in page",
+    "no console errors (CSP, scripts) in the moderator browser",
+    "streamer turns remote access on with a chosen port",
+    "streamer adds a moderator and toggles permissions",
+    "invite link built for the chosen address",
+    "moderator signs in with the link; streamer sees them online and their actions",
+    "permission granted from the tab applies to the open session",
+    "kick, new key, delete and turning off work from the tab"
+  ]
+}
