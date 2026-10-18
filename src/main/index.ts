@@ -64,6 +64,7 @@ import { TtsEngine } from './features/ttsEngine';
 import { KawakiService } from './integrations/kawaki/service';
 import { invokeHandler, onPush, push, registerIpc } from './ipc';
 import { RemoteAccessService } from './remote/service';
+import { SceneStudioService } from './sceneStudio/service';
 import { ObsService } from './obs/obs';
 import { createAuthRoutes } from './overlay/authPages';
 import { createDockRoutes } from './overlay/dock';
@@ -162,6 +163,8 @@ async function bootstrap(): Promise<void> {
     (alert) => overlay.broadcast('alerts', { type: 'alert', alert }),
     () => overlay.broadcast('alerts', { type: 'alertSkip' }),
   );
+  const sceneStudio = new SceneStudioService(ctx, alerts, (scene, event) => push('scene:preview', { scene, event }));
+  void sceneStudio.start().catch((err) => console.warn('[scene-studio] MCP startup failed', err));
   const overlayTests = new OverlayTests(ctx, alerts, (kind, message) => overlay.broadcast(kind, message), (event) => push('event', event));
   let hub!: OverlayHub;
   let dockRoute!: ReturnType<typeof createDockRoutes>;
@@ -533,6 +536,13 @@ async function bootstrap(): Promise<void> {
   onPush((channel, payload) => remote.push(channel, payload));
 
   registerIpc({
+    'scene:test': (scene, event) => sceneStudio.preview(scene, event),
+    'scene:ai:get': () => sceneStudio.ai.getConfig(),
+    'scene:ai:configure': (config, key) => sceneStudio.ai.configure(config, key),
+    'scene:ai:generate': (request) => sceneStudio.ai.generate(request),
+    'scene:mcp:status': () => sceneStudio.status(),
+    'scene:mcp:configure': (enabled, port) => sceneStudio.configure(enabled, port),
+    'scene:mcp:rotate': () => sceneStudio.rotate(),
     'app:init': () => ({
       settings: settings.all,
       state: state.current,
@@ -854,6 +864,7 @@ async function bootstrap(): Promise<void> {
     void obs.disconnect();
     void overlay.stop();
     void remote.stop();
+    void sceneStudio.stop();
   });
 
   // Keep running in the tray: overlays must stay alive while OBS is open.

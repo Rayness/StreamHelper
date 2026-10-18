@@ -9,7 +9,7 @@ import { OverlayBar, ScaledFrame } from '../components/overlay';
 import { Button, Card, ColorInput, CopyField, Field, IconButton, NumberInput, PageHeader, Select, TextInput, Toggle } from '../components/ui';
 import { FontPicker } from '../components/FontPicker';
 import { useT } from '../i18n';
-import { call, saveSettings, useApp, useSub } from '../store';
+import { call, navigate, saveSettings, useApp, useSub } from '../store';
 
 const VARS: Record<AlertType, string> = {
   follow: '{user}',
@@ -29,6 +29,7 @@ export function Alerts() {
   const overlayUrl = useApp((d) => d.state!.overlayUrl);
   const currency = useApp((d) => d.settings!.currency);
   const lang = useApp((d) => d.settings!.language);
+  const remote = useApp((d) => d.remote);
   const [selected, setSelected] = useSub<AlertType>('alerts', 'follow', ALERT_TYPES);
   const [tierId, setTierId] = useState<string>('');
   const [previewKey, setPreviewKey] = useState(0);
@@ -64,7 +65,7 @@ export function Alerts() {
 
   return (
     <div className="page alerts-page">
-      <PageHeader title={t('nav.alerts')} subtitle={t('alerts.subtitle')} />
+      <PageHeader title={t('nav.alerts')} subtitle={t('alerts.subtitle')} actions={!remote && <Button icon="sparkle" onClick={() => navigate('eventStudio')}>{lang === 'ru' ? 'Студия событий' : 'Event Studio'}</Button>} />
       <OverlayBar kind="alerts" name={t('nav.alerts')} />
       <div className="workspace-alert-run"><div><strong>{queue.current || t(queue.paused ? 'dash.alertsPaused' : 'workspace.alertIdle')}</strong><span className="muted small">{t('dash.alertQueue',{n:queue.queueLength})}</span></div><Button data-alert-control="pause" icon={queue.paused ? 'play' : 'pause'} onClick={() => void call('alerts:pause', !queue.paused)}>{t(queue.paused ? 'dash.alertsResume' : 'dash.alertsPause')}</Button><Button data-alert-control="skip" icon="skip" disabled={!queue.current} onClick={() => void call('alerts:skip')}>{t('dash.alertsSkip')}</Button></div>
       <div className="alert-type-picker">

@@ -1,0 +1,443 @@
+.event-studio {
+  max-width:1900px;
+}
+.studio-local-badge {
+  padding:7px 11px;
+  border:1px solid #9b75ff50;
+  border-radius:20px;
+  color:#c9b6ff;
+  font-size:12px;
+}
+.studio-topbar {
+  display:flex;
+  align-items:center;
+  gap:20px;
+  padding:16px 0 22px;
+}
+.studio-layout {
+  display:grid;
+  grid-template-columns:215px minmax(0,1fr);
+  gap:20px;
+}
+.studio-library {
+  background:var(--bg-elevated,#171922);
+  border:1px solid var(--border,#ffffff14);
+  border-radius:14px;
+  padding:16px;
+  align-self:start;
+  min-width:0;
+}
+.studio-library h3 {
+  display:flex;
+  justify-content:space-between;
+  margin:0 0 16px;
+  font-size:14px;
+}
+.studio-library h3 span {
+  color:#a892df;
+}
+.studio-library h4 {
+  margin:24px 0 12px;
+  font-size:12px;
+  color:var(--text-muted,#9393a8);
+  text-transform:uppercase;
+  letter-spacing:.08em;
+}
+.studio-scene-list {
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+  margin-bottom:16px;
+  max-height:430px;
+  overflow:auto;
+}
+.studio-scene-list>button {
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+  text-align:left;
+  padding:12px;
+  background:transparent;
+  color:inherit;
+  border:1px solid transparent;
+  border-radius:9px;
+  cursor:pointer;
+}
+.studio-scene-list>button:hover {
+  background:#ffffff06;
+}
+.studio-scene-list>button.active {
+  border-color:#ae87ff66;
+  background:#9b6bff16;
+}
+.studio-scene-list strong {
+  font-size:13px;
+  overflow-wrap:anywhere;
+}
+.studio-scene-list span {
+  font-size:11px;
+  color:var(--text-muted,#9997ac);
+}
+.studio-presets {
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
+.studio-presets .btn {
+  text-align:left;
+  justify-content:flex-start;
+  white-space:normal;
+  height:auto;
+  min-height:36px;
+}
+.studio-workspace {
+  min-width:0;
+}
+.studio-editor-head {
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:14px;
+  margin-bottom:18px;
+}
+.studio-editor-head h2 {
+  font-size:20px;
+  margin:0 0 7px;
+  overflow-wrap:anywhere;
+}
+.studio-state {
+  font-size:12px;
+  color:#9b9ba8;
+}
+.studio-state.dirty {
+  color:#f0c577;
+}
+.studio-actions {
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+}
+.studio-tabs {
+  margin-bottom:16px;
+  overflow-x:auto;
+  flex-wrap:nowrap;
+}
+.studio-content-split {
+  display:grid;
+  grid-template-columns:minmax(280px,1.12fr) minmax(290px,1fr);
+  gap:18px;
+  align-items:start;
+}
+.studio-edit-panel,.studio-preview-panel {
+  min-width:0;
+}
+.studio-code-caption {
+  display:flex;
+  justify-content:space-between;
+  gap:8px;
+  padding:11px 14px;
+  font:11px ui-monospace,monospace;
+  color:#a5a0b5;
+  border:1px solid #ffffff14;
+  border-bottom:0;
+  border-radius:10px 10px 0 0;
+  background:#14151c;
+}
+.studio-code {
+  display:block;
+  resize:vertical;
+  width:100%;
+  min-height:470px;
+  padding:18px;
+  line-height:1.6;
+  tab-size:2;
+  white-space:pre;
+  font:13px/1.6 Consolas,ui-monospace,monospace;
+  color:#d8cef1;
+  background:#101118;
+  border:1px solid #ffffff18;
+  border-radius:0 0 10px 10px;
+  outline:none;
+}
+.studio-code:focus {
+  border-color:#a77dff77;
+}
+.studio-api-note {
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  margin-top:12px;
+  padding:12px 2px;
+  font-size:11px;
+  color:#9994aa;
+  line-height:1.6;
+  overflow-wrap:anywhere;
+}
+.studio-api-note code {
+  color:#c2a5ff;
+}
+.studio-preview-panel {
+  position:sticky;
+  top:16px;
+  display:flex;
+  flex-direction:column;
+  gap:14px;
+}
+.studio-preview-head {
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:10px;
+  font-size:13px;
+}
+.studio-stage {
+  position:relative;
+  overflow:hidden;
+  border:1px solid #ffffff1c;
+  border-radius:12px;
+  background-color:#11131b;
+}
+.studio-stage iframe {
+  position:absolute;
+  top:0;
+  border:0;
+  transform-origin:top left;
+  pointer-events:none;
+}
+.studio-stage-placeholder {
+  display:flex;
+  flex-direction:column;
+  gap:18px;
+  align-items:center;
+  justify-content:center;
+  height:100%;
+  color:#9390a3;
+  font-size:12px;
+}
+.studio-stage-placeholder>span {
+  font-size:25px;
+  color:#b392fa;
+}
+.studio-preview-status {
+  color:#aaa0bf;
+  font-size:11px;
+  min-height:14px;
+}
+.studio-notice,.studio-error {
+  padding:12px 15px;
+  margin-bottom:15px;
+  border:1px solid #ab7aff35;
+  border-radius:9px;
+  background:#ab7aff0b;
+  color:#cbb6ef;
+  font-size:12px;
+  line-height:1.5;
+  overflow-wrap:anywhere;
+}
+.studio-error {
+  border-color:#fa757550;
+  color:#ffb1b1;
+  background:#d0474713;
+  margin:0;
+}
+.studio-json {
+  font:12px/1.6 Consolas,monospace;
+  tab-size:2;
+}
+.studio-edit-panel .card {
+  margin:0;
+}
+.studio-edit-panel .card-body {
+  min-width:0;
+}
+.studio-edit-panel textarea.input {
+  resize:vertical;
+  min-height:90px;
+}
+.studio-level {
+  display:grid;
+  grid-template-columns:minmax(80px,1fr) minmax(75px,.7fr);
+  gap:12px;
+  padding:14px 0;
+  border-bottom:1px solid #ffffff10;
+}
+.studio-level>.btn {
+  align-self:end;
+  justify-self:start;
+}
+.studio-route-result {
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  gap:8px;
+  padding:12px 0;
+  font-size:12px;
+  line-height:1.5;
+  color:#c7b7e5;
+}
+.studio-route-result>.btn {
+  margin-left:auto;
+}
+.studio-empty {
+  display:grid;
+  place-items:center;
+  min-height:400px;
+  color:#9991ab;
+  border:1px dashed #ffffff20;
+  border-radius:12px;
+}
+.studio-candidate {
+  display:flex;
+  align-items:center;
+  gap:9px;
+  flex-wrap:wrap;
+  border:1px solid #b28aff55;
+  border-radius:10px;
+  padding:12px;
+  grid-column:1/-1;
+  font-size:12px;
+}
+.studio-sample {
+  gap:12px;
+}
+.studio-sample .field-label {
+  font-size:11px;
+}
+.studio-sample .input {
+  font-size:12px;
+}
+.studio-preview-panel>.card .card-body {
+  padding:16px;
+}
+.studio-edit-panel .copy-field {
+  min-width:0;
+}
+.studio-edit-panel .copy-field input {
+  min-width:0;
+}
+.studio-edit-panel .form>.btn {
+  justify-self:start;
+}
+.studio-edit-panel .form>.studio-actions {
+  grid-column:1/-1;
+}
+.studio-stage iframe {
+  color-scheme:light;
+}
+@media(min-width:1600px) {
+  .studio-library {
+    width:230px;
+  }
+  .studio-layout {
+    grid-template-columns:230px minmax(0,1fr);
+  }
+  .studio-code {
+    min-height:590px;
+  }
+}
+@media(max-width:1200px) {
+  .studio-layout {
+    grid-template-columns:1fr;
+    gap:14px;
+  }
+  .studio-library {
+    padding:12px;
+  }
+  .studio-editor-head {
+    align-items:flex-start;
+    flex-direction:column;
+  }
+  .studio-content-split {
+    grid-template-columns:minmax(220px,1fr) minmax(240px,.9fr);
+    gap:12px;
+  }
+  .studio-actions .btn {
+    font-size:11px;
+    padding:7px 10px;
+  }
+  .studio-code {
+    min-height:440px;
+    font-size:12px;
+  }
+  .studio-code-caption {
+    flex-direction:column;
+    gap:4px;
+  }
+  .studio-library {
+    display:grid;
+    grid-template-columns:1fr auto;
+    gap:12px;
+  }
+  .studio-library h3 {
+    grid-column:1/-1;
+    margin:0;
+  }
+  .studio-scene-list {
+    flex-direction:row;
+    flex-wrap:wrap;
+    max-height:150px;
+    margin:0;
+  }
+  .studio-scene-list>button {
+    min-width:130px;
+  }
+  .studio-library h4 {
+    grid-column:1/-1;
+    margin:8px 0 0;
+  }
+  .studio-presets {
+    grid-column:1/-1;
+    flex-direction:row;
+    flex-wrap:wrap;
+  }
+  .studio-preview-panel {
+    position:static;
+  }
+  .studio-topbar {
+    flex-wrap:wrap;
+    gap:10px;
+  }
+}
+@media(max-width:720px) {
+  .studio-content-split {
+    grid-template-columns:1fr;
+  }
+  .studio-preview-panel {
+    grid-row:1;
+  }
+  .studio-preview-panel .card {
+    max-height:280px;
+    overflow:auto;
+  }
+  .studio-code {
+    min-height:350px;
+  }
+  .studio-tabs {
+    gap:0;
+  }
+  .studio-tabs .tab {
+    padding:9px 11px;
+    font-size:11px;
+  }
+  .studio-editor-head h2 {
+    font-size:18px;
+  }
+  .studio-library {
+    display:block;
+  }
+  .studio-library>.btn {
+    margin-top:12px;
+  }
+  .studio-library h4 {
+    margin:16px 0 8px;
+  }
+  .studio-presets {
+    gap:6px;
+  }
+  .studio-level {
+    grid-template-columns:1fr 1fr;
+  }
+  .studio-topbar {
+    padding-bottom:16px;
+  }
+}

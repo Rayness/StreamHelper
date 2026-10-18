@@ -215,7 +215,8 @@ export function remoteAllowed(permissions: readonly RemotePermission[], channel:
   const need = CHANNELS[channel as keyof IpcInvoke]!;
   if (need === VIEW) return true;
   if (channel === 'settings:set' || channel === 'settings:reset') {
-    const key = settingsPermission(String(args[0]));
+    if (typeof args[0] !== 'string') return false;
+    const key = settingsPermission(args[0]);
     return key !== null && permissions.includes(key);
   }
   return permissions.includes(need);

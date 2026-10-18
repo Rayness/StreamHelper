@@ -5,6 +5,7 @@ import { defaultSettings, mergeDefaults, migrateLists, migrateSettings } from '@
 import { merge3 } from '@shared/merge';
 import { ALL_OVERLAY_KINDS, LEGACY_OVERLAY_KINDS, OVERLAY_KINDS_0_12, PROFILE_KEYS, profileSnapshot } from '@shared/profiles';
 import { normalizeWorkspaceCards, normalizeMonitorLayout } from '@shared/workspace';
+import { normalizeEventStudio } from '@shared/eventStudio';
 import type { Language, OverlayKind, ProfileConfig, ProfileSettingsKey, Settings, SettingsKey } from '@shared/types';
 import type { EventBus } from './eventBus';
 
@@ -50,6 +51,7 @@ export class SettingsStore {
           ...tier,
           style: tier.style ? { ...config.alerts.style, ...tier.style } : undefined,
         }));
+        config.alerts.studio = normalizeEventStudio(config.alerts.studio);
         return {
           ...profile,
           config,

@@ -9,6 +9,7 @@ import type { IpcPush, RuntimeState, Settings } from '@shared/types';
 import { remoteAllowed, remoteReadOnly, type RemoteClientInfo, type RemoteLogEntry, type RemoteModerator, type RemoteSession } from '@shared/remote';
 import { safeJoin } from '../overlay/server';
 import { REMOTE_SHIM } from './shim';
+import { defaultAlerts } from '@shared/defaults';
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -239,7 +240,20 @@ export class RemoteServer {
     if (!moderator || !timingSafeEqual(client.keyHash, hash(moderator.key))) { client.ws.close(CLOSE_UNAUTHORIZED, 'signed out'); return; }
     if (!remoteAllowed(moderator.permissions, channel, args)) return reply({ ok: false, error: 'forbidden', denied: true });
     try {
-      let value = await this.opts.invoke(channel, args);
+      let invokeChannel = channel;
+      const invokeArgs = [...args];
+      // Executable scene source stays under the streamer's control, even for settings moderators.
+      if ((channel === 'settings:set' || channel === 'settings:reset') && args[0] === 'alerts') {
+        const settings = this.opts.snapshot().settings;
+        const profile = typeof args[2] === 'string' ? settings.profiles?.find((p) => p.id === args[2]) : undefined;
+        const studio = (profile?.config.alerts ?? settings.alerts)?.studio;
+        const submitted = channel === 'settings:reset' ? defaultAlerts(settings.language) : args[1];
+        if (!submitted || typeof submitted !== 'object' || Array.isArray(submitted)) return reply({ ok: false, error: 'Invalid alert settings' });
+        invokeChannel = 'settings:set';
+        invokeArgs[1] = { ...submitted, studio };
+        if (invokeArgs[3] && typeof invokeArgs[3] === 'object') invokeArgs[3] = { ...invokeArgs[3] as object, studio };
+      }
+      let value = await this.opts.invoke(invokeChannel, invokeArgs);
       if (channel === 'app:init' && value && typeof value === 'object') {
         const init = value as { state: RuntimeState };
         const session: RemoteSession = { name: moderator.name, permissions: moderator.permissions };

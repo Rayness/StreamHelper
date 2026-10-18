@@ -17,14 +17,16 @@ const Connections = lazy(() => import('./pages/Connections').then((m) => ({ defa
 const Profiles = lazy(() => import('./pages/Profiles').then((m) => ({ default:m.Profiles })));
 const Variables = lazy(() => import('./pages/Variables').then((m) => ({ default:m.Variables })));
 const Designer = lazy(() => import('./pages/Designer').then((m) => ({ default:m.Designer })));
+const EventStudio = lazy(() => import('./pages/EventStudio').then((m) => ({ default:m.EventStudio })));
 const Preferences = lazy(() => import('./pages/Settings').then((m) => ({ default:m.Settings })));
 
-const NAV: { page: Page & ('workspace' | 'dashboard' | 'designer' | 'variables' | 'connections'); icon: IconName; label: TKey }[] = [
+const NAV: { page: Page & ('workspace' | 'dashboard' | 'designer' | 'variables' | 'connections' | 'eventStudio'); icon: IconName; label: TKey }[] = [
   { page: 'workspace', icon: 'layers', label: 'workspace.title' },
   { page: 'dashboard', icon: 'dashboard', label: 'workspace.monitor' },
   { page: 'designer', icon: 'designer', label: 'nav.designer' },
   { page: 'variables', icon: 'braces', label: 'nav.variables' },
   { page: 'connections', icon: 'plug', label: 'nav.connections' },
+  { page: 'eventStudio', icon: 'sparkle', label: 'nav.eventStudio' },
 ];
 
 function SideStatus() {
@@ -52,8 +54,8 @@ export function App() {
   const profileName = useApp((d) => d.settings!.profiles.find((p) => p.id === d.settings!.activeProfileId)?.name ?? '—');
   const remote = useApp((d) => d.remote);
   // Connections (logins, tokens) stay on the streamer's computer.
-  const nav = remote && rawNav.page === 'connections' ? { ...rawNav, page: 'workspace' as const } : rawNav;
-  const navItems = remote ? NAV.filter((item) => item.page !== 'connections') : NAV;
+  const nav = remote && (rawNav.page === 'connections' || rawNav.page === 'eventStudio') ? { ...rawNav, page: 'workspace' as const } : rawNav;
+  const navItems = remote ? NAV.filter((item) => item.page !== 'connections' && item.page !== 'eventStudio') : NAV;
   const [palette,setPalette] = useState(false);
   const look = useAppearance();
   useApplyAppearance();
@@ -72,6 +74,7 @@ export function App() {
       else if (!e.shiftKey && e.code === 'Digit3') { e.preventDefault(); navigate('designer'); }
       else if (!e.shiftKey && e.code === 'Digit4') { e.preventDefault(); navigate('variables'); }
       else if (!e.shiftKey && e.code === 'Digit5') { e.preventDefault(); navigate('connections'); }
+      else if (!e.shiftKey && e.code === 'Digit6') { e.preventDefault(); navigate('eventStudio'); }
       else if (!e.shiftKey && e.code === 'Comma') { e.preventDefault(); navigate('settings'); }
       else if (e.shiftKey && e.code === 'KeyL') { e.preventDefault(); toggleThemeRef.current(); }
     };
@@ -87,7 +90,7 @@ export function App() {
       <div className="nav-group"><ul>{navItems.map((item, i) => <li key={item.page}><button className={nav.page === item.page ? 'active' : ''} aria-current={nav.page === item.page ? 'page' : undefined} onClick={() => navigate(item.page)} title={`Ctrl+${i + 1}`} data-kbd={`Ctrl ${i + 1}`}><Icon name={item.icon} size={18} /><span>{t(item.label)}</span></button></li>)}</ul></div>
       <div className="workspace-side-footer">{!remote && <SideStatus />}<div className="sidebar-quick"><button className="workspace-preferences" onClick={() => navigate('settings')} title={`${t('workspace.preferences')} (Ctrl+,)`}><Icon name="settings" size={16} /><span>{t('workspace.preferences')}</span></button><IconButton icon={look.theme === 'light' ? 'moon' : 'sun'} label={`${t('look.toggleTheme')} (Ctrl+Shift+L)`} onClick={toggleTheme} /><IconButton icon="palette" label={t('look.title')} onClick={() => navigate('settings','look')} /></div></div>
     </nav>
-    <main className="content"><ErrorBoundary key={nav.page}><Suspense fallback={<div className="page" role="status">…</div>}>{nav.page === 'dashboard' ? <Monitor /> : nav.page === 'connections' ? <Connections /> : nav.page === 'variables' ? <Variables /> : nav.page === 'designer' ? <Designer /> : <Workspace />}</Suspense></ErrorBoundary></main>
+    <main className="content"><ErrorBoundary key={nav.page}><Suspense fallback={<div className="page" role="status">…</div>}>{nav.page === 'dashboard' ? <Monitor /> : nav.page === 'connections' ? <Connections /> : nav.page === 'variables' ? <Variables /> : nav.page === 'designer' ? <Designer /> : nav.page === 'eventStudio' ? <EventStudio /> : <Workspace />}</Suspense></ErrorBoundary></main>
     {nav.dialog && <div className="workspace-dialog-backdrop" onMouseDown={closeDialog}><section className="workspace-dialog" role="dialog" aria-modal="true" aria-label={t(nav.dialog === 'profiles' ? 'nav.profiles' : 'workspace.preferences')} onMouseDown={(e) => e.stopPropagation()}><div className="workspace-dialog-close"><IconButton icon="x" label={t('common.cancel')} onClick={closeDialog} /></div><ErrorBoundary key={nav.dialog}><Suspense fallback={<span role="status">…</span>}>{nav.dialog === 'profiles' ? <Profiles /> : <Preferences />}</Suspense></ErrorBoundary></section></div>}
     <CommandPalette open={palette} onClose={() => setPalette(false)} /><Toasts />
   </div>;

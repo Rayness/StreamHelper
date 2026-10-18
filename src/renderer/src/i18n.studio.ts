@@ -1,6 +1,7 @@
 // Fonts, donation board, per-scene settings, OBS groups, variables and the overlay designer.
 export const ruStudio = {
   'nav.designer': 'Конструктор',
+  'nav.eventStudio': 'Студия событий',
   'nav.variables': 'Переменные',
 
   'font.bundled': 'Встроенный',
@@ -265,6 +266,7 @@ export const ruStudio = {
 
 export const enStudio: Record<keyof typeof ruStudio, string> = {
   'nav.designer': 'Designer',
+  'nav.eventStudio': 'Event Studio',
   'nav.variables': 'Variables',
 
   'font.bundled': 'Bundled',

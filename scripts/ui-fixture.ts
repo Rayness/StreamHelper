@@ -12,12 +12,18 @@ import { SongRequestService } from '../src/main/features/songRequests';
 import { TtsService } from '../src/main/features/tts';
 import { OverlayServer } from '../src/main/overlay/server';
 import { version } from '../package.json';
+import type { SecretsData } from '../src/main/core/secrets';
+import { SceneStudioService } from '../src/main/sceneStudio/service';
+import { defaultSceneAiConfig } from '../src/shared/sceneAi';
+import { createServer } from 'node:net';
 
 export async function createFixture(root: string, dataDir: string, push: (channel: string, value: unknown) => void) {
   const bus = new EventBus();
   const settings = new SettingsStore(join(dataDir, 'settings.json'), bus, 'ru');
   const state = new StateHub(bus);
-  const ctx = { bus, settings, state, toast: () => undefined } as unknown as AppContext;
+  const secrets: SecretsData = { sceneStudio: { config: defaultSceneAiConfig() } };
+  const ctx = { bus, settings, state, mediaDir: dataDir, toast: () => undefined,
+    secrets: { get: (key: keyof SecretsData) => secrets[key], set: (key: keyof SecretsData, value: never) => { secrets[key] = value; } } } as unknown as AppContext;
   const chat = sampleChatMessage('ru'); chat.fragments = [{ type: 'text', text: chat.text }];
   let alerts: AlertQueue;
   let songs: SongRequestService;
@@ -53,6 +59,15 @@ export async function createFixture(root: string, dataDir: string, push: (channe
     speak: async () => ({ url: 'data:audio/wav;base64,', wav: new Uint8Array() }),
     say: async () => undefined, loadUserVoices: () => ({}), saveUserVoices: () => undefined,
   });
+  const probe = createServer();
+  await new Promise<void>((resolve) => probe.listen(0, '127.0.0.1', resolve));
+  secrets.sceneStudio!.mcpPort = (probe.address() as import('node:net').AddressInfo).port;
+  await new Promise<void>((resolve) => probe.close(() => resolve()));
+  const studio = new SceneStudioService(ctx, alerts, (scene, event) => push('scene:preview', { scene, event }), async (_url, init) => {
+    const input = JSON.parse(JSON.parse(String(init?.body)).input);
+    const generated = { ...input.scene, html: '<main><h1>AI draft</h1><p data-field="user"></p></main>', css: 'body{color:white;background:transparent;font-family:Segoe UI}', js: '', published: false };
+    return new Response(JSON.stringify({ output: [{ type: 'message', content: [{ type: 'output_text', text: JSON.stringify(generated) }] }] }), { headers: { 'Content-Type': 'application/json' } });
+  });
   new EmoteRain(ctx,{broadcast} as any);
   const overlayTests = new OverlayTests(ctx,alerts,broadcast,(event) => push('event',event));
   bus.on('settings:changed', () => push('settings', settings.all));
@@ -63,6 +78,13 @@ export async function createFixture(root: string, dataDir: string, push: (channe
     async invoke(channel: string, ...args: any[]) {
       calls.push({ channel, args });
       switch (channel as keyof IpcInvoke) {
+        case 'scene:test': return studio.preview(args[0], args[1]);
+        case 'scene:ai:get': return studio.ai.getConfig();
+        case 'scene:ai:configure': return studio.ai.configure(args[0], args[1]);
+        case 'scene:ai:generate': return studio.ai.generate(args[0]);
+        case 'scene:mcp:status': return studio.status();
+        case 'scene:mcp:configure': return studio.configure(args[0], args[1]);
+        case 'scene:mcp:rotate': return studio.rotate();
         case 'app:init': return { settings: settings.all, state: state.current, chat: [chat], events: [], version: `${version} QA` };
         case 'settings:reset': settings.reset(args[0]); return settings.all;
         case 'settings:set': settings.setForProfile(args[0], args[1], args[2], args[3]); return settings.all;
@@ -102,6 +124,6 @@ export async function createFixture(root: string, dataDir: string, push: (channe
         default: throw new Error('Unhandled QA action: ' + channel);
       }
     },
-    async stop() { alerts.dispose(); tts.dispose(); settings.flush(); await overlay.stop(); },
+    async stop() { alerts.dispose(); tts.dispose(); settings.flush(); await studio.stop(); await overlay.stop(); },
   };
 }

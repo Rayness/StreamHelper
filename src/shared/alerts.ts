@@ -1,5 +1,6 @@
 import { donationAmount, eventAmount, eventVars } from './events';
 import { renderTemplate } from './template';
+import { buildSceneDocument, sceneEventData, selectEventScene } from './eventStudio';
 import type { AlertSettings, AlertType, RenderedAlert, StreamEvent } from './types';
 
 export function mediaUrl(name: string | null): string | null {
@@ -7,7 +8,7 @@ export function mediaUrl(name: string | null): string | null {
 }
 
 /** Turn an event into what the alert overlay shows. Returns null if this alert is disabled or below threshold. */
-export function renderAlert(e: StreamEvent, settings: AlertSettings, mainCurrency = e.type === 'donation' ? e.currency : ''): RenderedAlert | null {
+export function renderAlert(e: StreamEvent, settings: AlertSettings, mainCurrency = e.type === 'donation' ? e.currency : '', mediaBaseUrl?: string): RenderedAlert | null {
   const amount = e.type === 'donation' ? donationAmount(e, mainCurrency) : eventAmount(e);
   const tier = e.type === 'donation' && amount !== null
     ? [...(settings.donationTiers ?? [])]
@@ -18,19 +19,22 @@ export function renderAlert(e: StreamEvent, settings: AlertSettings, mainCurrenc
   if (!v?.enabled) return null;
   if (v.minAmount > 0 && (amount === null || amount < v.minAmount)) return null;
   const vars = eventVars(e);
+  const document = selectEventScene(settings.studio, e, amount);
+  const scene = document ? { document, event: sceneEventData(e) } : undefined;
   return {
     id: e.id,
     type: e.type,
     title: renderTemplate(v.title, vars),
     message: renderTemplate(v.message, vars),
     userName: e.userName,
-    durationSec: v.durationSec,
+    durationSec: document?.durationSec ?? v.durationSec,
     sound: mediaUrl(v.sound),
     volume: v.volume,
     image: mediaUrl(v.image),
     animation: v.animation,
     tts: v.tts,
     style: tier?.style ?? settings.style,
+    ...(scene ? { scene, sceneHtml: buildSceneDocument(scene.document, scene.event, { mediaBaseUrl }) } : {}),
   };
 }
 

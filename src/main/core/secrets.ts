@@ -25,6 +25,7 @@ export interface KawakiSession {
 }
 
 export interface SecretsData {
+  sceneStudio?: { config: import('@shared/sceneAi').SceneAiConfig; apiKey?: string; mcpToken?: string; mcpEnabled?: boolean; mcpPort?: number };
   twitch?: OAuthToken;
   twitchBot?: OAuthToken;
   donationalerts?: OAuthToken;

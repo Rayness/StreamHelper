@@ -25,11 +25,12 @@ export interface AppData {
   toasts: Toast[];
   /** Set when this UI runs in a moderator's browser over remote access. */
   remote: RemoteSession | null;
+  scenePreview: IpcPush['scene:preview'] | null;
 }
 
 const CHAT_LIMIT = 500;
 
-let data: AppData = { ready: false, version: '', windowMaterial: false, settings: null, state: null, chat: [], events: [], toasts: [], remote: null };
+let data: AppData = { ready: false, version: '', windowMaterial: false, settings: null, state: null, chat: [], events: [], toasts: [], remote: null, scenePreview: null };
 const listeners = new Set<() => void>();
 const subscribe = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; };
 
@@ -78,6 +79,10 @@ export function useApp<T>(select: (d: AppData) => T): T {
 }
 
 export const getData = () => data;
+export function clearScenePreview(): void { set({ scenePreview: null }); }
+const navigationGuards = new Set<() => boolean>();
+export function registerNavigationGuard(guard: () => boolean): () => void { navigationGuards.add(guard); return () => { navigationGuards.delete(guard); }; }
+function canNavigate(): boolean { return [...navigationGuards].every((guard) => guard()); }
 
 let toastSeq = 0;
 export function toast(kind: Toast['kind'], key: string, params?: Toast['params']): void {
@@ -96,7 +101,7 @@ export async function call<K extends keyof IpcInvoke>(
   ...args: Parameters<IpcInvoke[K]>
 ): Promise<Awaited<ReturnType<IpcInvoke[K]>> | undefined> {
   try {
-    if (channel === 'alerts:test' || channel === 'overlays:test' || channel === 'chat:test') {
+    if (channel === 'alerts:test' || channel === 'overlays:test' || channel === 'chat:test' || channel === 'scene:test') {
       const profileId = data.settings?.activeProfileId;
       flushSaves();
       await settingsWrite;
@@ -198,6 +203,7 @@ export async function profileAction<K extends 'profiles:create' | 'profiles:rena
   channel: K,
   ...args: Parameters<IpcInvoke[K]>
 ): Promise<boolean> {
+  if (!canNavigate()) return false;
   flushSaves();
   pendingSaves++;
   const operation = settingsWrite.then(async () => {
@@ -213,9 +219,9 @@ export async function profileAction<K extends 'profiles:create' | 'profiles:rena
 
 // ---------- navigation ----------
 
-export type Page = 'workspace' | 'dashboard' | 'interactive' | 'alerts' | 'overlays' | 'profiles' | 'bot' | 'obs' | 'kawaki' | 'connections' | 'settings' | 'variables' | 'designer';
-type TopPage = 'workspace' | 'dashboard' | 'connections' | 'variables' | 'designer';
-const TOP_PAGES: readonly TopPage[] = ['connections', 'variables', 'designer'];
+export type Page = 'workspace' | 'dashboard' | 'interactive' | 'alerts' | 'overlays' | 'profiles' | 'bot' | 'obs' | 'kawaki' | 'connections' | 'settings' | 'variables' | 'designer' | 'eventStudio';
+type TopPage = 'workspace' | 'dashboard' | 'connections' | 'variables' | 'designer' | 'eventStudio';
+const TOP_PAGES: readonly TopPage[] = ['connections', 'variables', 'designer', 'eventStudio'];
 
 interface NavState {
   page: TopPage;
@@ -256,10 +262,11 @@ function setNav(next: NavState): void {
 }
 
 export function navigate(page: Page, sub?: string): void {
+  if (!canNavigate()) return;
   flushSaves();
   const remembered = sub === undefined ? nav.sub : { ...nav.sub, [page]: sub };
   if (page === 'profiles' || page === 'settings') { setNav({ ...nav, dialog: page, sub: remembered }); return; }
-  if (page === 'connections' || page === 'variables' || page === 'designer') { setNav({ page, sub: remembered }); return; }
+  if (page === 'connections' || page === 'variables' || page === 'designer' || page === 'eventStudio') { setNav({ page, sub: remembered }); return; }
   const target = workspaceTarget(page, sub ?? remembered[page]);
   setNav({ page: page === 'dashboard' ? 'dashboard' : 'workspace', sub: remembered,
     ...resolveModuleAccess(target, data.settings?.workspace.cards) });
@@ -267,11 +274,12 @@ export function navigate(page: Page, sub?: string): void {
 
 export function openModule(module: WorkspaceCard): void {
   if (['twitch','donationalerts','streamlabs','streamelements','streamerbot','discord','subforstream'].includes(module)) { navigate('connections', module); return; }
+  if (!canNavigate()) return;
   flushSaves();
   setNav({ page: 'workspace', sub: nav.sub, ...resolveModuleAccess(module, data.settings?.workspace.cards) });
 }
 
-export function openCatalog(): void { flushSaves(); setNav({ page: 'workspace', sub: nav.sub, catalog: true }); }
+export function openCatalog(): void { if (!canNavigate()) return; flushSaves(); setNav({ page: 'workspace', sub: nav.sub, catalog: true }); }
 export function closeDialog(): void { setNav({ ...nav, dialog: undefined }); }
 
 export function useNav(): NavState {
@@ -295,6 +303,7 @@ export function useSub<T extends string>(page: Page, fallback: T, allowed?: read
 export async function init(): Promise<void> {
   window.addEventListener('beforeunload', flushSaves);
   window.api.on('state', (state) => set({ state: data.state ? reconcile(data.state, state) : state }));
+  window.api.on('scene:preview', (preview) => { set({ scenePreview: preview }); navigate('eventStudio'); });
   window.api.on('settings', (settings) => {
     if (pendingSaves === 0) applySettings(settings);
     else deferredSettings = settings;

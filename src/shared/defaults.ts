@@ -1,4 +1,5 @@
 import { normalizeWorkspaceCards, normalizeMonitorLayout } from './workspace';
+import { defaultEventStudio, normalizeEventStudio } from './eventStudio';
 import type {
   AppearanceSettings,
   ClipperSettings,
@@ -106,6 +107,7 @@ export function defaultAlerts(lang: Language): AlertSettings {
     style: { fontFamily: 'Montserrat', fontSize: 40, textColor: '#ffffff', accentColor: '#9b6bff', layout: 'stacked', x: 50, y: 50, width: 90, anchor: 'center', safeMargin: 24, imageWidth: 420, imageHeight: 480, messageFontSize: 22, textAlign: 'center', backgroundColor: '#15121f', backgroundOpacity: 0, padding: 16, borderRadius: 16 },
     types,
     donationTiers: [],
+    studio: defaultEventStudio(),
   };
 }
 
@@ -879,6 +881,7 @@ export function migrateSettings(s: Settings): Settings {
     appearance: normalizeAppearance(s.appearance),
     alerts: {
       ...s.alerts,
+      studio: normalizeEventStudio(s.alerts.studio),
       donationTiers: s.alerts.donationTiers.map((tier) => ({
         ...tier,
         style: tier.style ? { ...s.alerts.style, ...tier.style } : undefined,

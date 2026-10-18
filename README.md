@@ -153,6 +153,8 @@ StreamHelper — приложение для Windows, которое собир�
 
 ## Разработка
 
+Документация студии событий, HTML/CSS/JS, AI API и MCP: [руководство](docs/event-scene-studio.md).
+
 Нужны Node.js и npm, Windows для сборки установщика. Исходники — Electron, React и TypeScript.
 
 ```powershell

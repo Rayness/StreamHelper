@@ -66,7 +66,7 @@ app.whenReady().then(async () => {
   await window.loadFile(join(root,'out/renderer/index.html'));
   console.log('UI QA: app loaded');
   await until(`!!document.querySelector('.workspace-welcome')`,'empty workspace did not load');
-  assert.equal(await js(`document.querySelectorAll('.sidebar .nav-group li').length`),5,'workspace, monitor, designer, variables and connections belong in main navigation');
+  assert.deepEqual(await js(`[...document.querySelectorAll('.sidebar .nav-group button')].map(b=>b.textContent.trim())`),['Рабочая область','Панель','Конструктор','Переменные','Подключения','Студия событий'],'main navigation includes the event studio');
   assert.equal(await js(`document.querySelectorAll('.content input,.content textarea').length`),0,'empty workspace must not expose settings');
   await capture('workspace-empty');
   const legacy = async (page,sub) => {

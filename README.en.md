@@ -153,6 +153,8 @@ The overlay server listens only on `127.0.0.1`. The OBS dock has its own access 
 
 ## Development
 
+Event Scene Studio, HTML/CSS/JS, AI API and MCP: [authoring guide (Russian)](docs/event-scene-studio.md).
+
 Development requires Node.js and npm; building the installer requires Windows. The app uses Electron, React, and TypeScript.
 
 ```powershell

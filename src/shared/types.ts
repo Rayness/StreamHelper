@@ -341,6 +341,7 @@ export interface AlertSettings {
   style: AlertStyle;
   types: Record<AlertType, AlertVariant>;
   donationTiers: { id: string; minAmount: number; variant: AlertVariant; style?: AlertStyle }[];
+  studio?: import('./eventStudio').EventStudioSettings;
 }
 
 export type ChatBackgroundStyle = 'card' | 'glass' | 'gradient' | 'outline' | 'neon' | 'stripe' | 'bubble' | 'none';
@@ -1965,6 +1966,8 @@ export interface RenderedAlert {
   animation: AlertAnimation;
   tts: boolean;
   style: AlertStyle;
+  scene?: import('./eventStudio').ScenePlayback;
+  sceneHtml?: string;
 }
 
 export type OverlayMessage =
@@ -2035,6 +2038,13 @@ export interface MediaFile {
 
 /** Request/response calls from renderer to main. */
 export interface IpcInvoke {
+  'scene:test': (scene: import('./eventStudio').EventScene, event?: import('./eventStudio').SceneEventData) => void;
+  'scene:ai:get': () => import('./sceneAi').SceneAiStatus;
+  'scene:ai:configure': (config: import('./sceneAi').SceneAiConfig, apiKey?: string) => import('./sceneAi').SceneAiStatus;
+  'scene:ai:generate': (request: { prompt: string; scene: import('./eventStudio').EventScene }) => Promise<import('./eventStudio').EventScene>;
+  'scene:mcp:status': () => import('./sceneAi').SceneMcpStatus;
+  'scene:mcp:configure': (enabled: boolean, port: number) => Promise<import('./sceneAi').SceneMcpStatus>;
+  'scene:mcp:rotate': () => Promise<import('./sceneAi').SceneMcpStatus>;
   /** `remote`: set when the UI runs in a moderator's browser over remote access. */
   'app:init': () => { settings: Settings; state: RuntimeState; chat: ChatMessage[]; events: StreamEvent[]; version: string; windowMaterial: boolean; remote?: RemoteSession };
   /** `base` is the value the editor started from, so changes made by the app meanwhile survive the save. */
@@ -2223,6 +2233,7 @@ export interface IpcInvoke {
 
 /** Push notifications from main to renderer. */
 export interface IpcPush {
+  'scene:preview': { scene: import('./eventStudio').EventScene; event?: import('./eventStudio').SceneEventData };
   'state': RuntimeState;
   'settings': Settings;
   'chat:message': ChatMessage;

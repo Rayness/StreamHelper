@@ -154,6 +154,11 @@
 
       function fit() {
         layoutFrame = 0;
+        if (current?.tagName === 'IFRAME') {
+          const w=Number(current.dataset.width),h=Number(current.dataset.height);
+          current.style.transform=`translate(-50%,-50%) scale(${Math.min(stage.clientWidth/w,stage.clientHeight/h)})`;
+          return;
+        }
         if (!current || !currentStyle) return;
         const width = Math.max(10, Math.min(100, Number(currentStyle.width) || 90)) / 100 * stage.clientWidth;
         current.style.width = width + 'px';
@@ -211,6 +216,23 @@
 
       function show(a) {
         clear(true);
+        if (a.scene && a.sceneHtml) {
+          const frame = document.createElement('iframe');
+          frame.setAttribute('sandbox', 'allow-scripts');
+          frame.setAttribute('allow', 'autoplay');
+          frame.setAttribute('title', a.scene.document.name || 'Event scene');
+          frame.style.cssText = 'position:absolute;left:50%;top:50%;border:0;background:transparent;pointer-events:none';
+          frame.dataset.width=a.scene.document.width;frame.dataset.height=a.scene.document.height;
+          frame.style.width=a.scene.document.width+'px';frame.style.height=a.scene.document.height+'px';
+          frame.src = '/overlay/assets/scene-frame.html';
+          let loaded = false;
+          frame.onload = () => { if (loaded) return; loaded = true; frame.contentWindow.postMessage({type:'scene:load',document:a.sceneHtml}, '*'); };
+          current = frame;
+          stage.appendChild(frame);
+          scheduleFit();
+          exitTimer = setTimeout(() => clear(true), Math.max(1,a.durationSec)*1000);
+          return;
+        }
         SH.loadFont(a.style.fontFamily);
         const s = document.documentElement.style;
         s.setProperty('--font', SH.fontStack(a.style.fontFamily));
@@ -296,7 +318,7 @@
         if (!position) return;
         position.querySelectorAll('video,audio').forEach((media) => media.pause());
         const box = position.firstElementChild;
-        if (immediate || !box) return position.remove();
+        if (immediate || !box || position.tagName === 'IFRAME') return position.remove();
         box.classList.remove('enter');
         box.classList.add('exit');
         setTimeout(() => position.remove(), 600);
@@ -307,7 +329,7 @@
         if (msg.type === 'alert') {
           document.documentElement.lang = /[а-яё]/i.test(msg.alert.title) ? 'ru-RU' : 'en-US';
           show(msg.alert);
-        } else if (msg.type === 'alertSkip') clear(false);
+        } else if (msg.type === 'alertSkip' || msg.type === 'profileVisibility' && !msg.visible) clear(true);
       });
       if (SH.preview) window.addEventListener('message', (event) => {
         if (event.source === window.parent && event.data?.type === 'alert') show(event.data.alert);
