@@ -9,6 +9,7 @@ import { sampleEvent, AlertQueue } from '../src/main/features/alerts';
 import { OverlayTests } from '../src/main/features/overlayTests';
 import { EmoteRain } from '../src/main/features/emotes';
 import { SongRequestService } from '../src/main/features/songRequests';
+import { TtsService } from '../src/main/features/tts';
 import { OverlayServer } from '../src/main/overlay/server';
 import { version } from '../package.json';
 
@@ -45,6 +46,13 @@ export async function createFixture(root: string, dataDir: string, push: (channe
   songs = new SongRequestService(ctx, { pauseCurrent: async () => null, resumeSource: async () => undefined } as any, (message) => overlay.broadcast('song', message), undefined, { lookup: async () => ({ ok: true, title: 'Тестовый трек' }), playlistLookup: async () => ({ ok: true, title: 'Тестовый плейлист' }), details: async () => null, search: async () => [{ videoId: 'dQw4w9WgXcQ', title: 'Тестовый трек' }], yandexTrack: async (trackId) => ({ trackId, title: 'Тестовый исполнитель - Тестовый трек', available: true }), yandexSearch: async () => [] });
   const testBroadcasts: {kind:OverlayKind;message:OverlayMessage}[] = [];
   const broadcast = (kind:OverlayKind,message:OverlayMessage) => {testBroadcasts.push({kind,message});overlay.broadcast(kind,message);};
+  // Exercise the real queue and IPC without starting Windows speech or playing audio.
+  const tts = new TtsService(ctx, {
+    broadcast: (message) => broadcast('tts', message),
+    voices: async () => [{ name: 'QA Russian', lang: 'ru-RU', gender: 'male', source: 'sapi' }],
+    speak: async () => ({ url: 'data:audio/wav;base64,', wav: new Uint8Array() }),
+    say: async () => undefined, loadUserVoices: () => ({}), saveUserVoices: () => undefined,
+  });
   new EmoteRain(ctx,{broadcast} as any);
   const overlayTests = new OverlayTests(ctx,alerts,broadcast,(event) => push('event',event));
   bus.on('settings:changed', () => push('settings', settings.all));
@@ -77,6 +85,11 @@ export async function createFixture(root: string, dataDir: string, push: (channe
         case 'song:jamAdd': return songs.addJam(args[0], args[1]);
         case 'twitch:rewards': return [{ id: 'song-reward', title: 'Заказ музыки', inputRequired: true, enabled: true, manageable: true }];
         case 'twitch:createSongReward': return { id: 'song-reward', title: args[0] };
+        case 'tts:test': return tts.test(args[0]);
+        case 'tts:skip': return tts.skip();
+        case 'tts:clear': return tts.clear();
+        case 'tts:voices': return tts.refreshVoices();
+        case 'tts:forgetVoices': return tts.forgetVoices();
         case 'alerts:test': return overlayTests.alert(args[0],args[1],args[2]);
         case 'overlays:test': return overlayTests.widget(args[0],args[1]);
         case 'alerts:pause': return alerts.setPaused(args[0]);
@@ -89,6 +102,6 @@ export async function createFixture(root: string, dataDir: string, push: (channe
         default: throw new Error('Unhandled QA action: ' + channel);
       }
     },
-    async stop() { alerts.dispose(); settings.flush(); await overlay.stop(); },
+    async stop() { alerts.dispose(); tts.dispose(); settings.flush(); await overlay.stop(); },
   };
 }
