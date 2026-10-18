@@ -1424,3 +1424,9 @@
     transition: none;
   }
 }
+
+/* ---------- focus timer ---------- */
+.control-status b.focus-clock {
+  font-size: 30px;
+  line-height: 1.15;
+}

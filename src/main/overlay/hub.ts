@@ -35,6 +35,8 @@ export interface HubSources {
   melody: () => OverlayMessage;
   stocks: () => OverlayMessage;
   portal: () => OverlayMessage;
+  focus: () => OverlayMessage;
+  shoutout: () => OverlayMessage;
 }
 
 /** Wires bus events and settings changes to connected overlays. */
@@ -244,6 +246,13 @@ export class OverlayHub {
         return [this.sources.stocks()];
       case 'portal':
         return [this.sources.portal()];
+      case 'focus':
+        return [this.sources.focus()];
+      case 'shoutout':
+        return [this.sources.shoutout()];
+      // Audio only: plays what it's sent, nothing to restore.
+      case 'tts':
+        return [];
     }
   }
 }

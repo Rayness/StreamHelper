@@ -50,7 +50,8 @@ export function Monitor() {
   const saveLayout = (patch: Partial<MonitorLayout>) => saveSettings('workspace', { ...s.workspace, monitor: { ...layout, ...patch } });
   // Saving freezes every visible card where it is; hidden cards keep their last spot.
   const savePositions = (next: MonitorRects) => saveLayout({ positions: { ...layout.positions, ...next } });
-  const now = useNow(cards.includes('timer') && s.timers.some((timer) => timer.running) ? 1000 : 60_000);
+  const ticking = (cards.includes('timer') && s.timers.some((timer) => timer.running)) || (cards.includes('focus') && state.focus.status === 'running');
+  const now = useNow(ticking ? 1000 : 60_000);
 
   /** One grid step in pixels, measured from the live grid width. */
   const unit = () => {
@@ -148,6 +149,9 @@ export function Monitor() {
       case 'melody': return <><strong>{t(`melodyStatus.${state.melody.status}`)}</strong>{state.melody.round > 0 && <p className="muted">{state.melody.round} / {state.melody.rounds}</p>}{state.melody.leaderboard.slice(0,3).map((r) => <div className="monitor-number" key={r.userName}><span>{r.userName}</span><strong>{r.points}</strong></div>)}</>;
       case 'stocks': return state.market.quotes.length ? state.market.quotes.slice(0,5).map((q) => <div className="monitor-number" key={q.userId}><span>${q.name}</span><strong className={q.change >= 0 ? 'up' : 'down'}>{q.price} <small>{q.change > 0 ? '+' : ''}{q.change}%</small></strong></div>) : <p className="muted">{t('market.empty')}</p>;
       case 'portal': return <><StatusText status={state.portal.status} error={state.portal.error} />{state.portal.channel && <strong>{state.portal.channel}</strong>}{state.portal.messages.slice(0,3).map((m) => <p key={m.id} className="muted">{m.direction === 'in' ? '⬅' : '➡'} {m.userName}: {m.text}</p>)}</>;
+      case 'focus': { const f = state.focus; const left = f.status === 'running' && f.endsAt ? f.endsAt - now : f.leftMs; return f.status === 'idle' ? <><p className="muted">{t('focus.idle')}</p><Button size="sm" icon="play" onClick={() => void call('focus:toggle')}>{t('focus.start')}</Button></> : <><div className="monitor-number"><span>{s.focus.labels[f.phase] || t(`focusPhase.${f.phase}`)}{f.status === 'paused' ? ` · ${t('focus.paused')}` : ''}</span><strong>{formatClock(Math.max(0, left))}</strong></div><p className="muted">{t('focus.sessions', { n: f.done })}</p><Button size="sm" icon={f.status === 'running' ? 'pause' : 'play'} onClick={() => void call('focus:toggle')}>{t(f.status === 'running' ? 'focus.pause' : 'focus.resume')}</Button></>; }
+      case 'shoutout': return <>{state.shoutout.current ? <><strong>{state.shoutout.current.displayName}</strong><Button size="sm" icon="x" onClick={() => void call('shoutout:skip')}>{t('shoutout.hide')}</Button></> : <p className="muted">{t('shoutout.idle')}</p>}{state.shoutout.queue.length > 0 && <p className="muted">{t('shoutout.queue', { n: state.shoutout.queue.length })}</p>}{state.shoutout.history.slice(0, 3).map((c) => <p key={c.id} className="muted">{c.displayName}{c.viewers ? ` · ${c.viewers}` : ''}</p>)}</>;
+      case 'tts': return <>{!s.tts.enabled ? <p className="muted">{t('workspace.disabled')}</p> : state.tts.current ? <><strong>{t('tts.speaking', { name: state.tts.current.userName })}</strong><p className="muted">{state.tts.current.text}</p><Button size="sm" icon="skip" onClick={() => void call('tts:skip')}>{t('tts.skip')}</Button></> : <p className="muted">{t('tts.idle')}</p>}{state.tts.queue.length > 0 && <p className="muted">{t('tts.queue', { n: state.tts.queue.length })}</p>}</>;
       default: return <p className="muted">{t('workspace.sources',{n:state.overlayKinds[id as OverlayKind] ?? 0})}</p>;
     }
   };

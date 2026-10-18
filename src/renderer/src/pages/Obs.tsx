@@ -102,6 +102,7 @@ const STEP_TYPES: ActionStep['type'][] = [
   'clipMoment',
   'shieldToggle',
   'curseVote',
+  'focusToggle',
   'variable',
   'wait',
 ];

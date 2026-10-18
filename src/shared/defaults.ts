@@ -10,6 +10,9 @@ import type {
   MarketSettings,
   MelodySettings,
   PortalSettings,
+  FocusSettings,
+  ShoutoutSettings,
+  TtsSettings,
   ReportSettings,
   ShieldSettings,
   ThemeId,
@@ -645,6 +648,78 @@ export function defaultShield(lang: Language): ShieldSettings {
   };
 }
 
+export function defaultFocus(lang: Language): FocusSettings {
+  const ru = lang === 'ru';
+  return {
+    focusMin: 25,
+    breakMin: 5,
+    longBreakMin: 15,
+    longEvery: 4,
+    autoContinue: true,
+    task: '',
+    labels: ru ? { focus: 'Фокус', break: 'Перерыв', long: 'Длинный перерыв' } : { focus: 'Focus', break: 'Break', long: 'Long break' },
+    rewardTitle: '',
+    rewardMinutes: 5,
+    maxExtendMin: 30,
+    command: ru ? 'фокус' : 'focus',
+    announce: true,
+    breakScene: '',
+    chime: true,
+    layout: 'ring',
+    showCycles: true,
+    accentColor: '#ff6b5a',
+    breakColor: '#37d399',
+    fontFamily: 'Montserrat',
+  };
+}
+
+export function defaultShoutout(lang: Language): ShoutoutSettings {
+  return {
+    onRaid: true,
+    minViewers: 1,
+    onCommand: true,
+    delaySec: 8,
+    chatMessage: lang === 'ru'
+      ? 'Спасибо за рейд, {name}! Загляните на канал: twitch.tv/{login} — последняя категория: {game}'
+      : 'Thanks for the raid, {name}! Go check them out at twitch.tv/{login} — last seen in {game}',
+    nativeShoutout: true,
+    showCard: true,
+    playClip: true,
+    clipPick: 'top',
+    clipMaxSec: 30,
+    clipMuted: false,
+    cardSec: 12,
+    accentColor: '#9146ff',
+    fontFamily: 'Montserrat',
+  };
+}
+
+export function defaultTts(_lang: Language): TtsSettings {
+  return {
+    enabled: false,
+    mode: 'prefix',
+    trigger: '!!!',
+    command: 'tts',
+    roles: { broadcaster: true, moderator: true, vip: true, subscriber: false, viewer: false },
+    rewardTitle: '',
+    voice: 'female',
+    voices: ['female', 'male', 'chipmunk', 'giant', 'robot', 'radio', 'fast', 'lich'],
+    femaleVoice: '',
+    maleVoice: '',
+    volume: 80,
+    ratePercent: 100,
+    maxLength: 200,
+    cooldownSec: 15,
+    queueMax: 5,
+    readNames: true,
+    skipEmotes: true,
+    skipLinks: true,
+    blockedWords: [],
+    profanityFilter: true,
+    useBotWords: true,
+  };
+}
+
 export const DEFAULT_KAWAKI_URL = 'https://kawaki.ru';
 
 export function defaultKawaki(lang: Language): KawakiSettings {
@@ -717,7 +792,7 @@ export function defaultSettings(lang: Language): Settings {
     overlayVariants: [],
     collabOverlay: { title: lang === 'ru' ? 'Коллаборация' : 'Collaboration', guests: [], showRaids: true, accentColor: '#9b6bff', fontFamily: 'Segoe UI' },
     musicOverlay: { source: 'auto', style: 'card', showArtwork: true, showAlbum: true, showProgress: true, hideWhenPaused: true, accentColor: '#1db954', layout: 'horizontal', coverSize: 130, fontSize: 25, backgroundOpacity: 90, showSource: true, fontFamily: 'Segoe UI' },
-    songRequests: { enabled: false, rewardTitle: '', rewardId: '', replyInChat: true, refundRejected: true, listen: 'viewers', chatEnabled: true, chatCommand: 'sr', chatPermission: 'everyone', chatCooldownSec: 10, minDonation: 100, autoPlay: true, pauseWindowsMusic: true, resumeWindowsMusic: true, maxQueue: 30, videoLayout: 'full', videoPosition: 'left', videoWidth: 45, showRequester: true, showTitle: true, showQueueCount: true, showControls: true, volume: 100, accentColor: '#9146ff', backgroundOpacity: 88, fontFamily: 'Segoe UI' },
+    songRequests: { enabled: false, rewardTitle: '', rewardId: '', replyInChat: true, refundRejected: true, listen: 'viewers', chatEnabled: true, chatCommand: 'sr', chatPermission: 'everyone', chatCooldownSec: 10, allowSearch: true, yandexPlayback: true, maxPerUser: 3, maxDurationMin: 10, minViews: 0, bannedWords: [], minDonation: 100, autoPlay: true, pauseWindowsMusic: true, resumeWindowsMusic: true, maxQueue: 30, videoLayout: 'full', videoPosition: 'left', videoWidth: 45, showRequester: true, showTitle: true, showQueueCount: true, showControls: true, volume: 100, accentColor: '#9146ff', backgroundOpacity: 88, fontFamily: 'Segoe UI', bannedUsers: [], bannedVideos: [], skipRewardTitle: '', skipRewardId: '', backgroundEnabled: false, backgroundTracks: [], backgroundShuffle: true, backgroundVolume: 40, backgroundShowVideo: false, jams: [], backgroundJamId: '' },
     songQueue: [],
     goals: [defaultGoal(lang)],
     timers: [defaultTimer(lang)],
@@ -750,6 +825,9 @@ export function defaultSettings(lang: Language): Settings {
     portal: defaultPortal(lang),
     report: defaultReport(lang),
     shield: defaultShield(lang),
+    focus: defaultFocus(lang),
+    shoutout: defaultShoutout(lang),
+    tts: defaultTts(lang),
     currency: lang === 'ru' ? 'RUB' : 'USD',
     minimizeToTray: true,
     appearance: defaultAppearance(),

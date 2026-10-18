@@ -1,5 +1,5 @@
 import { twitchClientId } from '@shared/defaults';
-import type { AccountInfo, Category, ChatMessage, StreamInfo } from '@shared/types';
+import type { AccountInfo, Category, ChatMessage, ShoutoutClip, StreamInfo } from '@shared/types';
 import { errorMessage, type AppContext } from '../../core/context';
 import type { OAuthToken } from '../../core/secrets';
 import type { ChatPlatform } from '../types';
@@ -387,14 +387,16 @@ export class TwitchService implements ChatPlatform {
   }
 
   /** A song-request reward owned by this app, so redemptions can be refunded automatically. */
-  async createSongReward(title: string, cost: number): Promise<{ id: string; title: string }> {
+  async createSongReward(title: string, cost: number, kind: 'request' | 'skip' = 'request'): Promise<{ id: string; title: string }> {
     const id = this.requireBroadcaster();
     const ru = this.ctx.settings.get('language') === 'ru';
+    const skip = kind === 'skip';
     const res = await this.helix.broadcaster.post('/channel_points/custom_rewards', {
-      title: title.trim().slice(0, 45) || (ru ? 'Заказ песни' : 'Song request'),
+      title: title.trim().slice(0, 45) || (skip ? (ru ? 'Пропустить трек' : 'Skip the song') : (ru ? 'Заказ песни' : 'Song request')),
       cost: Math.max(1, Math.round(cost)),
-      prompt: ru ? 'Вставьте ссылку на видео YouTube с песней' : 'Paste a YouTube link to the song',
-      is_user_input_required: true,
+      prompt: skip ? (ru ? 'Пропускает трек, который сейчас играет' : 'Skips the track that is playing now')
+        : (ru ? 'Вставьте ссылку на видео YouTube с песней' : 'Paste a YouTube link to the song'),
+      is_user_input_required: !skip,
       is_enabled: true,
     }, { broadcaster_id: id });
     const reward = res.data?.[0];
@@ -562,5 +564,40 @@ export class TwitchService implements ChatPlatform {
       .post('/chat/shoutouts', undefined, { from_broadcaster_id: id, to_broadcaster_id: u.id, moderator_id: id })
       .catch(() => undefined);
     return { displayName: u.display_name, category: ch.data?.[0]?.game_name ?? '' };
+  }
+
+  // ---------- shoutout card ----------
+
+  /** Avatar, last category and title of a channel. Null when there is no such channel. */
+  async channelCard(login: string): Promise<{ id: string; login: string; displayName: string; avatarUrl: string; game: string; title: string } | null> {
+    this.requireBroadcaster();
+    const users = await this.helix.broadcaster.get('/users', { login: login.replace(/^@/, '').toLowerCase() });
+    const u = users?.data?.[0];
+    if (!u) return null;
+    const ch = await this.helix.broadcaster.get('/channels', { broadcaster_id: u.id }).catch(() => null);
+    const c = ch?.data?.[0];
+    return { id: u.id, login: u.login, displayName: u.display_name, avatarUrl: u.profile_image_url ?? '', game: c?.game_name ?? '', title: c?.title ?? '' };
+  }
+
+  /** A channel's most viewed clips; with `days`, only clips made in that many last days. */
+  async channelClips(userId: string, days?: number): Promise<ShoutoutClip[]> {
+    this.requireBroadcaster();
+    const now = Date.now();
+    // Without ended_at Twitch only looks one week past started_at.
+    const range = days ? { started_at: new Date(now - days * 86_400_000).toISOString(), ended_at: new Date(now).toISOString() } : {};
+    const res = await this.helix.broadcaster.get('/clips', { broadcaster_id: userId, first: 20, ...range });
+    return (res?.data ?? []).map((c: { id: string; title?: string; duration?: number; view_count?: number; thumbnail_url?: string }) => ({
+      id: c.id,
+      title: c.title ?? '',
+      durationSec: Number(c.duration) || 30,
+      views: c.view_count ?? 0,
+      thumbnailUrl: c.thumbnail_url ?? '',
+    }));
+  }
+
+  /** Twitch's own shoutout: live only, at most one every 2 minutes and one per channel per hour. */
+  async nativeShoutout(userId: string): Promise<void> {
+    const id = this.requireBroadcaster();
+    await this.helix.broadcaster.post('/chat/shoutouts', undefined, { from_broadcaster_id: id, to_broadcaster_id: userId, moderator_id: id });
   }
 }

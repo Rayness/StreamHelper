@@ -210,6 +210,12 @@
 .song-now-info strong { font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .song-eyebrow { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--accent-text); }
 .song-now-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.song-volume { width: 100%; }
+.song-fav.active { color: var(--accent); }
+.song-fav.active svg { fill: currentColor; }
+.song-own-title { display: inline-flex; align-items: center; gap: 6px; }
+.song-volume > svg { flex: none; color: var(--text-2); }
+.song-now-card + .song-volume { margin: -4px 0 12px; padding: 0 10px; }
 @media (max-width: 760px) { .song-now-card { grid-template-columns: 96px minmax(0, 1fr); } .song-now-card img { width: 96px; } .song-now-actions { grid-column: 1 / -1; justify-content: flex-start; } }
 .song-idle { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 10px 12px; margin: 6px 0 12px; border-radius: var(--radius); border: 1px dashed var(--border-hover); }
 .song-queue-hint { margin: 0 0 6px; }
@@ -226,5 +232,16 @@
 .song-item-actions { display: flex; gap: 2px; opacity: .55; transition: opacity .15s; }
 .song-queue li:hover .song-item-actions, .song-item-actions:focus-within { opacity: 1; }
 .song-up svg { transform: rotate(-90deg); }
+.song-tracks li { grid-template-columns: 72px minmax(0, 1fr) auto; cursor: default; }
+.song-tracks li.playing { border-color: var(--accent); }
+.song-bans { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 8px; }
+.song-ban { display: inline-flex; align-items: center; gap: 2px; padding-right: 2px; }
+.song-create-inline { margin-top: 0; padding-top: 0; border-top: 0; }
+.song-bg-options { margin-top: 14px; }
+.song-jams { display: flex; flex-wrap: wrap; gap: 6px; }
+.song-jam-cover { display: grid; place-items: center; width: 72px; aspect-ratio: 16 / 9; border-radius: 5px; background: var(--input-bg); color: var(--text-2); }
+.song-jam-add { margin-bottom: 16px; }
+.song-jam-add .input:first-child { flex: 0 1 220px; }
+.song-own-title { display: block; margin-bottom: 6px; }
 .song-add { display: flex; gap: 8px; }
 .song-add .input { flex: 1; }

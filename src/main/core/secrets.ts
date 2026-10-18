@@ -33,6 +33,8 @@ export interface SecretsData {
   discordWebhookUrl?: string;
   obsPassword?: string;
   dockToken?: string;
+  /** Yandex Music account for playing requests in the streamer's Yandex Music app (Ynison). */
+  yandexMusic?: { accessToken: string; deviceId: string; uid?: string; login?: string; displayName?: string };
 }
 
 /**

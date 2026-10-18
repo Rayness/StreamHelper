@@ -1,4 +1,5 @@
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { copyFile, stat, unlink } from 'node:fs/promises';
 import { basename, extname, join } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { app, BrowserWindow, clipboard, ClipboardItem, dialog, Menu, nativeImage, nativeTheme, shell, Tray } from 'electron';
@@ -20,6 +21,8 @@ import { StateHub } from './core/state';
 import { SettingsStore } from './core/store';
 import { DonationAlertsService } from './donations/donationalerts';
 import { StreamlabsService } from './donations/streamlabs';
+import { YandexMusicService, tokenFromRedirect } from './integrations/yandexMusic';
+import { LOCAL_SONGS_DIR } from './features/songRequests';
 import { StreamElementsService } from './donations/streamelements';
 import { StreamerBotService } from './integrations/streamerbot';
 import { DiscordService } from './integrations/discord';
@@ -54,18 +57,25 @@ import { PortalService } from './features/portal';
 import { ReportService } from './features/report';
 import { REPORT_HEIGHT, REPORT_WIDTH } from './features/reportCard';
 import { ShieldService } from './features/shield';
+import { FocusService } from './features/focus';
+import { ShoutoutService } from './features/shoutout';
+import { TtsService } from './features/tts';
+import { TtsEngine } from './features/ttsEngine';
 import { KawakiService } from './integrations/kawaki/service';
 import { push, registerIpc } from './ipc';
 import { ObsService } from './obs/obs';
 import { createAuthRoutes } from './overlay/authPages';
 import { createDockRoutes } from './overlay/dock';
 import { OverlayHub } from './overlay/hub';
-import { OverlayServer } from './overlay/server';
+import { OverlayServer, safeJoin } from './overlay/server';
 import { TwitchService } from './platforms/twitch/service';
 import { PlatformRegistry } from './platforms/types';
 
 const IMAGE_EXT = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'];
 const AUDIO_EXT = ['.mp3', '.ogg', '.wav', '.m4a'];
+/** Songs from the computer: what Chromium in OBS can play. */
+const SONG_EXT = ['.mp3', '.ogg', '.oga', '.opus', '.wav', '.m4a', '.aac', '.flac', '.webm'];
+const MAX_SONG_BYTES = 300 * 1024 * 1024;
 const VIDEO_EXT = ['.webm', '.mp4'];
 
 let mainWindow: BrowserWindow | null = null;
@@ -134,6 +144,7 @@ async function bootstrap(): Promise<void> {
   platforms.register(twitch);
   const obs = new ObsService(ctx);
   const streamlabs = new StreamlabsService(ctx);
+  const yandexMusic = new YandexMusicService(ctx, undefined, openYandexLogin);
   const streamelements = new StreamElementsService(ctx);
   const streamerbot = new StreamerBotService(ctx);
   const discord = new DiscordService(ctx);
@@ -143,6 +154,7 @@ async function bootstrap(): Promise<void> {
   const music = new MusicService(ctx);
 
   let overlay!: OverlayServer;
+  const ttsEngine = new TtsEngine(join(userData, 'tts'));
   const donationalerts = new DonationAlertsService(ctx, () => `http://127.0.0.1:${overlay.port}/auth/donationalerts`);
   const alerts = new AlertQueue(
     ctx,
@@ -174,6 +186,14 @@ async function bootstrap(): Promise<void> {
         // Overlays only fetch web fonts for families that aren't installed.
         res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
         res.end(JSON.stringify(await systemFonts()));
+        return true;
+      }
+      const speech = /^\/tts\/([\w-]+\.wav)$/.exec(url.pathname);
+      if (speech && (req.method === 'GET' || req.method === 'HEAD')) {
+        const file = ttsEngine.path(speech[1]);
+        if (!file || !existsSync(file)) { res.writeHead(404); res.end(); return true; }
+        res.writeHead(200, { 'Content-Type': 'audio/wav', 'Cache-Control': 'no-cache' });
+        if (req.method === 'HEAD') res.end(); else res.end(readFileSync(file));
         return true;
       }
       const card = /^\/reports\/([\w-]+)\.png$/.exec(url.pathname);
@@ -217,6 +237,7 @@ async function bootstrap(): Promise<void> {
 
   songRequests = new SongRequestService(ctx, music, (message) => overlay.broadcast('song', message), (text, replyTo) => twitch.sendMessage(text, replyTo), {
     rewards: { settle: (rewardId, redemptionId, status) => twitch.settleRedemption(rewardId, redemptionId, status) },
+    remote: yandexMusic,
   });
 
   const sendToAllChats = async (text: string) => {
@@ -260,7 +281,7 @@ async function bootstrap(): Promise<void> {
   });
   const duel = new DuelService(ctx, stage, {
     upcoming: () => state.current.songRequests.queue,
-    hasCurrent: () => !!state.current.songRequests.current,
+    hasCurrent: () => !!(state.current.songRequests.current ?? state.current.songRequests.background),
     isPaused: () => state.current.songRequests.paused,
     pause: (paused) => songRequests.pause(paused),
     move: (id, index) => songRequests.move(id, index),
@@ -294,6 +315,30 @@ async function bootstrap(): Promise<void> {
     accountAges: (ids) => twitch.getAccountAges(ids),
     say: (msg) => sendToAllChats(msg),
   }, join(userData, 'shield-known.json'));
+  const focus = new FocusService(ctx, {
+    ...stage,
+    currentScene: () => (state.current.obs.status === 'connected' ? state.current.obs.currentScene : ''),
+    setScene: (scene) => obs.setScene(scene),
+  });
+  const shoutout = new ShoutoutService(ctx, {
+    broadcast: (msg) => overlay.broadcast('shoutout', msg),
+    say: (msg) => sendToAllChats(msg).catch((err) => console.warn('[shoutout] chat', String(err?.message ?? err))),
+    channel: (login) => twitch.channelCard(login),
+    clips: (userId, days) => twitch.channelClips(userId, days),
+    native: (userId) => twitch.nativeShoutout(userId),
+  });
+  const tts = new TtsService(ctx, {
+    broadcast: (msg) => overlay.broadcast('tts', msg),
+    voices: () => ttsEngine.voices(),
+    speak: async (job) => {
+      const file = await ttsEngine.speak(job);
+      return { url: `/tts/${file}`, wav: readFileSync(ttsEngine.path(file)!) };
+    },
+    say: (msg) => sendToAllChats(msg).catch((err) => console.warn('[tts] chat', String(err?.message ?? err))),
+    loadUserVoices: () => JSON.parse(readFileSync(join(userData, 'tts-voices.json'), 'utf8')),
+    saveUserVoices: (voices) => writeFileSync(join(userData, 'tts-voices.json'), JSON.stringify(voices)),
+  });
+  void tts.refreshVoices();
   hub = new OverlayHub(ctx, overlay, chatHistory, {
     alerts: () => alerts,
     text: () => text,
@@ -313,6 +358,8 @@ async function bootstrap(): Promise<void> {
     melody: () => melody.overlayMessage(),
     stocks: () => market.overlayMessage(),
     portal: () => portal.configMessage(),
+    focus: () => focus.overlayMessage(),
+    shoutout: () => shoutout.overlayMessage(),
   });
 
   const bot = new BotService(ctx, platforms, twitch, songRequests);
@@ -336,6 +383,7 @@ async function bootstrap(): Promise<void> {
     clipMoment: () => clipper.clipNow(),
     shieldToggle: () => shield.toggle(),
     curseVote: () => curses.startVote(),
+    focusToggle: () => focus.toggle(),
     setVariable: (name, value) => {
       const key = name.trim().toLowerCase();
       if (!VARIABLE_NAME.test(key)) return;
@@ -378,7 +426,7 @@ async function bootstrap(): Promise<void> {
         case 'adShow': if (id) return ads.show(id); break;
         case 'adHide': return ads.hide();
         case 'songPlay': return songRequests.play(id);
-        case 'songAdd': if (id) return songRequests.add(id); break;
+        case 'songAdd': if (id) return songRequests.addManual(id); break;
         case 'songSkip': return songRequests.skip();
         case 'songRemove': if (id) return songRequests.remove(id); break;
         case 'songVideoLayout': if (id === 'full' || id === 'compact' || id === 'queue') return void settings.set('songRequests', { ...settings.get('songRequests'), videoLayout: id }); break;
@@ -405,6 +453,10 @@ async function bootstrap(): Promise<void> {
         case 'guessStart': return guess.start();
         case 'guessStop': return guess.stop();
         case 'hypeReset': return hype.reset();
+        case 'focusToggle': return focus.toggle();
+        case 'focusSkip': return focus.skip();
+        case 'focusStop': return focus.stop();
+        case 'shoutoutSkip': return shoutout.skip();
         case 'counterAdd': if (id) { const [name, delta] = id.split(':'); if (name && /^-?\d{1,4}$/.test(delta ?? '')) return void bot.addCounter(name, Number(delta)); } break;
       }
       throw new Error('Unknown dock action');
@@ -497,9 +549,9 @@ async function bootstrap(): Promise<void> {
     'twitch:updateStream': (patch) => twitch.updateStream(patch),
     'twitch:searchCategories': (q) => twitch.searchCategories(q),
     'twitch:rewards': () => twitch.listRewards(),
-    'twitch:createSongReward': async (title, cost) => {
+    'twitch:createSongReward': async (title, cost, kind) => {
       try {
-        return await twitch.createSongReward(title, cost);
+        return await twitch.createSongReward(title, cost, kind === 'skip' ? 'skip' : 'request');
       } catch (error) {
         const status = (error as { status?: number }).status;
         const ru = settings.get('language') === 'ru';
@@ -520,6 +572,9 @@ async function bootstrap(): Promise<void> {
     'chat:test': () => bus.emit('chat:message', sampleChatMessage(settings.get('language'))),
     'da:login': () => donationalerts.login(),
     'da:logout': () => donationalerts.logout(),
+    'yandex:login': () => yandexMusic.login(),
+    'yandex:setToken': (token) => yandexMusic.setToken(token),
+    'yandex:logout': () => yandexMusic.logout(),
     'streamlabs:connect': (token) => streamlabs.connect(token),
     'streamlabs:disconnect': () => streamlabs.disconnect(),
     'streamelements:connect': (channelId, token) => streamelements.connect(channelId, token),
@@ -551,6 +606,43 @@ async function bootstrap(): Promise<void> {
     'song:remove': (id) => songRequests.remove(id),
     'song:pause': (paused) => songRequests.pause(paused),
     'song:move': (id, index) => songRequests.move(id, index),
+    'song:banUser': (userName) => songRequests.banUser(userName),
+    'song:banVideo': (url) => songRequests.banVideo(url),
+    'song:backgroundAdd': (url) => songRequests.addBackground(url),
+    'song:favorite': (id) => songRequests.toggleFavorite(id),
+    'song:favoriteRemove': (videoId) => {
+      const track = songRequests.removeFavorite(videoId);
+      // A song copied from the computer has no other use: its copy goes too.
+      const file = track?.kind === 'local' && track.file ? safeJoin(join(mediaDir, LOCAL_SONGS_DIR), encodeURIComponent(track.file)) : null;
+      if (file) void unlink(file).catch(() => undefined);
+    },
+    'song:favoritePlay': (videoId) => songRequests.playFavorite(videoId),
+    'song:importLocal': async () => {
+      const res = await dialog.showOpenDialog(mainWindow!, {
+        title: settings.get('language') === 'ru' ? 'Песни для избранного' : 'Songs for the favourites',
+        properties: ['openFile', 'multiSelections'],
+        filters: [{ name: 'Audio', extensions: SONG_EXT.map((e) => e.slice(1)) }],
+      });
+      if (res.canceled || !res.filePaths.length) return 0;
+      const dir = join(mediaDir, LOCAL_SONGS_DIR);
+      mkdirSync(dir, { recursive: true });
+      const added: { file: string; title: string }[] = [];
+      for (const src of res.filePaths.slice(0, 500)) {
+        const ext = extname(src).toLowerCase();
+        // A stray video or disk image is no song: skip anything huge.
+        const size = (await stat(src).catch(() => null))?.size ?? 0;
+        if (!SONG_EXT.includes(ext) || size > MAX_SONG_BYTES) continue;
+        const title = basename(src, extname(src)).replace(/_/g, ' ').replace(/\s+/g, ' ').trim() || 'Track';
+        const stem = basename(src, extname(src)).replace(/[^\p{L}\p{N} _.()-]+/gu, '_').trim().slice(0, 80) || 'song';
+        let file = `${stem}${ext}`;
+        for (let i = 1; existsSync(join(dir, file)); i++) file = `${stem}_${i}${ext}`;
+        // One unreadable file (permissions, full disk) must not lose the others.
+        try { await copyFile(src, join(dir, file)); } catch { continue; }
+        added.push({ file, title });
+      }
+      return songRequests.addLocal(added);
+    },
+    'song:jamAdd': (url, name) => songRequests.addJam(url, name),
     'music:control': (source, action) => music.control(source, action),
     'subs:check': () => subForStream.check(),
     'subs:clear': () => subForStream.clear(),
@@ -647,6 +739,18 @@ async function bootstrap(): Promise<void> {
     'report:discord': (id) => report.resend(id),
     'shield:activate': () => shield.activate(),
     'shield:release': async () => { await shield.release(); },
+    'focus:toggle': () => focus.toggle(),
+    'focus:skip': () => focus.skip(),
+    'focus:stop': () => focus.stop(),
+    'focus:add': (minutes) => void focus.add(minutes),
+    'shoutout:show': (login) => shoutout.show(login),
+    'shoutout:test': () => shoutout.test(),
+    'shoutout:skip': () => shoutout.skip(),
+    'tts:test': (voice) => tts.test(voice),
+    'tts:skip': () => tts.skip(),
+    'tts:clear': () => tts.clear(),
+    'tts:forgetVoices': () => tts.forgetVoices(),
+    'tts:voices': () => tts.refreshVoices(),
     'shell:openExternal': (url) => {
       if (/^https?:\/\//.test(url)) void shell.openExternal(url);
     },
@@ -670,6 +774,7 @@ async function bootstrap(): Promise<void> {
   void twitch.start();
   void donationalerts.start();
   streamlabs.start();
+  yandexMusic.start();
   streamelements.start();
   streamerbot.start();
   discord.start();
@@ -680,15 +785,15 @@ async function bootstrap(): Promise<void> {
   report.start();
   shield.start();
 
-  // OBS and chat changes that must be undone before quitting (curse, ducked music, locked chat).
+  // OBS and chat changes that must be undone before quitting (curse, ducked music, locked chat, break scene).
   // Their requests need OBS and Twitch still connected, so quitting waits for them (a few seconds at most).
   let undoneBeforeQuit = false;
   app.on('before-quit', (event) => {
     quitting = true;
-    if (!undoneBeforeQuit && (curses.needsShutdown || ducking.needsShutdown || shield.needsShutdown)) {
+    if (!undoneBeforeQuit && (curses.needsShutdown || ducking.needsShutdown || shield.needsShutdown || focus.needsShutdown)) {
       undoneBeforeQuit = true;
       event.preventDefault();
-      const done = Promise.allSettled([curses.shutdown(), ducking.shutdown(), shield.shutdown()]);
+      const done = Promise.allSettled([curses.shutdown(), ducking.shutdown(), shield.shutdown(), focus.shutdown()]);
       void Promise.race([done, new Promise((r) => setTimeout(r, 4000))]).finally(() => app.quit());
       return;
     }
@@ -699,6 +804,8 @@ async function bootstrap(): Promise<void> {
     twitch.stop();
     donationalerts.stop();
     streamlabs.stop();
+    yandexMusic.release(true);
+    yandexMusic.stop();
     streamelements.stop();
     streamerbot.stop();
     subForStream.stop();
@@ -724,6 +831,9 @@ async function bootstrap(): Promise<void> {
     portal.stop();
     report.dispose();
     shield.dispose();
+    focus.dispose();
+    shoutout.dispose();
+    tts.dispose();
     bot.stop();
     void obs.disconnect();
     void overlay.stop();
@@ -810,6 +920,39 @@ async function bootstrap(): Promise<void> {
     );
     tray.on('click', () => showWindow());
   }
+}
+
+/**
+ * Yandex sign-in in its own window. Yandex sends the token to the page it redirects to (URL fragment);
+ * the window uses a throwaway session so no Yandex cookies stay behind.
+ */
+function openYandexLogin(url: string): Promise<string | null> {
+  return new Promise((resolve) => {
+    const win = new BrowserWindow({
+      width: 520,
+      height: 720,
+      parent: mainWindow ?? undefined,
+      modal: !!mainWindow,
+      autoHideMenuBar: true,
+      title: 'Яндекс ID',
+      webPreferences: { partition: `yandex-login-${Date.now()}`, sandbox: true, contextIsolation: true, nodeIntegration: false },
+    });
+    let done = false;
+    const finish = (token: string | null) => {
+      if (done) return;
+      done = true;
+      resolve(token);
+      if (!win.isDestroyed()) win.close();
+    };
+    const check = (target: string) => { const token = tokenFromRedirect(target); if (token) finish(token); };
+    win.webContents.on('will-redirect', (_e, target) => check(target));
+    win.webContents.on('will-navigate', (_e, target) => check(target));
+    win.webContents.on('did-navigate', (_e, target) => check(target));
+    win.webContents.on('did-navigate-in-page', (_e, target) => check(target));
+    win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+    win.on('closed', () => finish(null));
+    void win.loadURL(url);
+  });
 }
 
 /** Render a self-contained HTML page to PNG in an invisible window (the stream recap card). */
