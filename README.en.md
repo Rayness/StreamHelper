@@ -2,9 +2,9 @@
 
 [Русский](README.md) · [English](README.en.md)
 
-StreamHelper is a Windows desktop app for managing a stream, chat, and OBS browser sources from one place. Current version: **0.12.1**. The interface supports Russian and English.
+StreamHelper is a Windows desktop app for managing a stream, chat, and OBS browser sources from one place. Current version: **0.13.0**. The interface supports Russian and English.
 
-Patch **0.12.1** makes the newer overlays (curses, music duel, guess the melody, stock exchange, portal) visible in OBS again for profiles created before they existed. Release **0.12.0** added a font picker to every module (30 bundled fonts, installed fonts and Google Fonts), a Donations module, a StreamHelper group and separate settings per OBS scene, the Designer (custom overlays) and Variables tabs, Kawaki login in Connections, and the stream tools pack: auto clipper, curses, music duel, guess the melody, music ducking, viewer stock exchange, portal, stream recap and raid shield. [Verification report (Russian)](docs/verification-0.12.0.md).
+Release **0.13.0** adds Yandex Music requests, favourites and queue limits; Windows chat TTS with individual viewer voices; a focus timer, shoutouts and browser access for moderators with separate permissions. [Release notes and verification results (Russian)](docs/release-notes-0.13.0.md).
 
 > **Upgrading from 0.11.x:** "Add to OBS" now puts sources into a nested scene "StreamHelper · <scene>". Sources you already added stay where they are; move them into the group with the button in the OBS module, or turn the group off in **Connections → OBS**. Reconnect Twitch for clips and the raid shield.
 
@@ -32,7 +32,7 @@ These screenshots use fictional demo data; they contain no real accounts or toke
 
 ## Download and first run
 
-1. Download `StreamHelper-Setup-0.12.1.exe` from [release 0.12.1](https://github.com/Rayness/StreamHelper/releases/tag/v0.12.1) or the [update repository](https://github.com/Rayness/StreamHelper-Releases/releases/tag/v0.12.1). The Windows installer is currently unsigned.
+1. Download `StreamHelper-Setup-0.13.0.exe` from [release 0.13.0](https://github.com/Rayness/StreamHelper/releases/tag/v0.13.0) or the [update repository](https://github.com/Rayness/StreamHelper-Releases/releases/tag/v0.13.0). The Windows installer is currently unsigned.
 2. Open **Connections → Twitch** and sign in as the broadcaster. Authorization uses a device code on Twitch.
 3. If needed, open **Connections → OBS** and enter its WebSocket address, port and password. The usual port is 4455.
 4. Add the features you need: Alerts, Chat, Song Requests or individual activities. Select an added module to configure it and use **Add to OBS** for its browser source.
@@ -74,6 +74,7 @@ Each overlay is a separate OBS Browser Source. Each added widget module shows it
 | Top chatters | The most active viewers of the stream; bots are excluded. |
 | Focus timer | Pomodoro: focus, breaks and the current task on screen; chat extends a phase with a reward, breaks can switch to their own OBS scene. |
 | Shoutout | A card for a raider or friend with their avatar, category and one of their clips; chat message and Twitch's built-in shoutout. |
+| Chat TTS | Windows voices through an OBS source: viewer roles, the `!!!` prefix or all messages, a Twitch reward and personal voice selection. |
 | Interactive sources | Wheel, poll, giveaway, viewer queue, guess the number, boss, quiz, and emote rain. |
 | Kawaki | Current title, poster, and viewing progress. |
 
@@ -83,9 +84,11 @@ Each overlay is a separate OBS Browser Source. Each added widget module shows it
 
 **Music:** open **Overlays → Now Playing** and add the source to OBS. Auto mode selects an active session, preferring Spotify, then the Yandex Music app, then a browser. You can pin a source and adjust the horizontal or vertical layout, artwork and title size, background opacity, accent color, source label, album, and progress. The card hides on pause by default. StreamHelper reads local Windows media sessions, so no Spotify or Yandex sign-in is needed. Yandex Music in Chrome or Edge appears as “Browser” because Windows does not provide the tab URL. If several tabs in one browser play at once, a specific tab cannot be selected.
 
-**Song requests:** open **Overlays → Song requests**, add its separate OBS Browser Source, and enable viewer requests. Set the exact title of a custom Twitch reward; viewers enter a link to an individual YouTube video. For donations, set a minimum in the main currency; the donation message must contain the link. DonationAlerts, Streamlabs, and StreamElements are supported. The queue survives restarts and can advance automatically or be controlled from the app and OBS dock. Choose full-size video, compact visible video beside request details, or queue-only mode with no YouTube video or audio in OBS. Adjust volume, player controls, requester and title labels, queue count, compact video position and size, accent color, and background opacity. YouTube playback requires a visible video; queue-only mode keeps requests ready until you switch back or play them in another player. StreamHelper can pause the active Windows media session and resume it after the queue. The YouTube video must allow embedding and be reachable from the OBS computer.
+**Song requests:** open **Overlays → Song requests**, add its separate OBS Browser Source, and enable viewer requests. Set the exact title of a custom Twitch reward; viewers enter a YouTube, YouTube Music or Yandex Music track link, or a song name when search is enabled. For donations, set a minimum in the main currency; the donation message must contain the link. DonationAlerts, Streamlabs, and StreamElements are supported. The queue survives restarts and can advance automatically or be controlled from the app and OBS dock. Choose full-size video, compact visible video beside request details, or queue-only mode with no YouTube video or audio in OBS. Adjust volume, player controls, requester and title labels, queue count, compact video position and size, accent color, and background opacity. YouTube playback requires a visible video; queue-only mode keeps requests ready until you switch back or play them in another player. StreamHelper can pause the active Windows media session and resume it after the queue. The YouTube video must allow embedding and be reachable from the OBS computer.
 
 **Favourites:** ♥ on a request or the playing track keeps it in the Favourites on the Background music card. While there are no requests the favourites play in the background; ▶ starts a track right away. You can also add YouTube and Yandex Music links and songs from the computer (“Files from the computer”: they are copied into the app folder and play in the OBS source).
+
+**Request limits:** set the queue size, requests per viewer, maximum track length, minimum views and blocked words. Ban a viewer or track from the queue; a separate channel reward can skip the current song. Limits apply to viewer requests; the streamer's manual additions bypass them.
 
 **Yandex Music requests:** in the Yandex Music card, sign in with Yandex ID (or paste an OAuth token) and open the Yandex Music app or site with the same account. Yandex Music track links and “artist - song” requests (searched in Yandex Music first, then YouTube) play right in that app through “Play on device” (Ynison): StreamHelper starts the track, notices its end, plays the next one, and after the queue returns your previous music at the same position. The OBS source shows the cover and title while the sound comes from the Yandex Music app — capture it in OBS. Without Yandex Plus the app may play only previews. Ynison is an internal Yandex service with no public API, so a Yandex update can break this control; then turn off “Play requests in Yandex Music” and tracks will be found on YouTube.
 
@@ -122,6 +125,12 @@ Twitch is currently the implemented chat platform. The `ChatPlatform` interface 
 ### OBS dock
 
 In StreamHelper, open **OBS & actions → StreamHelper dock for OBS** and copy the URL. In OBS, choose **View → Docks → Custom Browser Docks**, give the dock a name, and paste the URL. The dock has sections for live OBS controls, alerts and on-screen messages, interactive activities, and music/tools. You can switch profiles there as well. The URL contains a random access key: treat it like a password and replace it in OBS if you change the overlay port.
+
+### Remote access for moderators
+
+In **Settings → Remote access**, enable the server, add a moderator, choose their permissions and share their personal invite link. The moderator opens StreamHelper in a browser with only the permitted actions; service connections and account sign-ins stay hidden. Permission changes apply immediately; you can kick a session, rotate the key or remove the moderator. Overlay previews work in the browser, and the moderator's appearance preferences are local to their interface.
+
+Treat the link like a password. Internet access requires an HTTPS tunnel or a VPN such as Tailscale/ZeroTier. Plain HTTP port forwarding sends the key and commands without encryption. The remote access server is enabled separately from the local overlay server.
 
 ## Updates and local data
 
