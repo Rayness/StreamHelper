@@ -73,13 +73,15 @@ app.whenReady().then(async () => {
     await js(`localStorage.setItem('nav',JSON.stringify({page:${JSON.stringify(page)},sub:${JSON.stringify(sub)}}))`);
     await window.reload(); await until(`!!document.querySelector('.workspace')`,'workspace reload failed'); await delay(150);
   };
+  const editedModules = new Set();
   const add = async (id) => {
     await click('Добавить модуль');
     await until(`!!document.querySelector('[data-add-module="${id}"]')`,'catalog module missing: '+id);
     await js(`document.querySelector('[data-add-module="${id}"]').click()`);
     await until(`!!document.querySelector('[data-editor-module="${id}"]')`,'module editor missing: '+id); await until(`!document.querySelector('[data-editor-module="${id}"] [role=status]')`,'module remained suspended: '+id); await delay(150);
+    editedModules.add(id);
   };
-  const select = async (id) => { await js(`document.querySelector('[data-module="${id}"]').click()`); await until(`!!document.querySelector('[data-editor-module="${id}"]')`,'selected module missing: '+id); await delay(150); };
+  const select = async (id) => { await js(`document.querySelector('[data-module="${id}"]').click()`); await until(`!!document.querySelector('[data-editor-module="${id}"]')`,'selected module missing: '+id); editedModules.add(id); await delay(150); };
   const remove = async () => { await js(`document.querySelector('.workspace-module-menu summary').click()`); await click('Убрать модуль'); await delay(150); };
   await js(`document.querySelector('.search-btn').click()`); await delay(100);
   await fill('.palette-input input','алерты');
@@ -146,15 +148,21 @@ app.whenReady().then(async () => {
   await click('Добавить в область'); await until(`!!document.querySelector('.alerts-layout')`,'re-added alert missing');
   assert.equal(fixture.settings.get('alerts').style.x,20,'re-adding must restore prior settings');
   await add('song');
-  await fill('[data-editor-module="song"] input[placeholder*=youtube]','https://youtu.be/M7lc1UVf-VE');
+  // Scope to the queue entry form; localized copy and provider names may change.
+  const songInput = '[data-editor-module="song"] .song-queue:not(.song-tracks) ~ .song-add input';
+  assert.equal(await js(`document.querySelectorAll(${JSON.stringify(songInput)}).length`),1,'manual song entry must be unambiguous');
+  await fill(songInput,'https://youtu.be/M7lc1UVf-VE');
   await click('Добавить');
   await until(`document.querySelector('[data-editor-module="song"]').textContent.includes('Тестовый трек')`,'manual song did not enter queue');
+  assert.deepEqual(fixture.settings.get('songQueue').map(({videoId,source})=>({videoId,source})),[{videoId:'M7lc1UVf-VE',source:'manual'}],'manual URL did not queue the requested video');
+  assert.equal(await js(`document.querySelector(${JSON.stringify(songInput)}).value`),'','successful manual add must clear the input');
   // Who hears the music + picking tracks from the queue.
   await js(`document.querySelector('[data-listen="both"]').click()`); await delay(250);
   assert.equal(fixture.settings.get('songRequests').listen,'both','listen choice not saved');
   assert.equal(await js(`document.querySelector('[data-listen="both"]').getAttribute('aria-checked')`),'true');
-  await fill('[data-editor-module="song"] input[placeholder*=youtube]','https://youtu.be/dQw4w9WgXcQ'); await click('Добавить');
+  await fill(songInput,'https://youtu.be/dQw4w9WgXcQ'); await click('Добавить');
   await until(`document.querySelectorAll('[data-editor-module="song"] [data-song]').length===2`,'second song missing');
+  assert.deepEqual(fixture.settings.get('songQueue').map((item)=>item.videoId),['M7lc1UVf-VE','dQw4w9WgXcQ'],'manual adds queued different videos');
   const firstSong = fixture.settings.get('songQueue')[0].id, secondSong = fixture.settings.get('songQueue')[1].id;
   await js(`document.querySelector('[data-song="${secondSong}"] [aria-label="Поставить следующим"]').click()`); await delay(250);
   assert.deepEqual(fixture.settings.get('songQueue').map((x)=>x.id),[secondSong,firstSong],'play next did not reorder the queue');
@@ -195,13 +203,39 @@ app.whenReady().then(async () => {
   await click('Добавить модуль');
   const remaining = await js(`[...document.querySelectorAll('[data-add-module]:not(:disabled)')].map(b=>b.dataset.addModule)`);
   await click('Отмена');
-  const toolPack = ['clipper','curse','duel','melody','ducking','stocks','portal','report','shield','focus','shoutout'];
+  const toolPack = ['clipper','curse','duel','melody','ducking','stocks','portal','report','shield','focus','shoutout','tts'];
   for (const id of remaining) { await add(id); assert.equal(await js(`document.querySelectorAll('[data-editor-module]').length`),1,'more than one editor mounted'); if (toolPack.includes(id) || id === 'donations') { await delay(400); await capture('module-'+id); }
+    if (id === 'tts') {
+      await fill('[data-editor-module="tts"] input[placeholder="!!!"]','??');
+      assert.equal(fixture.settings.get('tts').trigger,'??','TTS trigger edit did not save');
+      await js(`(()=>{const s=[...document.querySelectorAll('[data-editor-module="tts"] select')].find(s=>[...s.options].some(o=>o.value==='all'));s.value='all';s.dispatchEvent(new Event('change',{bubbles:true}))})()`); await delay(250);
+      assert.equal(fixture.settings.get('tts').mode,'all','TTS all-message mode did not save');
+      assert.equal(await js(`!!document.querySelector('[data-editor-module="tts"] input[placeholder="!!!"]')`),false,'prefix input remains in all-message mode');
+      await js(`(()=>{const s=[...document.querySelectorAll('[data-editor-module="tts"] select')].find(s=>[...s.options].some(o=>o.value==='lich'));s.value='lich';s.dispatchEvent(new Event('change',{bubbles:true}))})()`); await delay(250);
+      assert.equal(fixture.settings.get('tts').voice,'lich','TTS voice selection did not save');
+      assert(fixture.settings.get('tts').voices.includes('lich'),'selected TTS voice is not offered to viewers');
+      await click('Обновить список');
+      assert.equal(await js(`[...document.querySelectorAll('[data-editor-module="tts"] option')].some(o=>o.value==='QA Russian')`),true,'system voice refresh did not update options');
+      await click('Проверить голос');
+      await until(`document.querySelector('[data-editor-module="tts"] .control-status').textContent.includes('Читает: Тест')`,'TTS test did not reach current playback');
+      assert.equal(fixture.state.current.tts.current.voice,'lich','TTS test ignored selected voice');
+      assert(fixture.testBroadcasts.some(({kind,message})=>kind==='tts'&&message.type==='tts'&&message.play.effect==='echo'),'TTS test did not broadcast selected voice effect');
+      await click('Пропустить');
+      assert.equal(fixture.state.current.tts.current,null,'TTS skip did not stop playback');
+      await click('Проверить голос'); await click('Проверить голос');
+      assert.equal(fixture.state.current.tts.queue.length,1,'TTS test did not queue the next sample');
+      await click('Очистить очередь');
+      assert.equal(fixture.state.current.tts.current,null,'TTS clear did not stop playback');
+      assert.deepEqual(fixture.state.current.tts.queue,[],'TTS clear did not empty the queue');
+    }
     if (id === 'banner') {
       await js(`document.querySelector('.font-picker-button').click()`); await until(`document.querySelectorAll('.font-option').length>20`,'font picker lists bundled fonts');
       await capture('font-picker'); await js(`document.querySelector('.font-picker-button').click()`);
     } }
   await click('Рабочая область'); await capture('workspace-modules');
+  const moduleEditors = editedModules.size;
+  assert.equal(moduleEditors,43,'catalog did not install every module, including TTS');
+  assert.deepEqual([...editedModules].sort(),[...fixture.settings.get('workspace').cards].sort(),'not every installed module editor was exercised');
   const tiles = await js(`[...document.querySelectorAll('.workspace-installed')].map((tile)=>tile.getBoundingClientRect().height)`);
   assert(tiles.every((height)=>height<145),'module tiles are too tall');
   await click('Подключения');
@@ -228,7 +262,7 @@ app.whenReady().then(async () => {
   await until(`!!document.querySelector('.designer-props')`,'designer properties missing');
   await capture('designer');
   await click('Панель'); await until(`!!document.querySelector('.monitor-grid')`,'full monitor missing'); await capture('monitor-modules');
-  assert.equal(await js(`document.querySelectorAll('.monitor-card').length`),42);
+  assert.equal(await js(`document.querySelectorAll('.monitor-card').length`),43,'monitor did not render every installed module, including TTS');
   assert.equal(await js(`document.querySelectorAll('.content input,.content textarea,.content select').length`),0,'monitor renders mutable settings');
   await js(`document.querySelector('[data-monitor-edit]').click()`); await delay(150);
   // Free grid: drag by header and resize by corner with real pointer events; nothing may overlap.
@@ -319,6 +353,6 @@ app.whenReady().then(async () => {
   assert.equal(await js(`document.documentElement.lang`),'en');
   const alertGeometryCases = await checkAlertBounds();
   assert.deepEqual(failures,[],'renderer console errors');
-  writeFileSync(join(output,'ui-results.json'), JSON.stringify({passed:true,alertGeometryCases,moduleEditors:40,connectionEditors:9,checks:['empty workspace','three-page navigation','legacy route gate','search gate','remove/re-add preserves configuration','profile isolation and editor dismissal','individual activity and connection editors','global preferences scope','all 40 module editors','variables tab','designer tab','monitor has no feature configuration inputs','manual song queue','safe position settings','close-up live preview','coalesced settings writes','bot trailing spaces','small window layout','real alert DOM geometry','English module workflow','confirmed reset is scoped to current module','reset waits for pending edits','live chat and settings stay in module','local alert queue pause/resume/skip','isolated widget tests with emote rain active','separate connections without installation','fresh profile without losing connections','monitor free grid drag, corner resize, keyboard move, no overlaps, hide and persistence','compact module tiles','test waits for pending form edits','native pointer drag for alert position'],calls:fixture.calls.map(c=>c.channel)},null,2));
-  console.log('UI smoke passed: 40 module editors, 9 connection editors, designer, variables, draggable monitor, fresh profiles and isolated tests. Screenshots: dist/qa');
+  writeFileSync(join(output,'ui-results.json'), JSON.stringify({passed:true,alertGeometryCases,moduleEditors,connectionEditors:9,checks:['empty workspace','three-page navigation','legacy route gate','search gate','remove/re-add preserves configuration','profile isolation and editor dismissal','individual activity and connection editors','global preferences scope','all 43 module editors','variables tab','designer tab','monitor has no feature configuration inputs','manual song queue','TTS settings, voices and queue controls','safe position settings','close-up live preview','coalesced settings writes','bot trailing spaces','small window layout','real alert DOM geometry','English module workflow','confirmed reset is scoped to current module','reset waits for pending edits','live chat and settings stay in module','local alert queue pause/resume/skip','isolated widget tests with emote rain active','separate connections without installation','fresh profile without losing connections','monitor free grid drag, corner resize, keyboard move, no overlaps, hide and persistence','compact module tiles','test waits for pending form edits','native pointer drag for alert position'],calls:fixture.calls.map(c=>c.channel)},null,2));
+  console.log('UI smoke passed: 43 module editors, 9 connection editors, designer, variables, draggable monitor, fresh profiles and isolated tests. Screenshots: dist/qa');
 }).catch((error)=>{console.error(error);process.exitCode=1;}).finally(async()=>{alertWindow?.destroy(); await fixture?.stop(); window?.destroy(); app.exit(process.exitCode||0);});

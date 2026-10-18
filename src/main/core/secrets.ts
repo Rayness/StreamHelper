@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { safeStorage } from 'electron';
+import type { RemoteModerator } from '@shared/remote';
 
 export interface OAuthToken {
   accessToken: string;
@@ -33,6 +34,8 @@ export interface SecretsData {
   discordWebhookUrl?: string;
   obsPassword?: string;
   dockToken?: string;
+  /** Remote access for moderators: each moderator signs in with their own key. */
+  remoteAccess?: { enabled: boolean; port: number; moderators: (RemoteModerator & { key: string })[] };
   /** Yandex Music account for playing requests in the streamer's Yandex Music app (Ynison). */
   yandexMusic?: { accessToken: string; deviceId: string; uid?: string; login?: string; displayName?: string };
 }

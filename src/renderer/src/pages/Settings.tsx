@@ -6,21 +6,26 @@ import { Icon, type IconName } from '../components/icons';
 import { Button, Card, Field, NumberInput, PageHeader, Select, TextInput, Toggle } from '../components/ui';
 import { useT, type TKey } from '../i18n';
 import { call, saveSettings, useApp, useSub } from '../store';
+import { RemoteAccess } from './RemoteAccess';
 
-const TABS = ['look', 'general', 'server', 'updates', 'keys'] as const;
+const TABS = ['look', 'general', 'server', 'remote', 'updates', 'keys'] as const;
 type Tab = typeof TABS[number];
-const TAB_ICON: Record<Tab, IconName> = { look: 'palette', general: 'settings', server: 'layers', updates: 'refresh', keys: 'keyboard' };
+const TAB_ICON: Record<Tab, IconName> = { look: 'palette', general: 'settings', server: 'layers', remote: 'link', updates: 'refresh', keys: 'keyboard' };
+/** A moderator over remote access only sets up their own view. */
+const REMOTE_TABS: readonly Tab[] = ['look', 'keys'];
 
 export function Settings() {
   const t = useT();
   const version = useApp((d) => d.version);
-  const [tab, setTab] = useSub<Tab>('settings', 'look', TABS);
+  const remote = useApp((d) => !!d.remote);
+  const tabs = remote ? REMOTE_TABS : TABS;
+  const [tab, setTab] = useSub<Tab>('settings', 'look', tabs);
   return (
     <div className="page">
       <PageHeader title={t('workspace.preferences')} subtitle={`StreamHelper ${version}`} />
       <div className="settings-layout">
         <nav className="settings-nav" aria-label={t('workspace.preferences')}>
-          {TABS.map((id) => (
+          {tabs.map((id) => (
             <button key={id} type="button" className={tab === id ? 'active' : ''} aria-current={tab === id ? 'page' : undefined} onClick={() => setTab(id)}>
               <Icon name={TAB_ICON[id]} size={16} />
               {t(`settings.tab.${id}`)}
@@ -31,6 +36,7 @@ export function Settings() {
           {tab === 'look' && <Appearance />}
           {tab === 'general' && <General />}
           {tab === 'server' && <Server />}
+          {tab === 'remote' && <RemoteAccess />}
           {tab === 'updates' && <Updates />}
           {tab === 'keys' && <Shortcuts />}
         </div>
