@@ -237,7 +237,7 @@ function readNav(): NavState {
     const raw = JSON.parse(localStorage.getItem('nav') ?? 'null');
     if (raw && typeof raw.page === 'string') {
       const sub = raw.sub && typeof raw.sub === 'object' ? raw.sub : {};
-      if (['twitch','donationalerts','streamlabs','streamelements','streamerbot','discord','subforstream'].includes(raw.module)) return { page:'connections',sub:{...sub,connections:raw.module} };
+      if (['twitch','donationalerts','streamlabs','streamelements','streamerbot','discord','telegram','subforstream'].includes(raw.module)) return { page:'connections',sub:{...sub,connections:raw.module} };
       if (TOP_PAGES.includes(raw.page)) return { page: raw.page, sub };
       return { page: raw.version === 2 && raw.page === 'dashboard' ? 'dashboard' : 'workspace', sub,
         module: isWorkspaceModule(raw.module) ? raw.module : workspaceTarget(raw.page, sub[raw.page]) };
@@ -273,7 +273,7 @@ export function navigate(page: Page, sub?: string): void {
 }
 
 export function openModule(module: WorkspaceCard): void {
-  if (['twitch','donationalerts','streamlabs','streamelements','streamerbot','discord','subforstream'].includes(module)) { navigate('connections', module); return; }
+  if (['twitch','donationalerts','streamlabs','streamelements','streamerbot','discord','telegram','subforstream'].includes(module)) { navigate('connections', module); return; }
   if (!canNavigate()) return;
   flushSaves();
   setNav({ page: 'workspace', sub: nav.sub, ...resolveModuleAccess(module, data.settings?.workspace.cards) });
