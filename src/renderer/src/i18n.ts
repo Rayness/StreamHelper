@@ -8,6 +8,7 @@ import { enStudio, ruStudio } from './i18n.studio';
 import { enStream, ruStream } from './i18n.stream';
 import { enTts, ruTts } from './i18n.tts';
 import { enRemote, ruRemote } from './i18n.remote';
+import { enCaptions, ruCaptions } from './i18n.captions';
 import { useApp } from './store';
 
 const ruBase = {
@@ -420,7 +421,7 @@ const ruBase = {
   'toast.twitchSessionExpired': 'Сессия Twitch истекла — войдите снова',
 };
 
-const ru = { ...ruBase, ...ruExtra, ...ruMore, ...ruWorkspace, ...ruFeatures, ...ruStudio, ...ruStream, ...ruTts, ...ruRemote };
+const ru = { ...ruBase, ...ruExtra, ...ruMore, ...ruWorkspace, ...ruFeatures, ...ruStudio, ...ruStream, ...ruTts, ...ruRemote, ...ruCaptions };
 export type TKey = keyof typeof ru;
 
 const enBase: Record<keyof typeof ruBase, string> = {
@@ -833,7 +834,7 @@ const enBase: Record<keyof typeof ruBase, string> = {
   'toast.twitchSessionExpired': 'Twitch session expired — please log in again',
 };
 
-const en: Record<TKey, string> = { ...enBase, ...enExtra, ...enMore, ...enWorkspace, ...enFeatures, ...enStudio, ...enStream, ...enTts, ...enRemote };
+const en: Record<TKey, string> = { ...enBase, ...enExtra, ...enMore, ...enWorkspace, ...enFeatures, ...enStudio, ...enStream, ...enTts, ...enRemote, ...enCaptions };
 
 const DICTS = { ru, en } as const;
 type Params = Record<string, string | number>;

@@ -203,7 +203,7 @@ app.whenReady().then(async () => {
   await click('Добавить модуль');
   const remaining = await js(`[...document.querySelectorAll('[data-add-module]:not(:disabled)')].map(b=>b.dataset.addModule)`);
   await click('Отмена');
-  const toolPack = ['clipper','curse','duel','melody','ducking','stocks','portal','report','shield','focus','shoutout','tts'];
+  const toolPack = ['clipper','curse','duel','melody','ducking','stocks','portal','report','shield','focus','shoutout','tts','captions'];
   for (const id of remaining) { await add(id); assert.equal(await js(`document.querySelectorAll('[data-editor-module]').length`),1,'more than one editor mounted'); if (toolPack.includes(id) || id === 'donations') { await delay(400); await capture('module-'+id); }
     if (id === 'tts') {
       await fill('[data-editor-module="tts"] input[placeholder="!!!"]','??');
@@ -228,20 +228,27 @@ app.whenReady().then(async () => {
       assert.equal(fixture.state.current.tts.current,null,'TTS clear did not stop playback');
       assert.deepEqual(fixture.state.current.tts.queue,[],'TTS clear did not empty the queue');
     }
+    if (id === 'captions') {
+      await click('Тестовые субтитры');
+      assert.equal(fixture.state.current.captions.lines.length,1,'captions test did not show sample lines');
+      assert(fixture.testBroadcasts.some(({kind,message})=>kind==='captions'&&message.type==='captions'&&message.interim),'captions test did not reach the overlay');
+      await click('Очистить');
+      assert.deepEqual(fixture.state.current.captions.lines,[],'captions clear did not empty the lines');
+    }
     if (id === 'banner') {
       await js(`document.querySelector('.font-picker-button').click()`); await until(`document.querySelectorAll('.font-option').length>20`,'font picker lists bundled fonts');
       await capture('font-picker'); await js(`document.querySelector('.font-picker-button').click()`);
     } }
   await click('Рабочая область'); await capture('workspace-modules');
   const moduleEditors = editedModules.size;
-  assert.equal(moduleEditors,43,'catalog did not install every module, including TTS');
+  assert.equal(moduleEditors,44,'catalog did not install every module, including TTS and captions');
   assert.deepEqual([...editedModules].sort(),[...fixture.settings.get('workspace').cards].sort(),'not every installed module editor was exercised');
   const tiles = await js(`[...document.querySelectorAll('.workspace-installed')].map((tile)=>tile.getBoundingClientRect().height)`);
   assert(tiles.every((height)=>height<145),'module tiles are too tall');
   await click('Подключения');
   await until(`!!document.querySelector('[data-connection-editor]')`,'connections page missing');
   assert.equal(await js(`document.querySelectorAll('[data-add-module]').length`),0,'connections require installing a workspace module');
-  for(const id of ['twitch','donationalerts','streamlabs','streamelements','streamerbot','discord','obs','kawaki','subforstream']) {
+  for(const id of ['twitch','donationalerts','streamlabs','streamelements','streamerbot','discord','telegram','obs','kawaki','subforstream']) {
     await js(`document.querySelector('[data-connection="${id}"]').click()`);
     await until(`!!document.querySelector('[data-connection-editor="${id}"]')`,'connection editor missing: '+id);
     assert.equal(await js(`document.querySelectorAll('[data-connection-editor]').length`),1);
@@ -262,7 +269,7 @@ app.whenReady().then(async () => {
   await until(`!!document.querySelector('.designer-props')`,'designer properties missing');
   await capture('designer');
   await click('Панель'); await until(`!!document.querySelector('.monitor-grid')`,'full monitor missing'); await capture('monitor-modules');
-  assert.equal(await js(`document.querySelectorAll('.monitor-card').length`),43,'monitor did not render every installed module, including TTS');
+  assert.equal(await js(`document.querySelectorAll('.monitor-card').length`),44,'monitor did not render every installed module, including TTS and captions');
   assert.equal(await js(`document.querySelectorAll('.content input,.content textarea,.content select').length`),0,'monitor renders mutable settings');
   await js(`document.querySelector('[data-monitor-edit]').click()`); await delay(150);
   // Free grid: drag by header and resize by corner with real pointer events; nothing may overlap.
@@ -354,5 +361,5 @@ app.whenReady().then(async () => {
   const alertGeometryCases = await checkAlertBounds();
   assert.deepEqual(failures,[],'renderer console errors');
   writeFileSync(join(output,'ui-results.json'), JSON.stringify({passed:true,alertGeometryCases,moduleEditors,connectionEditors:9,checks:['empty workspace','three-page navigation','legacy route gate','search gate','remove/re-add preserves configuration','profile isolation and editor dismissal','individual activity and connection editors','global preferences scope','all 43 module editors','variables tab','designer tab','monitor has no feature configuration inputs','manual song queue','TTS settings, voices and queue controls','safe position settings','close-up live preview','coalesced settings writes','bot trailing spaces','small window layout','real alert DOM geometry','English module workflow','confirmed reset is scoped to current module','reset waits for pending edits','live chat and settings stay in module','local alert queue pause/resume/skip','isolated widget tests with emote rain active','separate connections without installation','fresh profile without losing connections','monitor free grid drag, corner resize, keyboard move, no overlaps, hide and persistence','compact module tiles','test waits for pending form edits','native pointer drag for alert position'],calls:fixture.calls.map(c=>c.channel)},null,2));
-  console.log('UI smoke passed: 43 module editors, 9 connection editors, designer, variables, draggable monitor, fresh profiles and isolated tests. Screenshots: dist/qa');
+  console.log('UI smoke passed: 44 module editors, 10 connection editors, designer, variables, draggable monitor, fresh profiles and isolated tests. Screenshots: dist/qa');
 }).catch((error)=>{console.error(error);process.exitCode=1;}).finally(async()=>{alertWindow?.destroy(); await fixture?.stop(); window?.destroy(); app.exit(process.exitCode||0);});

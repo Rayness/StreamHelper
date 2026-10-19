@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <title>StreamHelper — Captions</title>
+    <style>
+      * { box-sizing: border-box; }
+      html, body { margin: 0; width: 100%; height: 100%; background: transparent; overflow: hidden; }
+      #captions { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; padding: 16px; opacity: 0; transition: opacity 0.4s ease; }
+      #captions.on { opacity: 1; }
+      #captions.left { align-items: flex-start; }
+      .box { max-width: 100%; padding: 0.35em 0.7em; border-radius: 0.35em; display: flex; flex-direction: column; gap: 0.15em; }
+      #captions:not(.left) .box { text-align: center; }
+      .line { margin: 0; font-weight: 700; line-height: 1.3; overflow-wrap: anywhere; text-shadow: 0 2px 4px rgba(0, 0, 0, 0.55); }
+      .line.tr { font-weight: 600; font-size: 0.85em; }
+      .line.interim { opacity: 0.8; }
+    </style>
+  </head>
+  <body>
+    <div id="captions"><div class="box"></div></div>
+    <script src="/overlay/assets/common.js"></script>
+    <script>
+      const root = document.getElementById('captions');
+      const box = root.querySelector('.box');
+      let msg = null;
+      let skew = 0;
+      let hideTimer = null;
+
+      function hex(color, alpha) {
+        const m = /^#?([0-9a-f]{6})$/i.exec(color || '');
+        if (!m) return `rgba(0,0,0,${alpha})`;
+        const n = parseInt(m[1], 16);
+        return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${alpha})`;
+      }
+
+      function sample(lang) {
+        const now = Date.now();
+        return {
+          lines: [{ id: 'p1', text: SH.tr(lang, 'Всем привет, сегодня проходим финального босса', 'Hi everyone, today we beat the final boss'), translation: SH.tr(lang, 'Hi everyone, today we beat the final boss', 'Всем привет, сегодня проходим финального босса'), at: now }],
+          interim: SH.tr(lang, 'и посмотрим, что будет дальше', "and we'll see what happens next"),
+          lastAt: now,
+        };
+      }
+
+      function row(text, className, color) {
+        const p = SH.el('p', `line ${className}`.trim(), text);
+        p.style.color = color;
+        return p;
+      }
+
+      function render() {
+        if (!msg) return;
+        const s = msg.style;
+        const data = SH.preview && !msg.lines.length && !msg.interim ? sample(msg.lang) : msg;
+        root.classList.toggle('left', s.align === 'left');
+        box.style.fontSize = `${Math.max(12, s.fontSize)}px`;
+        box.style.background = hex(s.bgColor, Math.min(1, Math.max(0, s.bgOpacity)));
+        const nodes = [];
+        const translated = !!s.translateTo;
+        for (const line of data.lines) {
+          const tr = translated && line.translation;
+          if (!(s.translationOnly && tr)) nodes.push(row(line.text, '', s.textColor));
+          if (tr) nodes.push(row(line.translation, 'tr', s.translationColor));
+        }
+        // The phrase being spoken is not translated yet: shown in the spoken language unless only the translation is wanted.
+        if (data.interim && !(translated && s.translationOnly)) nodes.push(row(data.interim, 'interim', s.textColor));
+        box.replaceChildren(...nodes);
+        const quietFor = Date.now() + skew - (data.lastAt || 0);
+        const hideAfter = Math.max(1, s.hideAfterSec) * 1000;
+        const visible = nodes.length > 0 && (SH.preview || quietFor < hideAfter);
+        root.classList.toggle('on', visible);
+        clearTimeout(hideTimer);
+        if (visible && !SH.preview) hideTimer = setTimeout(render, hideAfter - quietFor + 50);
+      }
+
+      SH.connect('captions', (m) => {
+        if (m.type !== 'captions') return;
+        msg = m;
+        skew = m.now - Date.now();
+        SH.useFont(box, m.style.fontFamily);
+        render();
+      });
+    </script>
+  </body>
+</html>

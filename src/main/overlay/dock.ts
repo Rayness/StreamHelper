@@ -10,7 +10,7 @@ export interface DockOptions {
   action: (name: string, id?: string) => void | Promise<void>;
 }
 
-function authorized(given: string | null, expected: string): boolean {
+export function authorized(given: string | null, expected: string): boolean {
   if (!given || given.length !== expected.length) return false;
   return timingSafeEqual(Buffer.from(given), Buffer.from(expected));
 }

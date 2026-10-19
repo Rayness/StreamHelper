@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>StreamHelper — Субтитры</title>
+    <style>
+      :root { color-scheme: dark; --bg: #121017; --card: #1c1924; --line: #2c2836; --text: #ece9f3; --muted: #9a94a8; --accent: #9b6bff; --ok: #37d399; --bad: #ff6b6b; }
+      * { box-sizing: border-box; }
+      body { margin: 0; min-height: 100vh; background: var(--bg); color: var(--text); font: 15px/1.5 "Segoe UI", system-ui, sans-serif; display: flex; justify-content: center; padding: 32px 16px; }
+      main { width: 100%; max-width: 640px; display: flex; flex-direction: column; gap: 16px; }
+      h1 { margin: 0; font-size: 22px; }
+      .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; }
+      .status { display: flex; align-items: center; gap: 10px; font-weight: 600; }
+      .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); flex: none; }
+      .on .dot { background: var(--ok); box-shadow: 0 0 0 4px color-mix(in srgb, var(--ok) 25%, transparent); }
+      .bad .dot { background: var(--bad); }
+      button { font: inherit; font-weight: 600; border: 0; border-radius: 8px; padding: 10px 18px; cursor: pointer; background: var(--accent); color: #fff; }
+      button.secondary { background: var(--line); color: var(--text); }
+      .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+      .muted { color: var(--muted); font-size: 13px; }
+      .error { color: var(--bad); font-size: 13px; }
+      #log { min-height: 120px; display: flex; flex-direction: column; gap: 6px; }
+      #log p { margin: 0; }
+      #log .tr { color: #ffd35a; font-size: 14px; }
+      #interim { color: var(--muted); font-style: italic; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1 data-t="title">Субтитры StreamHelper</h1>
+      <div class="card">
+        <div class="row" style="justify-content: space-between">
+          <div class="status" id="status"><span class="dot"></span><span id="statusText" data-t="idle">Не слушаю</span></div>
+          <div class="row">
+            <button id="start" data-t="start">Начать</button>
+            <button id="stop" class="secondary" hidden data-t="stop">Остановить</button>
+          </div>
+        </div>
+        <p class="error" id="error" hidden></p>
+        <p class="muted" id="info"></p>
+      </div>
+      <div class="card">
+        <div id="log"></div>
+        <p id="interim"></p>
+      </div>
+      <p class="muted" data-t="hint">Оставьте эту вкладку открытой во время стрима — можно в отдельном окне за OBS. Распознавание работает в Chrome и Edge; звук обрабатывает сервис браузера (Google или Microsoft). Микрофон — тот, что выбран в браузере по умолчанию.</p>
+    </main>
+    <script>
+      const token = new URLSearchParams(location.search).get('token') || '';
+      const q = `?token=${encodeURIComponent(token)}`;
+      const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      const $ = (id) => document.getElementById(id);
+      const TEXT = {
+        ru: { title: 'Субтитры StreamHelper', idle: 'Не слушаю', start: 'Начать', stop: 'Остановить', listening: 'Слушаю', disabled: 'Субтитры выключены в StreamHelper', hint: 'Оставьте эту вкладку открытой во время стрима — можно в отдельном окне за OBS. Распознавание работает в Chrome и Edge; звук обрабатывает сервис браузера (Google или Microsoft). Микрофон — тот, что выбран в браузере по умолчанию.',
+          noApi: 'Этот браузер не умеет распознавать речь. Откройте ссылку в Chrome или Edge.', denied: 'Браузер не дал доступ к микрофону. Разрешите его значком в адресной строке и нажмите «Начать».', network: 'Нет связи с сервисом распознавания браузера. Пробую снова…', noMic: 'Микрофон не найден.',
+          noApp: 'StreamHelper не отвечает. Приложение закрыто или ссылка устарела.', lang: 'Язык: {lang}', tr: 'перевод на {lang}', trLoading: 'Загружаю перевод на {lang}…', noTr: 'Перевод в браузере недоступен (нужен Chrome 138 или новее). Субтитры идут без перевода.' },
+        en: { title: 'StreamHelper captions', idle: 'Not listening', start: 'Start', stop: 'Stop', listening: 'Listening', disabled: 'Captions are off in StreamHelper', hint: 'Keep this tab open while streaming — a separate window behind OBS is fine. Recognition works in Chrome and Edge; the browser\'s service (Google or Microsoft) processes the audio. The microphone is the browser\'s default one.',
+          noApi: "This browser can't recognize speech. Open the link in Chrome or Edge.", denied: 'The browser denied the microphone. Allow it from the icon in the address bar and press Start.', network: "Can't reach the browser's recognition service. Retrying…", noMic: 'No microphone found.',
+          noApp: "StreamHelper doesn't answer. The app is closed or the link is outdated.", lang: 'Language: {lang}', tr: 'translated to {lang}', trLoading: 'Loading translation to {lang}…', noTr: 'Translation in the browser is unavailable (Chrome 138 or newer). Captions go without it.' },
+      };
+      let ui = 'ru';
+      const t = (key, vars = {}) => (TEXT[ui][key] || key).replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
+
+      let config = null;
+      let rec = null;
+      let running = false;
+      let error = '';
+      let translator = null;
+      let translatorFor = '';
+      let lastSent = 0;
+      let lastPing = 0;
+      let pendingInterim = null;
+
+      function localize() {
+        document.documentElement.lang = ui;
+        document.querySelectorAll('[data-t]').forEach((n) => { n.textContent = t(n.dataset.t); });
+        document.title = `StreamHelper — ${t('title')}`;
+      }
+
+      function showError(text) {
+        error = text || '';
+        $('error').hidden = !error;
+        $('error').textContent = error;
+        ping(true);
+      }
+
+      function setStatus() {
+        const box = $('status');
+        box.classList.toggle('on', running && !error);
+        box.classList.toggle('bad', !!error);
+        $('statusText').textContent = running ? t('listening') : t('idle');
+        $('start').hidden = running;
+        $('stop').hidden = !running;
+        if (!config) return;
+        const parts = [t('lang', { lang: config.language })];
+        if (config.translateTo) parts.push(translator ? t('tr', { lang: config.translateTo }) : '');
+        $('info').textContent = parts.filter(Boolean).join(' · ');
+      }
+
+      async function send(path, body) {
+        try {
+          const r = await fetch(`/captions/${path}${q}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+          if (r.status === 403 && error !== t('noApp')) showError(t('noApp'));
+          return r.ok;
+        } catch {
+          if (error !== t('noApp')) showError(t('noApp'));
+          return false;
+        }
+      }
+
+      /** Tells the app the page is alive. Called from events too: background tabs slow timers down. */
+      function ping(force) {
+        const now = Date.now();
+        if (!force && now - lastPing < 5000) return;
+        lastPing = now;
+        void send('ping', { error: error || null });
+      }
+
+      async function loadConfig() {
+        try {
+          const r = await fetch(`/captions/config${q}`, { cache: 'no-store' });
+          if (!r.ok) throw new Error();
+          const next = await r.json();
+          ui = next.lang === 'en' ? 'en' : 'ru';
+          const changed = config && (config.language !== next.language || config.translateTo !== next.translateTo);
+          config = next;
+          localize();
+          if (!config.enabled) showError(t('disabled'));
+          else if (error === t('disabled') || error === t('noApp')) showError('');
+          if (changed && running) { await prepareTranslator(); restart(); }
+          setStatus();
+        } catch {
+          showError(t('noApp'));
+        }
+      }
+
+      /** Chrome's built-in translator works on the computer itself; the language pack downloads once. */
+      async function prepareTranslator() {
+        const target = config?.translateTo || '';
+        const source = (config?.language || '').split('-')[0];
+        if (!target || target === source) { translator = null; translatorFor = ''; return; }
+        if (translatorFor === `${source}>${target}` && translator) return;
+        translator = null;
+        if (!('Translator' in self)) { $('info').textContent = t('noTr'); return; }
+        try {
+          const availability = await Translator.availability({ sourceLanguage: source, targetLanguage: target });
+          if (availability === 'unavailable') { $('info').textContent = t('noTr'); return; }
+          $('info').textContent = t('trLoading', { lang: target });
+          translator = await Translator.create({ sourceLanguage: source, targetLanguage: target });
+          translatorFor = `${source}>${target}`;
+        } catch {
+          $('info').textContent = t('noTr');
+        }
+      }
+
+      function addLog(text, translation) {
+        const log = $('log');
+        const p = document.createElement('p');
+        p.textContent = text;
+        log.append(p);
+        if (translation) {
+          const tr = document.createElement('p');
+          tr.className = 'tr';
+          tr.textContent = translation;
+          log.append(tr);
+        }
+        while (log.children.length > 12) log.firstElementChild.remove();
+      }
+
+      async function onFinal(text) {
+        let translation = '';
+        if (translator && text) {
+          try { translation = await translator.translate(text); } catch { /* the line goes without it */ }
+        }
+        addLog(text, translation);
+        await send('push', { text, final: true, translation });
+      }
+
+      function onInterim(text) {
+        $('interim').textContent = text;
+        // At most ~8 updates a second, sent from recognition events (no timers: they lag in background tabs).
+        const now = Date.now();
+        if (now - lastSent < 120) { pendingInterim = text; return; }
+        lastSent = now;
+        pendingInterim = null;
+        void send('push', { text, final: false });
+      }
+
+      function build() {
+        rec = new Recognition();
+        rec.lang = config.language;
+        rec.continuous = true;
+        rec.interimResults = true;
+        rec.maxAlternatives = 1;
+        rec.onresult = (e) => {
+          let interim = '';
+          for (let i = e.resultIndex; i < e.results.length; i++) {
+            const r = e.results[i];
+            if (r.isFinal) void onFinal(r[0].transcript.trim());
+            else interim += r[0].transcript;
+          }
+          if (interim.trim()) onInterim(interim.trim());
+          else { $('interim').textContent = ''; pendingInterim = null; }
+          if (error && error === t('network')) showError('');
+          ping(false);
+        };
+        rec.onerror = (e) => {
+          if (e.error === 'no-speech' || e.error === 'aborted') return;
+          if (e.error === 'not-allowed' || e.error === 'service-not-allowed') { running = false; showError(t('denied')); setStatus(); return; }
+          if (e.error === 'audio-capture') { running = false; showError(t('noMic')); setStatus(); return; }
+          if (e.error === 'network') showError(t('network'));
+        };
+        // Chrome ends recognition after a pause or a minute; start again at once (timers lag in background tabs).
+        rec.onend = () => {
+          if (pendingInterim) void send('push', { text: pendingInterim, final: false });
+          if (!running) return;
+          try { rec.start(); } catch { build(); try { rec.start(); } catch { /* next event retries */ } }
+        };
+      }
+
+      function restart() {
+        if (!rec) return;
+        try { rec.abort(); } catch { /* not started */ }
+        build();
+        try { rec.start(); } catch { /* onend retries */ }
+      }
+
+      async function start() {
+        if (!Recognition) { showError(t('noApi')); return; }
+        await loadConfig();
+        if (!config || !config.enabled) return;
+        running = true;
+        showError('');
+        await prepareTranslator();
+        build();
+        try { rec.start(); } catch { /* already running */ }
+        setStatus();
+      }
+
+      function stop() {
+        running = false;
+        try { rec?.abort(); } catch { /* not started */ }
+        $('interim').textContent = '';
+        void send('push', { text: '', final: false });
+        setStatus();
+      }
+
+      $('start').addEventListener('click', () => void start());
+      $('stop').addEventListener('click', stop);
+      void loadConfig().then(() => { if (!Recognition) showError(t('noApi')); setStatus(); });
+      setInterval(() => { void loadConfig(); ping(false); }, 10000);
+    </script>
+  </body>
+</html>

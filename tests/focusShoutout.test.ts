@@ -243,7 +243,9 @@ describe('shoutout card', () => {
       say: async (t: string) => void said.push(t),
       channel: vi.fn(async (login: string) => channels[login] ?? null),
       clips: vi.fn(async (id: string, days?: number) => (id === '11' && !days ? [{ id: 'clipA', title: 'GG', durationSec: 20, views: 5, thumbnailUrl: '' }] : [])),
-      native: vi.fn(async () => undefined),
+      native: vi.fn(async (_id: string): Promise<void> => undefined),
+      followers: vi.fn(async (id: string) => ({ '11': 120, '22': 51, '33': 7 } as Record<string, number>)[id] ?? 0),
+      now: () => Date.now(),
     };
     const so = new ShoutoutService(env.ctx, deps);
     return { ...env, so, sent, said, deps };
@@ -283,13 +285,93 @@ describe('shoutout card', () => {
     so.dispose();
   });
 
-  it("only shows the card for the bot's !so: the bot already posted and shouted out", async () => {
+  it("shows the card for the bot's !so without a second chat message; Twitch's shoutout goes through the queue", async () => {
     const { bus, so, state, said, deps } = setup();
-    bus.emit('shoutout:command', { login: 'pal' });
+    bus.emit('shoutout:command', { login: 'pal', userId: '22' });
     await vi.advanceTimersByTimeAsync(0);
     expect(state.current.shoutout.current).toMatchObject({ login: 'pal', reason: 'command', clip: null });
     expect(said).toEqual([]);
-    expect(deps.native).not.toHaveBeenCalled();
+    expect(deps.native).toHaveBeenCalledWith('22');
+    so.dispose();
+  });
+
+  function chatter(login: string, userId: string, roles: Partial<ChatMessage['roles']> = {}): ChatMessage {
+    return { ...chat('hi'), userId, userLogin: login, userName: login, roles: { broadcaster: false, moderator: false, vip: false, subscriber: false, ...roles } };
+  }
+
+  function live(env: ReturnType<typeof setup>, on = true) {
+    env.state.patch('stream', { ...env.state.current.stream, live: on });
+    env.bus.emit('stream:update', env.state.current.stream);
+  }
+
+  it('shouts out a streamer with enough followers once per stream when they write in chat', async () => {
+    const env = setup({ onChatter: true, minFollowers: 50, playClip: false });
+    const { bus, so, state, said, deps } = env;
+    bus.emit('chat:message', chatter('raider', '11'));
+    await vi.advanceTimersByTimeAsync(0);
+    // Offline: nothing.
+    expect(deps.followers).not.toHaveBeenCalled();
+    live(env);
+    bus.emit('chat:message', chatter('raider', '11'));
+    bus.emit('chat:message', chatter('raider', '11'));
+    bus.emit('chat:message', chatter('smol', '33'));
+    bus.emit('chat:message', chatter('nightbot', '44'));
+    bus.emit('chat:message', chatter('pal', '22', { broadcaster: true }));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(deps.followers.mock.calls.map((c) => c[0])).toEqual(['11', '33']);
+    expect(state.current.shoutout.current).toMatchObject({ login: 'raider', reason: 'chatter', followers: 120 });
+    expect(said).toEqual(['Streamer Raider is in chat! Go check them out at twitch.tv/raider — last seen in Celeste']);
+    expect(deps.native).toHaveBeenCalledWith('11');
+    await vi.advanceTimersByTimeAsync(20_000);
+    bus.emit('chat:message', chatter('raider', '11'));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(said).toHaveLength(1);
+    // A new stream: shouted out again.
+    live(env, false);
+    live(env);
+    bus.emit('chat:message', chatter('raider', '11'));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(said).toHaveLength(2);
+    so.dispose();
+  });
+
+  it('does not shout out a raider again for chatting after the raid', async () => {
+    const env = setup({ onChatter: true, delaySec: 0, playClip: false });
+    live(env);
+    env.bus.emit('event', raid('raider', 10));
+    await vi.advanceTimersByTimeAsync(0);
+    env.bus.emit('chat:message', chatter('raider', '11'));
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(env.said).toHaveLength(1);
+    expect(env.deps.followers).not.toHaveBeenCalled();
+    env.so.dispose();
+  });
+
+  it("queues Twitch's own shoutout when one went out recently, and retries after a cooldown refusal", async () => {
+    const env = setup({ onChatter: true, showCard: false });
+    const { bus, so, state, deps } = env;
+    live(env);
+    deps.native.mockRejectedValueOnce(Object.assign(new Error('cooldown'), { status: 429 }));
+    bus.emit('chat:message', chatter('raider', '11'));
+    bus.emit('chat:message', chatter('pal', '22'));
+    await vi.advanceTimersByTimeAsync(1000);
+    // The first try was refused: both wait.
+    expect(deps.native.mock.calls.map((c) => c[0])).toEqual(['11']);
+    expect(state.current.shoutout.nativeQueue).toEqual(['Raider', 'Pal']);
+    expect(state.current.shoutout.nativeNextAt).not.toBeNull();
+    await vi.advanceTimersByTimeAsync(124_000);
+    expect(deps.native.mock.calls.map((c) => c[0])).toEqual(['11', '11']);
+    expect(state.current.shoutout.nativeQueue).toEqual(['Pal']);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(deps.native).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(65_000);
+    expect(deps.native.mock.calls.map((c) => c[0])).toEqual(['11', '11', '22']);
+    expect(state.current.shoutout.nativeQueue).toEqual([]);
+    expect(state.current.shoutout.nativeNextAt).toBeNull();
+    // The same channel within the hour: Twitch would refuse, so it is not queued.
+    await so.show('raider');
+    await vi.advanceTimersByTimeAsync(200_000);
+    expect(deps.native).toHaveBeenCalledTimes(3);
     so.dispose();
   });
 

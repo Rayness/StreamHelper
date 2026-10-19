@@ -17,7 +17,7 @@ export interface ChatPlatform {
   ban(userId: string, reason?: string): Promise<void>;
   /** Epoch ms when the user followed, or null. Platforms without follows return null. */
   getFollowedAt(userId: string): Promise<number | null>;
-  shoutout(login: string): Promise<{ displayName: string; category: string } | null>;
+  shoutout(login: string): Promise<{ id: string; displayName: string; category: string } | null>;
 }
 
 export class PlatformRegistry {

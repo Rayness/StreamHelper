@@ -142,6 +142,7 @@ export function ShoutoutModule() {
             <TextInput value={who} onChange={setWho} placeholder={t('shoutout.whoPlaceholder')} />
             <Button variant="primary" icon="megaphone" disabled={busy || !who.trim()} type="submit">{busy ? '…' : t('shoutout.go')}</Button>
           </form>
+          {s.nativeQueue.length > 0 && <p className="muted small">{t('shoutout.nativeQueue', { n: s.nativeQueue.length, names: s.nativeQueue.join(', ') })}{s.nativeNextAt ? ` · ${t('shoutout.nativeNext', { time: clockAt(s.nativeNextAt) })}` : ''}</p>}
           {s.error && <p className="error small">{s.error}</p>}
         </Card>
         <Card title={t('shoutout.when')}>
@@ -150,15 +151,18 @@ export function ShoutoutModule() {
               <div className="stack">
                 <Toggle checked={cfg.onRaid} onChange={(onRaid) => set({ onRaid })} label={t('shoutout.onRaid')} />
                 <Toggle checked={cfg.onCommand} onChange={(onCommand) => set({ onCommand })} label={t('shoutout.onCommand', { command: `${prefix}${soCommand?.trigger ?? 'so'}` })} />
+                <Toggle checked={cfg.onChatter} onChange={(onChatter) => set({ onChatter })} label={t('shoutout.onChatter')} />
               </div>
             </Field>
             <Field label={t('shoutout.minViewers')}><NumberInput value={cfg.minViewers} min={0} max={100000} onChange={(minViewers) => set({ minViewers })} /></Field>
             <Field label={t('shoutout.delay')} hint={t('shoutout.delayHint')}><NumberInput value={cfg.delaySec} min={0} max={120} onChange={(delaySec) => set({ delaySec })} /></Field>
+            <Field label={t('shoutout.minFollowers')} hint={t('shoutout.minFollowersHint')}><NumberInput value={cfg.minFollowers} min={1} max={10000000} onChange={(minFollowers) => set({ minFollowers })} /></Field>
           </div>
         </Card>
         <Card title={t('shoutout.chatTwitch')}>
           <div className="form">
             <Field label={t('shoutout.message')} hint={t('shoutout.messageHint')} wide><TextArea value={cfg.chatMessage} rows={2} onChange={(chatMessage) => set({ chatMessage })} /></Field>
+            <Field label={t('shoutout.chatterMessage')} hint={t('shoutout.chatterMessageHint')} wide><TextArea value={cfg.chatterMessage} rows={2} onChange={(chatterMessage) => set({ chatterMessage })} /></Field>
             <Field label={t('overlays.options')} hint={t('shoutout.nativeHint')} wide><Toggle checked={cfg.nativeShoutout} onChange={(nativeShoutout) => set({ nativeShoutout })} label={t('shoutout.native')} /></Field>
           </div>
         </Card>
@@ -183,7 +187,7 @@ export function ShoutoutModule() {
             <ul className="portal-log">
               {s.history.map((c) => (
                 <li key={c.id}>
-                  <span className="muted small">{clockAt(c.at)} · {t(`shoutoutReason.${c.reason}`, { n: c.viewers ?? 0 })}</span> <b>{c.displayName}</b>
+                  <span className="muted small">{clockAt(c.at)} · {t(`shoutoutReason.${c.reason}`, { n: c.reason === 'chatter' ? c.followers ?? 0 : c.viewers ?? 0 })}</span> <b>{c.displayName}</b>
                   {c.game && <span className="muted"> · {c.game}</span>}
                   {c.clip && <> · <a href={`https://clips.twitch.tv/${c.clip.id}`} target="_blank" rel="noreferrer">🎬 {c.clip.title || c.clip.id}</a></>}
                 </li>

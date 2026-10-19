@@ -33,6 +33,11 @@ export interface SecretsData {
   streamlabsSocketToken?: string;
   streamelementsJwt?: string;
   discordWebhookUrl?: string;
+  telegramBotToken?: string;
+  /** The live announcement in Telegram, so a restart mid-stream neither posts again nor loses it. */
+  telegramPost?: { startedAt: number; chatId: string; messageId: number; photo: boolean; pinned: boolean; endedAt?: number };
+  /** Lets the captions microphone page (in Chrome or Edge) send what it heard. */
+  captionsToken?: string;
   obsPassword?: string;
   dockToken?: string;
   /** Remote access for moderators: each moderator signs in with their own key. */
