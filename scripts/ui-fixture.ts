@@ -10,6 +10,7 @@ import { OverlayTests } from '../src/main/features/overlayTests';
 import { EmoteRain } from '../src/main/features/emotes';
 import { SongRequestService } from '../src/main/features/songRequests';
 import { TtsService } from '../src/main/features/tts';
+import { CaptionsService } from '../src/main/features/captions';
 import { OverlayServer } from '../src/main/overlay/server';
 import { version } from '../package.json';
 import type { SecretsData } from '../src/main/core/secrets';
@@ -42,6 +43,7 @@ export async function createFixture(root: string, dataDir: string, push: (channe
       if (kind === 'portal') base.push({ type: 'portalConfig', config: settings.get('portal'), channel: '', lang: 'ru' });
       if (kind === 'focus') base.push({ type: 'focus', focus: state.current.focus, style: settings.get('focus'), task: '', now, lang: 'ru' });
       if (kind === 'shoutout') base.push({ type: 'shoutout', card: null, endsAt: null, style: settings.get('shoutout'), now, lang: 'ru' });
+      if (kind === 'captions') base.push({ type: 'captions', lines: [], interim: '', style: settings.get('captions'), lastAt: null, now, lang: 'ru' });
       return base;
     },
   });
@@ -68,6 +70,8 @@ export async function createFixture(root: string, dataDir: string, push: (channe
     const generated = { ...input.scene, html: '<main><h1>AI draft</h1><p data-field="user"></p></main>', css: 'body{color:white;background:transparent;font-family:Segoe UI}', js: '', published: false };
     return new Response(JSON.stringify({ output: [{ type: 'message', content: [{ type: 'output_text', text: JSON.stringify(generated) }] }] }), { headers: { 'Content-Type': 'application/json' } });
   });
+  // Only captions with text count as test broadcasts; settings changes just restyle the overlay.
+  const captions = new CaptionsService(ctx, { broadcast: (message) => message.type === 'captions' && (message.lines.length || message.interim) ? broadcast('captions', message) : overlay.broadcast('captions', message) });
   new EmoteRain(ctx,{broadcast} as any);
   const overlayTests = new OverlayTests(ctx,alerts,broadcast,(event) => push('event',event));
   bus.on('settings:changed', () => push('settings', settings.all));
@@ -112,6 +116,8 @@ export async function createFixture(root: string, dataDir: string, push: (channe
         case 'tts:clear': return tts.clear();
         case 'tts:voices': return tts.refreshVoices();
         case 'tts:forgetVoices': return tts.forgetVoices();
+        case 'captions:test': return captions.test();
+        case 'captions:clear': return captions.clear();
         case 'alerts:test': return overlayTests.alert(args[0],args[1],args[2]);
         case 'overlays:test': return overlayTests.widget(args[0],args[1]);
         case 'alerts:pause': return alerts.setPaused(args[0]);
@@ -124,6 +130,6 @@ export async function createFixture(root: string, dataDir: string, push: (channe
         default: throw new Error('Unhandled QA action: ' + channel);
       }
     },
-    async stop() { alerts.dispose(); tts.dispose(); settings.flush(); await studio.stop(); await overlay.stop(); },
+    async stop() { alerts.dispose(); tts.dispose(); captions.dispose(); settings.flush(); await studio.stop(); await overlay.stop(); },
   };
 }

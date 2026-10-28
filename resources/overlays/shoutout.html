@@ -58,6 +58,7 @@
           const word = lang === 'en' ? (card.viewers === 1 ? 'viewer' : 'viewers') : SH.plural(card.viewers, 'зритель', 'зрителя', 'зрителей');
           return `${SH.tr(lang, 'Рейд', 'Raid')} · ${card.viewers} ${word}`;
         }
+        if (card.reason === 'chatter') return SH.tr(lang, 'Стример в чате', 'Streamer in chat');
         return SH.tr(lang, 'Загляните к ним', 'Go check them out');
       }
 

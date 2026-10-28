@@ -97,6 +97,8 @@ const CHANNELS: Partial<Record<keyof IpcInvoke, Need>> = {
   'shoutout:show': 'chat',
   'shoutout:test': 'chat',
   'shoutout:skip': 'chat',
+  'captions:test': 'stream',
+  'captions:clear': 'stream',
 
   'alerts:test': 'alerts',
   'overlays:test': 'alerts',
@@ -189,7 +191,7 @@ const CHANNELS: Partial<Record<keyof IpcInvoke, Need>> = {
  * the streamer's window look) and profile bookkeeping, which goes through the profile calls.
  */
 const LOCKED_SETTINGS: readonly SettingsKey[] = [
-  'version', 'language', 'overlayPort', 'twitch', 'donationalerts', 'streamlabs', 'streamelements', 'streamerbot', 'discord',
+  'version', 'language', 'overlayPort', 'twitch', 'donationalerts', 'streamlabs', 'streamelements', 'streamerbot', 'discord', 'telegram',
   'subForStream', 'obs', 'minimizeToTray', 'appearance', 'profiles', 'activeProfileId', 'overlayKindsSeen',
 ];
 

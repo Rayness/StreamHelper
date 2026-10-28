@@ -553,17 +553,14 @@ export class TwitchService implements ChatPlatform {
     return at ? Date.parse(at) : null;
   }
 
-  async shoutout(login: string): Promise<{ displayName: string; category: string } | null> {
-    const id = this.requireBroadcaster();
+  /** Looks the channel up for the bot's !so. Twitch's own shoutout is sent by the shoutout feature, which waits out its cooldowns. */
+  async shoutout(login: string): Promise<{ id: string; displayName: string; category: string } | null> {
+    this.requireBroadcaster();
     const users = await this.helix.broadcaster.get('/users', { login: login.replace(/^@/, '').toLowerCase() });
     const u = users.data?.[0];
     if (!u) return null;
     const ch = await this.helix.broadcaster.get('/channels', { broadcaster_id: u.id });
-    // The native /shoutout only works while live and has strict cooldowns; the chat message is the main part.
-    await this.helix.broadcaster
-      .post('/chat/shoutouts', undefined, { from_broadcaster_id: id, to_broadcaster_id: u.id, moderator_id: id })
-      .catch(() => undefined);
-    return { displayName: u.display_name, category: ch.data?.[0]?.game_name ?? '' };
+    return { id: u.id, displayName: u.display_name, category: ch.data?.[0]?.game_name ?? '' };
   }
 
   // ---------- shoutout card ----------
@@ -593,6 +590,13 @@ export class TwitchService implements ChatPlatform {
       views: c.view_count ?? 0,
       thumbnailUrl: c.thumbnail_url ?? '',
     }));
+  }
+
+  /** How many followers a channel has. Any token may read the total. */
+  async channelFollowers(userId: string): Promise<number> {
+    this.requireBroadcaster();
+    const res = await this.helix.broadcaster.get('/channels/followers', { broadcaster_id: userId, first: 1 });
+    return Number(res?.total) || 0;
   }
 
   /** Twitch's own shoutout: live only, at most one every 2 minutes and one per channel per hour. */

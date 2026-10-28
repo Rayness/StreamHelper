@@ -92,6 +92,11 @@ export function hasProfanity(text: string): boolean {
   return words.some((w) => PROFANITY[0].test(w));
 }
 
+/** Swear words cut to their first letter: "х***". Punctuation around them stays. */
+export function maskProfanity(text: string): string {
+  return text.replace(/[^\s.,!?;:()«»"]+/g, (word) => (hasProfanity(word) ? `${[...word][0]}***` : word));
+}
+
 const LINK = /\bhttps?:\/\/\S+|\bwww\.\S+|\b[\w-]+\.(?:com|ru|tv|net|org|io|gg|me|ly|be)(?:\/\S*)?/gi;
 
 /**
