@@ -67,6 +67,8 @@ export class YandexMusicService implements RemotePlayer {
   /** Volume slider drags send dozens of changes a second: only the last one in a moment goes out. */
   private volumeTimer: NodeJS.Timeout | null = null;
   private pendingVolume: number | null = null;
+  /** Ynison asked to stay away until then; kept across clients. */
+  private goAwayUntil: number | null = null;
 
   constructor(private ctx: AppContext, private factory?: SocketFactory, private openLogin?: (url: string) => Promise<string | null>) {
     ctx.bus.on('settings:changed', (key) => { if (key === 'songRequests') this.applySetting(); });
@@ -114,18 +116,31 @@ export class YandexMusicService implements RemotePlayer {
       return;
     }
     if (this.client) return;
-    this.client = new YnisonClient(saved.accessToken, saved.deviceId, {
+    const client = new YnisonClient(saved.accessToken, saved.deviceId, {
       onStatus: (status, error) => {
         if (error === 'unauthorized') {
           this.stop();
           this.ctx.state.patch('yandexMusic', { status: 'error', error: this.ru ? 'Вход в Яндекс устарел — войдите снова.' : 'The Yandex login expired, sign in again.' });
           return;
         }
+        this.goAwayUntil = client.retryAt;
+        if (status === 'error' && client.retryAt) {
+          const at = new Date(client.retryAt).toLocaleTimeString(this.ru ? 'ru-RU' : 'en-US', { hour: '2-digit', minute: '2-digit' });
+          error = this.ru
+            ? `Яндекс временно не пускает к плееру (${error ?? 'Ynison'}). Приложение подключится само в ${at}, до этого заказы играют через YouTube.`
+            : `Yandex temporarily refuses the player connection (${error ?? 'Ynison'}). The app reconnects by itself at ${at}; until then requests play from YouTube.`;
+        }
         this.ctx.state.patch('yandexMusic', { status, error: status === 'error' ? error : undefined });
       },
       onState: (state) => this.onState(state),
     }, this.factory);
-    this.client.start();
+    // A new client (a setting toggled, a new login) still waits out what Ynison asked for.
+    if (this.goAwayUntil && this.goAwayUntil > Date.now()) {
+      client.retryAt = this.goAwayUntil;
+      this.ctx.state.patch('yandexMusic', { status: 'error', error: this.ru ? 'Яндекс временно не пускает к плееру. Приложение подключится само позже.' : 'Yandex temporarily refuses the player connection. The app reconnects by itself later.' });
+    }
+    this.client = client;
+    client.start();
   }
 
   private get ru(): boolean { return this.ctx.settings.get('language') === 'ru'; }

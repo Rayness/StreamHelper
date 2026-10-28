@@ -57,7 +57,7 @@ describe('song requests', () => {
     expect(ctx.state.current.songRequests.current).toBeNull();
     expect(ctx.settings.get('songQueue')).toEqual([]);
   });
-  it('retains paid requests on player errors and pauses autoplay until a manual retry', async () => {
+  it('retains paid requests on player errors and pauses autoplay until a retry', async () => {
     const { ctx, service, music } = setup();
     service.setPlayerConnected(true); service.add(`https://youtu.be/${first}`);
     await vi.waitFor(() => expect(ctx.state.current.songRequests.current).not.toBeNull());
@@ -71,6 +71,36 @@ describe('song requests', () => {
     expect(ctx.state.current.songRequests.current).toBeNull();
     await service.play();
     expect(ctx.state.current.songRequests.current?.videoId).toBe(first);
+  });
+
+  it('retries a player problem on its own a few times, then waits for the streamer', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const { ctx, service } = setup();
+      service.setPlayerConnected(true); service.add(`https://youtu.be/${first}`);
+      await vi.waitFor(() => expect(ctx.state.current.songRequests.current).not.toBeNull());
+      const fail = async () => {
+        const msg = service.overlayMessage as Extract<typeof service.overlayMessage, { type: 'song' }>;
+        await service.playerFinished(msg.request!.id, msg.nonce!, 'YouTube did not start playback.');
+        expect(ctx.state.current.songRequests.current).toBeNull();
+      };
+      for (let i = 1; i <= 3; i++) {
+        await fail();
+        expect(ctx.state.current.songRequests.lastError).toContain(`(${i}/3)`);
+        await vi.advanceTimersByTimeAsync(15_000);
+        await vi.waitFor(() => expect(ctx.state.current.songRequests.current?.videoId).toBe(first));
+      }
+      await fail();
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(ctx.state.current.songRequests.current).toBeNull();
+      expect(ctx.settings.get('songQueue')).toHaveLength(1);
+      // Reloading the OBS source starts the queue again.
+      service.setPlayerConnected(false);
+      service.setPlayerConnected(true);
+      await vi.waitFor(() => expect(ctx.state.current.songRequests.current?.videoId).toBe(first));
+    } finally {
+      vi.useRealTimers();
+    }
   });
   it('accepts chat commands and applies permissions, aliases and per-viewer cooldowns', async () => {
     const { ctx, service } = setup();
