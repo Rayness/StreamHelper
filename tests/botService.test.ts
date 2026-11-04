@@ -33,7 +33,7 @@ class FakePlatform implements ChatPlatform {
     return Date.now() - 3 * 24 * 3600_000;
   }
   async shoutout(login: string) {
-    return { displayName: login.toUpperCase(), category: 'Chess' };
+    return { id: `id-${login}`, displayName: login.toUpperCase(), category: 'Chess' };
   }
 }
 

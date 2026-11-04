@@ -47,6 +47,7 @@ async function server(opts: { moderators?: Mod[]; overlayPort?: () => number; in
   ];
   const clients: RemoteClientInfo[][] = [];
   const state = { ...initialRuntimeState(), dockUrl: 'http://127.0.0.1:1/dock?token=t' };
+  state.captions.micUrl = 'http://127.0.0.1:1/captions/mic?token=private-microphone';
   const s = new RemoteServer({
     port: 0,
     rendererDir: rendererDir(),
@@ -198,6 +199,8 @@ describe('remote server: sessions', () => {
     h.s.push('chat:message', { id: 'c1' } as never);
     const state = await a.next((m) => m.t === 'push' && m.channel === 'state' && (m.payload as RuntimeState).remote !== undefined && a.messages.filter((x) => x.channel === 'state').length > 1);
     expect((state.payload as RuntimeState).dockUrl).toBe('');
+    expect((state.payload as RuntimeState).captions.micUrl).toBe('');
+    expect(h.state.captions.micUrl).toContain('private-microphone');
     expect((state.payload as RuntimeState).remote.addresses).toEqual([]);
     await b.next((m) => m.t === 'push' && m.channel === 'chat:message');
 

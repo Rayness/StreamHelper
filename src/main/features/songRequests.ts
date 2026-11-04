@@ -330,6 +330,9 @@ const MAX_CHAT_LOOKUPS = 4;
 /** A background track shorter than this is treated as broken, not as finished. */
 const MIN_BACKGROUND_MS = 3_000;
 const FAILED_CHAT_PAUSE_MS = 3_000;
+/** After a player problem the same request is tried again on its own a few times before autoplay waits for the streamer. */
+const PLAYER_RETRIES = 3;
+const PLAYER_RETRY_MS = 15_000;
 type Extra = Pick<SongRequest, 'title' | 'redemption' | 'provider' | 'yandexTrackId' | 'yandexAlbumId' | 'cover' | 'durationMs'>;
 
 const yandexUrl = (track: Pick<YandexTrack, 'trackId' | 'albumId'>): string => track.albumId ? `https://music.yandex.ru/album/${track.albumId}/track/${track.trackId}` : `https://music.yandex.ru/track/${track.trackId}`;
@@ -349,6 +352,9 @@ export class SongRequestService {
   private seenOrder: string[] = [];
   private starting = false;
   private autoBlocked = false;
+  /** Player problems in a row for one request, and the pending automatic retry. */
+  private playerFails = { id: '', count: 0 };
+  private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private generation = 0;
   private chatCooldowns = new Map<string, number>();
   /** Chat requests being looked up: one per viewer, a few at a time, so `!sr` spam can't flood the network. */
@@ -404,6 +410,10 @@ export class SongRequestService {
       void this.resumeMusic();
     }
     if (connected) {
+      // A reloaded OBS source is the usual fix for a player problem: try the queue again.
+      this.autoBlocked = false;
+      this.cancelRetry();
+      this.playerFails = { id: '', count: 0 };
       this.bgBlocked = false;
       this.bgFailed.clear();
       void this.maybeStart();
@@ -661,6 +671,7 @@ export class SongRequestService {
     if (this.starting) return;
     this.starting = true;
     this.autoBlocked = false;
+    this.cancelRetry();
     this.bgBlocked = false;
     const generation = this.generation;
     try {
@@ -1072,8 +1083,13 @@ export class SongRequestService {
     }
     if (error) {
       // A blocked embed/network failure must never consume a paid request or drain the queue.
+      const failed = this.current;
+      this.playerFails = { id: failed.id, count: this.playerFails.id === failed.id ? this.playerFails.count + 1 : 1 };
       this.autoBlocked = true;
-      this.ctx.state.patch('songRequests', { lastError: error.slice(0, 200) });
+      const retry = this.playerFails.count <= PLAYER_RETRIES;
+      const note = retry ? (this.ru ? ` Повтор через ${PLAYER_RETRY_MS / 1000} с (${this.playerFails.count}/${PLAYER_RETRIES}).` : ` Retrying in ${PLAYER_RETRY_MS / 1000} s (${this.playerFails.count}/${PLAYER_RETRIES}).`) : '';
+      this.ctx.state.patch('songRequests', { lastError: error.slice(0, 200) + note });
+      if (retry) this.scheduleRetry();
       this.current = null;
       this.nonce = null;
       this.sync();
@@ -1081,9 +1097,26 @@ export class SongRequestService {
       await this.resumeMusic();
       return true;
     }
+    this.playerFails = { id: '', count: 0 };
     void this.settle(this.current, 'FULFILLED');
     await this.dropCurrent();
     return true;
+  }
+
+  private scheduleRetry(): void {
+    this.cancelRetry();
+    this.retryTimer = setTimeout(() => {
+      this.retryTimer = null;
+      if (!this.autoBlocked || this.current) return;
+      this.autoBlocked = false;
+      void this.maybeStart();
+    }, PLAYER_RETRY_MS);
+    this.retryTimer.unref?.();
+  }
+
+  private cancelRetry(): void {
+    if (this.retryTimer) clearTimeout(this.retryTimer);
+    this.retryTimer = null;
   }
 
   private sync(): void {

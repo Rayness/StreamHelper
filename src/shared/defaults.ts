@@ -13,6 +13,8 @@ import type {
   PortalSettings,
   FocusSettings,
   ShoutoutSettings,
+  TelegramSettings,
+  CaptionsSettings,
   TtsSettings,
   ReportSettings,
   ShieldSettings,
@@ -680,6 +682,11 @@ export function defaultShoutout(lang: Language): ShoutoutSettings {
     onRaid: true,
     minViewers: 1,
     onCommand: true,
+    onChatter: false,
+    minFollowers: 50,
+    chatterMessage: lang === 'ru'
+      ? 'В чате стример {name}! Загляните на канал: twitch.tv/{login} — последняя категория: {game}'
+      : 'Streamer {name} is in chat! Go check them out at twitch.tv/{login} — last seen in {game}',
     delaySec: 8,
     chatMessage: lang === 'ru'
       ? 'Спасибо за рейд, {name}! Загляните на канал: twitch.tv/{login} — последняя категория: {game}'
@@ -693,6 +700,44 @@ export function defaultShoutout(lang: Language): ShoutoutSettings {
     cardSec: 12,
     accentColor: '#9146ff',
     fontFamily: 'Montserrat',
+  };
+}
+
+export function defaultTelegram(lang: Language): TelegramSettings {
+  const ru = lang === 'ru';
+  return {
+    enabled: false,
+    chatId: '',
+    chatTitle: '',
+    botName: '',
+    notifyLive: true,
+    liveMessage: ru ? '🔴 Стрим начался!\n{title}\nКатегория: {game}\n{link}' : '🔴 Live now!\n{title}\nPlaying: {game}\n{link}',
+    withPreview: true,
+    delaySec: 60,
+    pin: false,
+    silent: false,
+    editOnOffline: true,
+    offlineMessage: ru ? '⚫ Стрим завершён ({duration}). Спасибо, что были с нами!\n{title}' : '⚫ Stream ended ({duration}). Thanks for watching!\n{title}',
+    buttonText: ru ? 'Смотреть' : 'Watch',
+  };
+}
+
+export function defaultCaptions(lang: Language): CaptionsSettings {
+  return {
+    enabled: false,
+    language: lang === 'ru' ? 'ru-RU' : 'en-US',
+    translateTo: '',
+    translationOnly: false,
+    maxLines: 2,
+    hideAfterSec: 5,
+    profanityFilter: true,
+    fontFamily: 'Inter',
+    fontSize: 34,
+    textColor: '#ffffff',
+    translationColor: '#ffd35a',
+    bgColor: '#000000',
+    bgOpacity: 0.6,
+    align: 'center',
   };
 }
 
@@ -778,6 +823,7 @@ export function defaultSettings(lang: Language): Settings {
     streamelements: { enabled: false, channelId: '' },
     streamerbot: { enabled: false, port: 7474 },
     discord: { enabled: false, notifyLive: true, notifyOffline: false, notifyDonations: true },
+    telegram: defaultTelegram(lang),
     subForStream: { enabled: false, port: 5000 },
     obs: { host: '127.0.0.1', port: 4455, autoConnect: true, group: 'perScene' },
     bot: defaultBot(lang),
@@ -830,6 +876,7 @@ export function defaultSettings(lang: Language): Settings {
     focus: defaultFocus(lang),
     shoutout: defaultShoutout(lang),
     tts: defaultTts(lang),
+    captions: defaultCaptions(lang),
     currency: lang === 'ru' ? 'RUB' : 'USD',
     minimizeToTray: true,
     appearance: defaultAppearance(),

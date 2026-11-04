@@ -18,7 +18,7 @@ export interface BusEvents {
   /** The auto clipper saved a moment (clip and/or marker). */
   'clip:moment': ClipMoment;
   /** A moderator shouted a channel out with the bot command (the bot already posted the message). */
-  'shoutout:command': { login: string };
+  'shoutout:command': { login: string; userId: string };
 }
 
 type Handler<T> = (payload: T) => void;

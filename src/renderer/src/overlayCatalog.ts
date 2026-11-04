@@ -49,6 +49,7 @@ export const OVERLAYS: OverlayDef[] = [
   { kind: 'donations', icon: 'coin', group: 'main', size: [560, 380] },
   { kind: 'focus', icon: 'tomato', group: 'screen', size: [600, 480] },
   { kind: 'shoutout', icon: 'megaphone', group: 'screen', size: [1280, 720] },
+  { kind: 'captions', icon: 'captions', group: 'screen', size: [1280, 240] },
   // Audio only; the size just keeps the source small in OBS.
   { kind: 'tts', icon: 'mic', group: 'main', size: [100, 100] },
   // Made in the Designer tab; its size comes from the overlay itself.

@@ -57,12 +57,39 @@
     const $=(id)=>document.getElementById(id);
     const sample={id:'preview',videoId:'',url:'',userName:'Viewer'};
     const defaults={videoLayout:'full',videoPosition:'left',videoWidth:45,showRequester:true,showTitle:true,showQueueCount:true,showControls:true,volume:100,accentColor:'#9146ff',backgroundOpacity:88,backgroundVolume:40,backgroundShowVideo:false};
-    let audio=null,player=null,playerReady=false,apiReady=false,active=null,pending=null,reported=false,controls=true,config=defaults,lang='ru',videoTitle='',startTimer=null,limitTimer=null,apiFailed=false,playerList=null,jamErrors=0;
+    let audio=null,player=null,playerReady=false,apiReady=false,active=null,pending=null,reported=false,controls=true,config=defaults,lang='ru',videoTitle='',startTimer=null,limitTimer=null,playerList=null,jamErrors=0;
+    // A slow or flaky connection to YouTube gets a few more tries before the request is reported.
+    const START_WAIT_MS=25000,START_TRIES=2,BUFFERING_MAX_MS=90000;
+    let startTries=0,startedAt=0,apiLoading=false,apiTimer=null;
     // Where each jam (YouTube mix / playlist) was interrupted, so it continues instead of starting over.
     const jamIndex={};
     const label=(ru,en)=>SH.tr(lang,ru,en);
-    window.onYouTubeIframeAPIReady=()=>{apiReady=true;if(pending)load(pending)};
-    if(!SH.preview){const script=document.createElement('script');script.src='https://www.youtube.com/iframe_api';script.onerror=()=>{apiFailed=true;if(active)void finished(label('Не удалось загрузить YouTube. Проверьте доступ к YouTube.','Could not load YouTube. Check YouTube access.'))};document.head.appendChild(script)}
+    window.onYouTubeIframeAPIReady=()=>{apiReady=true;apiLoading=false;clearTimeout(apiTimer);if(pending)load(pending)};
+    // The YouTube player script is loaded again until it works: one network hiccup must not break every later request.
+    function loadApi(){
+      if(SH.preview||apiReady||apiLoading)return;
+      apiLoading=true;clearTimeout(apiTimer);
+      // A half-loaded API leaves YT.loading set and would never load again.
+      try{delete window.YT;delete window.YTConfig}catch(_){window.YT=undefined}
+      document.querySelectorAll('script[data-yt-api]').forEach((old)=>old.remove());
+      const script=document.createElement('script');script.dataset.ytApi='1';script.src='https://www.youtube.com/iframe_api';
+      const retry=()=>{if(apiReady)return;apiLoading=false;clearTimeout(apiTimer);apiTimer=setTimeout(loadApi,5000)};
+      script.onerror=retry;
+      // The script loads its own player code; no callback within 20 s means that part failed.
+      apiTimer=setTimeout(retry,20000);
+      document.head.appendChild(script);
+    }
+    loadApi();
+    function armStart(){clearTimeout(startTimer);startTimer=setTimeout(startTimeout,START_WAIT_MS)}
+    function startTimeout(){
+      startTimer=null;
+      if(!active||reported||active.paused||active.request.provider)return;
+      let state=null;try{state=player&&playerReady?player.getPlayerState():null}catch(_){/* player still loading */}
+      // Buffering means YouTube is answering, just slowly: give it more time instead of starting over.
+      if(state!==null&&state===YT.PlayerState.BUFFERING&&Date.now()-startedAt<BUFFERING_MAX_MS){armStart();return}
+      if(startTries<START_TRIES){startTries++;if(apiReady)createPlayer();else loadApi();armStart();return}
+      void finished(apiReady?label('YouTube не начал воспроизведение. Проверьте источник OBS и доступ к YouTube.','YouTube did not start playback. Check the OBS source and YouTube access.'):label('Не удалось загрузить YouTube. Проверьте доступ к YouTube.','Could not load YouTube. Check YouTube access.'));
+    }
     // 'video' = this video can never play here (removed, embedding blocked): the app skips it.
     // 'player' = YouTube/OBS trouble: the request is kept for a retry.
     async function finished(error='',kind='player'){
@@ -121,6 +148,8 @@
         onError:(e)=>{if(player!==e.target)return;
           // One unplayable entry must not stop a jam: move on, give up only when nothing in it plays.
           if(list&&[2,100,101,150].includes(e.data)&&++jamErrors<=5){try{player.nextVideo()}catch(_){/* reported below next time */}return}
+          // A player hiccup (not the video's fault) before playback started: start the player over.
+          if(![2,100,101,150].includes(e.data)&&active&&!active.background&&startTimer&&startTries<START_TRIES){startTries++;createPlayer();armStart();return}
           void finished([2,100].includes(e.data)?label('Видео не найдено или недоступно.','Video not found or unavailable.')+' ('+e.data+')':[101,150].includes(e.data)?label('Автор запретил проигрывание этого видео в OBS. Выберите другой трек.','This video cannot be embedded in OBS. Choose another track.')+' ('+e.data+')':e.data===153?label('YouTube не подтвердил источник проигрывателя. Перезагрузите браузерный источник OBS.','YouTube could not identify the player. Refresh the OBS browser source.')+' (153)':'YouTube error '+e.data,[2,100,101,150].includes(e.data)?'video':'player')}
       }});
     }
@@ -164,9 +193,10 @@
         render();return;
       }
       const same=active?.request.id===msg.request.id&&active.nonce===msg.nonce;
-      if(!same){active=msg;reported=false;videoTitle='';render();if(apiReady)createPlayer();if(apiFailed)void finished(label('Не удалось загрузить YouTube.','Could not load YouTube.'));else startTimer=setTimeout(()=>active?.paused?undefined:void finished(label('YouTube не начал воспроизведение. Проверьте источник OBS и доступ к YouTube.','YouTube did not start playback. Check the OBS source and YouTube access.')),60000);return}
+      if(!same){active=msg;reported=false;videoTitle='';startTries=0;startedAt=Date.now();render();if(apiReady)createPlayer();else loadApi();armStart();return}
       active=msg;
-      if(!player&&apiReady)createPlayer();
+      // The API arrived after the request: start the player and keep watching that it really plays.
+      if(!player&&apiReady){createPlayer();if(!reported)armStart()}
       else if(player&&controls!==!!config.showControls){let time=0;try{if(playerReady)time=player.getCurrentTime()}catch(_){}createPlayer(time||0.01)}
       else {applyVolume();applyPause();if(player&&playerReady)watchLimit()}
       render();

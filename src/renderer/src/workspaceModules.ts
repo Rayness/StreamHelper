@@ -8,7 +8,7 @@ export interface ModuleDef { id: WorkspaceCard; title?: TKey; name?: string; des
 export const MODULES: ModuleDef[] = [
   { id:'twitch', name:'Twitch', description:'workspace.desc.connection', icon:'broadcast', group:'setup' },
   { id:'obs', name:'OBS', description:'workspace.desc.obs', icon:'video', group:'channel' },
-  ...(['donationalerts','streamlabs','streamelements','streamerbot','discord'] as const).map((id): ModuleDef => ({ id, name:({donationalerts:'DonationAlerts',streamlabs:'Streamlabs',streamelements:'StreamElements',streamerbot:'Streamer.bot',discord:'Discord'})[id],description:'workspace.desc.connection',icon:'plug',group:'setup' })),
+  ...(['donationalerts','streamlabs','streamelements','streamerbot','discord','telegram'] as const).map((id): ModuleDef => ({ id, name:({donationalerts:'DonationAlerts',streamlabs:'Streamlabs',streamelements:'StreamElements',streamerbot:'Streamer.bot',discord:'Discord',telegram:'Telegram'})[id],description:'workspace.desc.connection',icon:'plug',group:'setup' })),
   { id:'subforstream', name:'SubForStream', description:'workspace.desc.subs', icon:'mic', group:'setup' },
   { id:'stream', title:'dash.stream', description:'workspace.desc.stream', icon:'broadcast', group:'channel' },
   { id:'bot', title:'nav.bot', description:'workspace.desc.bot', icon:'bot', group:'automation' },

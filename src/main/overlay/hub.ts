@@ -37,6 +37,7 @@ export interface HubSources {
   portal: () => OverlayMessage;
   focus: () => OverlayMessage;
   shoutout: () => OverlayMessage;
+  captions: () => OverlayMessage;
 }
 
 /** Wires bus events and settings changes to connected overlays. */
@@ -250,6 +251,8 @@ export class OverlayHub {
         return [this.sources.focus()];
       case 'shoutout':
         return [this.sources.shoutout()];
+      case 'captions':
+        return [this.sources.captions()];
       // Audio only: plays what it's sent, nothing to restore.
       case 'tts':
         return [];

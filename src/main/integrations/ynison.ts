@@ -17,6 +17,8 @@ const RECONNECT_MS = [2_000, 5_000, 15_000, 30_000, 60_000];
 const HEARTBEAT_MS = 25_000;
 /** The redirector answers at once; a hung handshake or answer must not stall the connection. */
 const ANSWER_TIMEOUT_MS = 15_000;
+/** Ynison may ask a client to stay away (`ynison-go-away-for-seconds`); reconnecting earlier only prolongs it. */
+const MAX_GO_AWAY_MS = 6 * 3600_000;
 
 export interface YnisonVersion { device_id: string; version: number; timestamp_ms: number }
 export interface YnisonPlayable {
@@ -121,6 +123,8 @@ export class YnisonClient {
   private stopped = true;
   private sessionId = String(Math.floor(Math.random() * 1e18)).padStart(18, '1').slice(0, 18);
   state: YnisonState | null = null;
+  /** Ynison asked us to stay away until then (epoch ms); null otherwise. */
+  retryAt: number | null = null;
   /** When the latest state arrived, to estimate the playing position between updates. */
   stateAt = 0;
 
@@ -140,6 +144,9 @@ export class YnisonClient {
     if (!this.stopped) return;
     this.stopped = false;
     this.attempt = 0;
+    // Restarting (a setting toggled) must not knock on the door Ynison closed.
+    if (this.retryAt && this.retryAt > Date.now()) return this.schedule(this.retryAt - Date.now());
+    this.retryAt = null;
     this.openRedirector();
   }
 
@@ -172,15 +179,20 @@ export class YnisonClient {
     };
   }
 
-  private retry(error?: string): void {
+  private retry(error?: string, waitMs = 0): void {
     this.drop();
     if (this.stopped) return;
+    const delay = waitMs > 0 ? Math.min(waitMs, MAX_GO_AWAY_MS) : RECONNECT_MS[Math.min(this.attempt++, RECONNECT_MS.length - 1)];
+    this.retryAt = waitMs > 0 ? Date.now() + delay : null;
     this.notify(this.events.onStatus, error ? 'error' : 'connecting', error);
     // The listener may have stopped us (an expired login).
     if (this.stopped) return;
-    const delay = RECONNECT_MS[Math.min(this.attempt++, RECONNECT_MS.length - 1)];
+    this.schedule(delay);
+  }
+
+  private schedule(delay: number): void {
     if (this.timer) clearTimeout(this.timer);
-    this.timer = setTimeout(() => { this.timer = null; if (!this.stopped) this.openRedirector(); }, delay);
+    this.timer = setTimeout(() => { this.timer = null; this.retryAt = null; if (!this.stopped) this.openRedirector(); }, delay);
   }
 
   private openRedirector(): void {
@@ -200,7 +212,7 @@ export class YnisonClient {
       answered = true;
       let reply: { host?: string; redirect_ticket?: string; session_id?: string; error?: { message?: string; details?: unknown } };
       try { reply = JSON.parse(String(data)); } catch { return this.retry('Ynison: bad redirector answer'); }
-      if (reply.error || typeof reply.host !== 'string' || typeof reply.redirect_ticket !== 'string' || !/^[\w.:-]+$/.test(reply.host)) return this.retry(errorText(reply.error));
+      if (reply.error || typeof reply.host !== 'string' || typeof reply.redirect_ticket !== 'string' || !/^[\w.:-]+$/.test(reply.host)) return this.retry(errorText(reply.error), goAwayMs(reply.error));
       this.drop();
       this.openHub(reply.host, reply.redirect_ticket, typeof reply.session_id === 'string' ? reply.session_id : this.sessionId);
     });
@@ -238,9 +250,10 @@ export class YnisonClient {
       let message: (Partial<YnisonState> & { error?: { message?: string } }) | null = null;
       try { message = JSON.parse(String(data)); } catch { return; }
       if (!message || typeof message !== 'object') return;
-      if (message.error) return this.retry(errorText(message.error));
+      if (message.error) return this.retry(errorText(message.error), goAwayMs(message.error));
       if (!validState(message.player_state)) return;
       this.attempt = 0;
+      this.retryAt = null;
       const first = !this.state;
       this.state = { player_state: message.player_state, devices: Array.isArray(message.devices) ? message.devices : this.state?.devices ?? [], active_device_id_optional: message.active_device_id_optional ?? null };
       this.stateAt = Date.now();
@@ -344,4 +357,11 @@ function errorText(error: unknown): string {
   const code = Number(e.http_code ?? e.grpc_code);
   if (code === 401 || code === 16 || /unauth|token/i.test(String(e.message ?? ''))) return 'unauthorized';
   return String(e.message ?? 'Ynison error').slice(0, 200);
+}
+
+/** How long Ynison asked the client to stay away, from the error details; 0 when it did not. */
+export function goAwayMs(error: unknown): number {
+  const details = (error as { details?: Record<string, unknown> } | undefined)?.details;
+  const seconds = Number(details && typeof details === 'object' ? details['ynison-go-away-for-seconds'] : 0);
+  return Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : 0;
 }

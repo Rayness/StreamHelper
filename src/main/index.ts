@@ -26,6 +26,7 @@ import { LOCAL_SONGS_DIR } from './features/songRequests';
 import { StreamElementsService } from './donations/streamelements';
 import { StreamerBotService } from './integrations/streamerbot';
 import { DiscordService } from './integrations/discord';
+import { TelegramService } from './integrations/telegram';
 import { SubForStreamService } from './integrations/subForStream';
 import { ActionRunner } from './features/actions';
 import { AlertQueue } from './features/alerts';
@@ -59,6 +60,7 @@ import { REPORT_HEIGHT, REPORT_WIDTH } from './features/reportCard';
 import { ShieldService } from './features/shield';
 import { FocusService } from './features/focus';
 import { ShoutoutService } from './features/shoutout';
+import { CaptionsService, createCaptionsRoutes } from './features/captions';
 import { TtsService } from './features/tts';
 import { TtsEngine } from './features/ttsEngine';
 import { KawakiService } from './integrations/kawaki/service';
@@ -127,6 +129,11 @@ async function bootstrap(): Promise<void> {
     dockToken = randomBytes(32).toString('hex');
     secrets.set('dockToken', dockToken);
   }
+  let captionsToken = secrets.get('captionsToken');
+  if (!captionsToken) {
+    captionsToken = randomBytes(32).toString('hex');
+    secrets.set('captionsToken', captionsToken);
+  }
 
   const ctx: AppContext = {
     isUiVisible: () => !!mainWindow?.isVisible(),
@@ -150,6 +157,7 @@ async function bootstrap(): Promise<void> {
   const streamelements = new StreamElementsService(ctx);
   const streamerbot = new StreamerBotService(ctx);
   const discord = new DiscordService(ctx);
+  const telegram = new TelegramService(ctx);
   const subForStream = new SubForStreamService(ctx);
   const progress = new ProgressTracker(ctx);
   const updater = new UpdateService(ctx);
@@ -168,6 +176,7 @@ async function bootstrap(): Promise<void> {
   const overlayTests = new OverlayTests(ctx, alerts, (kind, message) => overlay.broadcast(kind, message), (event) => push('event', event));
   let hub!: OverlayHub;
   let dockRoute!: ReturnType<typeof createDockRoutes>;
+  let captionsRoute!: ReturnType<typeof createCaptionsRoutes>;
   let songRequests!: SongRequestService;
   let report!: ReportService;
   const playerErrors = { duel: (_id: string, _code: number) => undefined as void, melody: (_id: string, _code: number) => undefined as void };
@@ -186,6 +195,7 @@ async function bootstrap(): Promise<void> {
     extraRoute: async (req, res, url) => {
       if (await authRoute(req, res, url)) return true;
       if (await dockRoute(req, res, url)) return true;
+      if (await captionsRoute(req, res, url)) return true;
       if (url.pathname === '/overlay/fonts/system.json' && req.method === 'GET') {
         // Overlays only fetch web fonts for families that aren't installed.
         res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
@@ -330,6 +340,14 @@ async function bootstrap(): Promise<void> {
     channel: (login) => twitch.channelCard(login),
     clips: (userId, days) => twitch.channelClips(userId, days),
     native: (userId) => twitch.nativeShoutout(userId),
+    followers: (userId) => twitch.channelFollowers(userId),
+  });
+  const captions = new CaptionsService(ctx, { broadcast: (msg) => overlay.broadcast('captions', msg) });
+  captionsRoute = createCaptionsRoutes({
+    token: captionsToken,
+    htmlPath: join(resourcesDir(), 'overlays', 'captions-mic.html'),
+    service: captions,
+    settings: () => ({ captions: settings.get('captions'), language: settings.get('language') }),
   });
   const tts = new TtsService(ctx, {
     broadcast: (msg) => overlay.broadcast('tts', msg),
@@ -364,6 +382,7 @@ async function bootstrap(): Promise<void> {
     portal: () => portal.configMessage(),
     focus: () => focus.overlayMessage(),
     shoutout: () => shoutout.overlayMessage(),
+    captions: () => captions.overlayMessage(),
   });
 
   const bot = new BotService(ctx, platforms, twitch, songRequests);
@@ -513,10 +532,13 @@ async function bootstrap(): Promise<void> {
       // "localhost", not the IP: YouTube refuses label/music videos embedded on an IP address (error 150).
       state.patch('overlayUrl', `http://localhost:${port}`);
       state.patch('dockUrl', `http://127.0.0.1:${port}/dock?token=${dockToken}`);
+      // 127.0.0.1 counts as a secure origin, so the browser lets the page use the microphone.
+      state.patch('captions', { micUrl: `http://127.0.0.1:${port}/captions/mic?token=${captionsToken}` });
     } catch (err) {
       console.error('[overlay] cannot listen', err);
       state.patch('overlayUrl', '');
       state.patch('dockUrl', '');
+      state.patch('captions', { micUrl: '' });
       ctx.toast('error', 'toast.overlayPortBusy', { port });
     }
     if (restart && state.current.overlayUrl) await obs.repairBrowserSources().catch((err) => console.warn('[obs] repair after port change', err));
@@ -603,6 +625,9 @@ async function bootstrap(): Promise<void> {
     'discord:connect': (url) => discord.connect(url),
     'discord:disconnect': () => discord.disconnect(),
     'discord:test': () => discord.test(),
+    'telegram:connect': (token, chatId) => telegram.connect(token, chatId),
+    'telegram:disconnect': () => telegram.disconnect(),
+    'telegram:test': () => telegram.test(),
     'obs:connect': (password) => obs.connect(password),
     'obs:disconnect': () => obs.disconnect(),
     'obs:setScene': (s) => obs.setScene(s),
@@ -764,6 +789,8 @@ async function bootstrap(): Promise<void> {
     'shoutout:show': (login) => shoutout.show(login),
     'shoutout:test': () => shoutout.test(),
     'shoutout:skip': () => shoutout.skip(),
+    'captions:test': () => captions.test(),
+    'captions:clear': () => captions.clear(),
     'tts:test': (voice) => tts.test(voice),
     'tts:skip': () => tts.skip(),
     'tts:clear': () => tts.clear(),
@@ -804,6 +831,7 @@ async function bootstrap(): Promise<void> {
   streamelements.start();
   streamerbot.start();
   discord.start();
+  telegram.start();
   subForStream.start();
   void kawaki.start();
   ducking.start();
@@ -860,6 +888,8 @@ async function bootstrap(): Promise<void> {
     focus.dispose();
     shoutout.dispose();
     tts.dispose();
+    captions.dispose();
+    telegram.dispose();
     bot.stop();
     void obs.disconnect();
     void overlay.stop();

@@ -66,7 +66,7 @@ async function setup(permissions: RemoteModerator['permissions'] = ['alerts', 's
   const moderators = [{ id: 'm1', name: 'Mod', permissions, createdAt: 0, key: KEY }];
   const calls: { channel: string; args: unknown[] }[] = [];
   const log: RemoteLogEntry[] = [];
-  const state = { dockUrl: 'http://127.0.0.1:1/dock?token=secret', overlayUrl: 'http://localhost:1', remote: { status: 'running', port: 0, addresses: ['10.0.0.1'], moderators: [{ id: 'm1' }], clients: [], log: [], error: null } } as unknown as RuntimeState;
+  const state = { dockUrl: 'http://127.0.0.1:1/dock?token=secret', captions: { micUrl: 'http://127.0.0.1:1/captions/mic?token=private' }, overlayUrl: 'http://localhost:1', remote: { status: 'running', port: 0, addresses: ['10.0.0.1'], moderators: [{ id: 'm1' }], clients: [], log: [], error: null } } as unknown as RuntimeState;
   const server = new RemoteServer({
     port: 0,
     rendererDir: dir,
@@ -150,6 +150,7 @@ describe('remote server', () => {
     const value = init.value as { remote: unknown; state: RuntimeState };
     expect(value.remote).toEqual({ name: 'Mod', permissions: ['alerts', 'settings'] });
     expect(value.state.dockUrl).toBe('');
+    expect(value.state.captions.micUrl).toBe('');
     expect(value.state.remote.addresses).toEqual([]);
 
     expect(await c.call('alerts:skip')).toMatchObject({ ok: true });

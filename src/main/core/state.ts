@@ -14,6 +14,7 @@ export function initialRuntimeState(): RuntimeState {
     streamelements: { ...disconnected },
     streamerbot: { ...disconnected, actions: [] },
     discord: { ...disconnected },
+    telegram: { ...disconnected },
     subForStream: { ...disconnected, overlayUrl: '' },
     obs: { ...disconnected, scenes: [], currentScene: '', sceneItems: [], inputs: [], streaming: false, recording: false, appSources: [], containers: [] },
     stream: { live: false, title: '', categoryId: '', categoryName: '', tags: [], viewers: 0, startedAt: null },
@@ -46,8 +47,9 @@ export function initialRuntimeState(): RuntimeState {
     portal: { status: 'disconnected', channel: '', messages: [] },
     report: { live: emptyReportSummary(Date.now()), reports: [], busy: false },
     focus: { status: 'idle', phase: 'focus', endsAt: null, leftMs: 0, durationMs: 0, done: 0, focusMs: 0, extendedMin: 0, lastExtend: null },
-    shoutout: { current: null, endsAt: null, queue: [], history: [], error: null },
+    shoutout: { current: null, endsAt: null, queue: [], history: [], error: null, nativeQueue: [], nativeNextAt: null },
     tts: { current: null, queue: [], history: [], voices: [], remembered: 0, error: null },
+    captions: { listening: false, lines: [], interim: '', lastAt: null, micUrl: '', error: null },
     remote: { status: 'off', port: 0, addresses: [], moderators: [], clients: [], log: [], error: null },
     shield: { status: 'off', readings: { newChatters: 0, similar: 0, young: 0 }, reason: null, activatedAt: null, releaseAt: null, suspects: [], history: [], error: null },
   };

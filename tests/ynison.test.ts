@@ -130,6 +130,29 @@ describe('Ynison resilience', () => {
     vi.advanceTimersByTime(120_000);
     expect(sockets).toHaveLength(1);
   });
+
+  it('stays away as long as Ynison asks instead of reconnecting every minute', () => {
+    vi.useFakeTimers();
+    const { sockets, factory } = fakeNetwork();
+    const statuses: (string | undefined)[] = [];
+    const client = new YnisonClient('token123', 'me', { onStatus: (status, error) => statuses.push(error ?? status) }, factory);
+    client.start();
+    sockets[0].message({ host: 'hub.example', redirect_ticket: 't', session_id: 's' });
+    sockets[1].open();
+    sockets[1].message({ error: { details: { 'ynison-error-code': '500140000', 'ynison-go-away-for-seconds': '3600' }, grpc_code: 14, http_code: 503, message: 'Ynison service is temporary unavailable.' } });
+    expect(statuses).toContain('Ynison service is temporary unavailable.');
+    expect(client.retryAt).toBeGreaterThan(Date.now() + 3_500_000);
+    vi.advanceTimersByTime(3_599_000);
+    expect(sockets).toHaveLength(2);
+    // A restart in the meantime keeps waiting too.
+    client.stop();
+    client.start();
+    expect(sockets).toHaveLength(2);
+    vi.advanceTimersByTime(2_000);
+    expect(sockets).toHaveLength(3);
+    expect(client.retryAt).toBeNull();
+    client.stop();
+  });
 });
 
 describe('Yandex Music remote', () => {

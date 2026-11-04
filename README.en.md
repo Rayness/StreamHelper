@@ -2,9 +2,9 @@
 
 [Русский](README.md) · [English](README.en.md)
 
-StreamHelper is a Windows desktop app for managing a stream, chat, and OBS browser sources from one place. Current version: **0.14.0**. The interface supports Russian and English.
+StreamHelper is a Windows desktop app for managing a stream, chat, and OBS browser sources from one place. Current version: **0.15.0**. The interface supports Russian and English.
 
-Release **0.14.0** adds **Event Studio**: HTML/CSS/JS scenes with local preview, donation levels, gift subscription batches and raid presets. Author scenes manually, through a configured AI API or with an external AI client over local MCP; publishing and enabling live scenes remain explicit steps. [Release notes and verification results (Russian)](docs/release-notes-0.14.0.md).
+Release **0.15.0** adds automatic shoutouts for streamers who chat and a queue for Twitch's own shoutouts, stream announcements in Telegram with a preview and a Watch button, and live captions in OBS with translation. YouTube song requests no longer get stuck after a player failure, and the Yandex Music connection waits when Yandex asks it to. [Release notes](docs/release-notes-0.15.0.md).
 
 > **Upgrading from 0.11.x:** "Add to OBS" now puts sources into a nested scene "StreamHelper · <scene>". Sources you already added stay where they are; move them into the group with the button in the OBS module, or turn the group off in **Connections → OBS**. Reconnect Twitch for clips and the raid shield.
 
@@ -32,7 +32,7 @@ These screenshots use fictional demo data; they contain no real accounts or toke
 
 ## Download and first run
 
-1. Download `StreamHelper-Setup-0.14.0.exe` from [release 0.14.0](https://github.com/Rayness/StreamHelper/releases/tag/v0.14.0) or the [update repository](https://github.com/Rayness/StreamHelper-Releases/releases/tag/v0.14.0). The Windows installer is currently unsigned.
+1. Download `StreamHelper-Setup-0.15.0.exe` from [release 0.15.0](https://github.com/Rayness/StreamHelper/releases/tag/v0.15.0) or the [update repository](https://github.com/Rayness/StreamHelper-Releases/releases/tag/v0.15.0). The Windows installer is currently unsigned.
 2. Open **Connections → Twitch** and sign in as the broadcaster. Authorization uses a device code on Twitch.
 3. If needed, open **Connections → OBS** and enter its WebSocket address, port and password. The usual port is 4455.
 4. Add the features you need: Alerts, Chat, Song Requests or individual activities. Select an added module to configure it and use **Add to OBS** for its browser source.

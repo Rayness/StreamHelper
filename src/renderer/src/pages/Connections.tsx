@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { DEFAULT_TWITCH_CLIENT_ID, twitchClientId } from '@shared/defaults';
 import { CONNECTION_TABS, type ConnectionTab } from '@shared/workspace';
 import type { ConnectionState, DeviceCodePrompt } from '@shared/types';
-import { Button, Card, CopyField, Field, NumberInput, Select, StatusText, TextInput, Toggle } from '../components/ui';
+import { Button, Card, CopyField, Field, NumberInput, Select, StatusText, TextArea, TextInput, Toggle } from '../components/ui';
+import type { TelegramSettings } from '@shared/types';
 import { Icon } from '../components/icons';
 import { moduleDef } from '../workspaceModules';
 import { SubForStream } from './Obs';
@@ -278,6 +279,54 @@ function DiscordCard() {
   );
 }
 
+function TelegramCard() {
+  const t = useT();
+  const state = useApp((d) => d.state!.telegram);
+  const cfg = useApp((d) => d.settings!.telegram);
+  const [token, setToken] = useState('');
+  const [chat, setChat] = useState('');
+  const [busy, setBusy] = useState(false);
+  const set = (patch: Partial<TelegramSettings>) => saveSettings('telegram', { ...cfg, ...patch });
+  return (
+    <Card className="conn-card" title={<span className="conn-title">Telegram</span>} actions={<StatusText status={state.status} error={state.error} />}>
+      <p className="muted small">{t('telegram.hint')}</p>
+      {cfg.enabled ? (
+        <div className="form compact">
+          <p className="small"><b>{t('telegram.connected', { bot: cfg.botName, chat: cfg.chatTitle || cfg.chatId })}</b></p>
+          <Field label={t('telegram.notifyLive')}><Toggle checked={cfg.notifyLive} onChange={(notifyLive) => set({ notifyLive })} /></Field>
+          <Field label={t('telegram.liveMessage')} hint={t('telegram.liveHint')} wide><TextArea value={cfg.liveMessage} rows={4} onChange={(liveMessage) => set({ liveMessage })} /></Field>
+          <Field label={t('overlays.options')} wide>
+            <div className="stack">
+              <Toggle checked={cfg.withPreview} onChange={(withPreview) => set({ withPreview })} label={t('telegram.withPreview')} />
+              <Toggle checked={cfg.pin} onChange={(pin) => set({ pin })} label={t('telegram.pin')} />
+              <Toggle checked={cfg.silent} onChange={(silent) => set({ silent })} label={t('telegram.silent')} />
+              <Toggle checked={cfg.editOnOffline} onChange={(editOnOffline) => set({ editOnOffline })} label={t('telegram.editOnOffline')} />
+            </div>
+          </Field>
+          <Field label={t('telegram.delay')} hint={t('telegram.delayHint')}><NumberInput value={cfg.delaySec} min={0} max={900} onChange={(delaySec) => set({ delaySec })} /></Field>
+          <Field label={t('telegram.button')} hint={t('telegram.buttonHint')}><TextInput value={cfg.buttonText} onChange={(buttonText) => set({ buttonText })} /></Field>
+          {cfg.editOnOffline && <Field label={t('telegram.offlineMessage')} hint={t('telegram.offlineHint')} wide><TextArea value={cfg.offlineMessage} rows={3} onChange={(offlineMessage) => set({ offlineMessage })} /></Field>}
+          <div className="row-gap">
+            <Button onClick={() => void call('telegram:test')}>{t('integration.test')}</Button>
+            <Button icon="logout" onClick={() => void call('telegram:disconnect')}>{t('common.disconnect')}</Button>
+          </div>
+          <p className="muted small">{t('telegram.testHint')}</p>
+        </div>
+      ) : (
+        <div className="form compact">
+          <Field label={t('telegram.token')}><TextInput type="password" value={token} onChange={setToken} mono /></Field>
+          <Field label={t('telegram.chat')}><TextInput value={chat} onChange={setChat} placeholder={t('telegram.chatPlaceholder')} /></Field>
+          <Button variant="primary" icon="plug" disabled={busy || !token.trim() || !chat.trim()} onClick={async () => {
+            setBusy(true);
+            if (await callOk('telegram:connect', token, chat)) { setToken(''); setChat(''); }
+            setBusy(false);
+          }}>{busy ? '…' : t('common.connect')}</Button>
+        </div>
+      )}
+    </Card>
+  );
+}
+
 function ObsCard() {
   const t = useT();
   const state = useApp((d) => d.state!.obs);
@@ -335,7 +384,7 @@ function ObsCard() {
   );
 }
 
-export function ConnectionDetail({ kind }: { kind: 'twitch' | 'obs' | 'donationalerts' | 'streamlabs' | 'streamelements' | 'streamerbot' | 'discord' }) {
+export function ConnectionDetail({ kind }: { kind: 'twitch' | 'obs' | 'donationalerts' | 'streamlabs' | 'streamelements' | 'streamerbot' | 'discord' | 'telegram' }) {
   const t = useT();
   const cfg = useApp((d) => d.settings!.twitch);
   switch (kind) {
@@ -346,5 +395,6 @@ export function ConnectionDetail({ kind }: { kind: 'twitch' | 'obs' | 'donationa
     case 'streamelements': return <StreamElementsCard />;
     case 'streamerbot': return <StreamerBotCard />;
     case 'discord': return <DiscordCard />;
+    case 'telegram': return <TelegramCard />;
   }
 }

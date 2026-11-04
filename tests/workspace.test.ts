@@ -43,7 +43,9 @@ describe('module-owned workspace', () => {
     expect(normalizeWorkspaceCards(['activities','counters','counter','chat','chat','unknown'])).toEqual(['wheel','poll','giveaway','queue','guess','quiz','boss','counter','chat']);
   });
   it('module registry contains only unique supported IDs', () => {
-    expect(WORKSPACE_CARDS.length).toBe(50);
+    expect(WORKSPACE_CARDS.length).toBe(52);
+    expect(WORKSPACE_CARDS).toContain('telegram');
+    expect(WORKSPACE_CARDS).toContain('captions');
     expect(WORKSPACE_CARDS).toContain('donations');
     // Custom overlays have their own Designer tab.
     expect(WORKSPACE_CARDS).not.toContain('custom');

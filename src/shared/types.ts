@@ -186,6 +186,7 @@ export interface RuntimeState {
   streamelements: ConnectionState;
   streamerbot: ConnectionState & { actions: { id: string; name: string }[] };
   discord: ConnectionState;
+  telegram: ConnectionState;
   /** `device`: the Yandex Music app or site that plays requests (title as Yandex reports it). */
   yandexMusic: ConnectionState & { device?: string | null; hasPlus?: boolean };
   subForStream: ConnectionState & { overlayUrl: string };
@@ -226,6 +227,7 @@ export interface RuntimeState {
   focus: FocusState;
   shoutout: ShoutoutState;
   tts: TtsState;
+  captions: CaptionsState;
   /** Remote access for moderators (only the streamer's own window sees the details). */
   remote: RemoteState;
 }
@@ -1482,6 +1484,12 @@ export interface ShoutoutSettings {
   minViewers: number;
   /** Show the card when a moderator uses the bot's shoutout command too. */
   onCommand: boolean;
+  /** Shout out streamers who write in chat (once per stream). */
+  onChatter: boolean;
+  /** Only channels with at least this many followers count as streamers. */
+  minFollowers: number;
+  /** Chat message for those streamers; {name} {login} {game} {title} {followers}. Empty = no message. */
+  chatterMessage: string;
   /** Wait after the raid before the shoutout, so the raid alert plays first. */
   delaySec: number;
   /** Chat message; {name} {login} {game} {title} {viewers}. Empty = no message. */
@@ -1519,7 +1527,9 @@ export interface ShoutoutCard {
   title: string;
   /** Raid size; null when it isn't a raid. */
   viewers: number | null;
-  reason: 'raid' | 'command' | 'manual' | 'test';
+  /** Follower count of a streamer who came to chat. */
+  followers?: number | null;
+  reason: 'raid' | 'command' | 'manual' | 'chatter' | 'test';
   clip: ShoutoutClip | null;
   at: number;
 }
@@ -1531,6 +1541,84 @@ export interface ShoutoutState {
   /** Logins waiting for their turn. */
   queue: string[];
   history: ShoutoutCard[];
+  error: string | null;
+  /** Channels waiting for Twitch's own shoutout (Twitch allows one every 2 minutes). */
+  nativeQueue: string[];
+  /** When the next one goes out. */
+  nativeNextAt: number | null;
+}
+
+// ---------- Telegram announcements ----------
+
+export interface TelegramSettings {
+  enabled: boolean;
+  /** "@channel" or a numeric id ("-100..."); the bot must be an admin there. */
+  chatId: string;
+  /** Channel or group title and the bot's @username, for the UI. */
+  chatTitle: string;
+  botName: string;
+  notifyLive: boolean;
+  /** {title} {game} {link} {name}. */
+  liveMessage: string;
+  /** Post the stream preview picture with the announcement. */
+  withPreview: boolean;
+  /** Wait after going live, so the title is set and Twitch has made the preview, seconds. */
+  delaySec: number;
+  /** Pin the announcement while live. */
+  pin: boolean;
+  /** Post without a notification sound. */
+  silent: boolean;
+  /** When the stream ends, change the announcement to the "ended" text. */
+  editOnOffline: boolean;
+  /** {title} {game} {link} {name} {duration}. */
+  offlineMessage: string;
+  /** Text of the button under the post; empty = no button. */
+  buttonText: string;
+}
+
+// ---------- Live captions ----------
+
+export interface CaptionsSettings {
+  enabled: boolean;
+  /** Language spoken on stream, BCP 47 ("ru-RU"). */
+  language: string;
+  /** Second line in this language ("en"), translated in the browser; '' = no translation. */
+  translateTo: string;
+  /** Hide the original and show only the translation. */
+  translationOnly: boolean;
+  /** Finished phrases kept on screen. */
+  maxLines: number;
+  /** Captions disappear after this much silence, seconds. */
+  hideAfterSec: number;
+  /** Swear words are shown as "х***". */
+  profanityFilter: boolean;
+  fontFamily: string;
+  fontSize: number;
+  textColor: string;
+  translationColor: string;
+  bgColor: string;
+  /** 0..1 */
+  bgOpacity: number;
+  align: 'left' | 'center';
+}
+
+export interface CaptionLine {
+  id: string;
+  text: string;
+  /** Translation of the line, when one is asked for and the browser could make it. */
+  translation?: string;
+  at: number;
+}
+
+export interface CaptionsState {
+  /** The microphone page sent something lately. */
+  listening: boolean;
+  lines: CaptionLine[];
+  interim: string;
+  lastAt: number | null;
+  /** The microphone page; open it in Chrome or Edge. */
+  micUrl: string;
+  /** The page's own problem (no microphone access, translation unavailable...). */
   error: string | null;
 }
 
@@ -1830,6 +1918,7 @@ export interface Settings {
   streamelements: { enabled: boolean; channelId: string };
   streamerbot: { enabled: boolean; port: number };
   discord: { enabled: boolean; notifyLive: boolean; notifyOffline: boolean; notifyDonations: boolean };
+  telegram: TelegramSettings;
   subForStream: { enabled: boolean; port: number };
   obs: { host: string; port: number; autoConnect: boolean; group: ObsGroupMode };
   bot: BotSettings;
@@ -1881,6 +1970,7 @@ export interface Settings {
   focus: FocusSettings;
   shoutout: ShoutoutSettings;
   tts: TtsSettings;
+  captions: CaptionsSettings;
   /** Main currency for donation totals (goals, subathon). */
   currency: string;
   minimizeToTray: boolean;
@@ -1925,10 +2015,10 @@ export interface MonitorRect { x: number; y: number; w: number; h: number }
 /** Modules without an overlay of their own. */
 export type ToolModule = 'clipper' | 'ducking' | 'shield' | 'report';
 
-export type WorkspaceCard = 'stream' | 'obs' | 'actions' | 'bot' | 'twitch' | 'donationalerts' | 'streamlabs' | 'streamelements' | 'streamerbot' | 'discord' | 'subforstream' | ToolModule | OverlayKind;
+export type WorkspaceCard = 'stream' | 'obs' | 'actions' | 'bot' | 'twitch' | 'donationalerts' | 'streamlabs' | 'streamelements' | 'streamerbot' | 'discord' | 'telegram' | 'subforstream' | ToolModule | OverlayKind;
 
 export type ProfileSettingsKey = 'workspace' | 'bot' | 'alerts' | 'chatOverlay' | 'spotlightOverlay' | 'rewardsOverlay' | 'eventsOverlay' | 'liveOverlay' | 'donationsOverlay' | 'customOverlays' | 'overlayVariants' | 'collabOverlay' | 'musicOverlay' | 'songRequests' | 'goals' | 'timers' | 'actions' | 'banners' | 'ads' | 'labels' | 'emoteRain' | 'wheels' | 'poll' | 'giveaway' | 'quiz' | 'boss' | 'kawaki' | 'viewerQueue' | 'guess' | 'counterOverlays' | 'hype' | 'leadersOverlay'
-  | 'clipper' | 'curses' | 'duel' | 'melody' | 'ducking' | 'market' | 'portal' | 'report' | 'shield' | 'focus' | 'shoutout' | 'tts';
+  | 'clipper' | 'curses' | 'duel' | 'melody' | 'ducking' | 'market' | 'portal' | 'report' | 'shield' | 'focus' | 'shoutout' | 'tts' | 'captions';
 export type ProfileConfig = Pick<Settings, ProfileSettingsKey>;
 export interface StreamProfile { id: string; name: string; config: ProfileConfig; overlays: OverlayKind[] }
 
@@ -1937,7 +2027,7 @@ export type SettingsKey = keyof Settings;
 // ---------- Overlay wire protocol ----------
 
 export type OverlayKind = 'chat' | 'alerts' | 'goal' | 'timer' | 'events' | 'rewards' | 'collab' | 'music' | 'song' | 'banner' | 'ad' | 'label' | 'emotes' | 'wheel' | 'poll' | 'giveaway' | 'kawaki' | 'quiz' | 'boss' | 'live' | 'spotlight' | 'queue' | 'guess' | 'counter' | 'hype' | 'leaders'
-  | 'curse' | 'duel' | 'melody' | 'stocks' | 'portal' | 'donations' | 'custom' | 'focus' | 'shoutout' | 'tts';
+  | 'curse' | 'duel' | 'melody' | 'stocks' | 'portal' | 'donations' | 'custom' | 'focus' | 'shoutout' | 'tts' | 'captions';
 
 export interface RenderedBanner extends Omit<Banner, 'slides'> {
   slides: { id: string; text: string; image: string | null }[];
@@ -2026,6 +2116,7 @@ export type OverlayMessage =
   | { type: 'tts'; play: TtsPlayback }
   | { type: 'ttsStop' }
   | { type: 'custom'; overlay: RenderedCustomOverlay | null }
+  | { type: 'captions'; lines: CaptionLine[]; interim: string; style: CaptionsSettings; lastAt: number | null; now: number; lang: Language }
   | { type: 'reload' };
 
 // ---------- IPC ----------
@@ -2080,6 +2171,11 @@ export interface IpcInvoke {
   'discord:connect': (url: string) => void;
   'discord:disconnect': () => void;
   'discord:test': () => void;
+  /** Check the bot token and the channel, then save them. */
+  'telegram:connect': (token: string, chatId: string) => void;
+  'telegram:disconnect': () => void;
+  /** Post the live announcement as it would look now. */
+  'telegram:test': () => void;
   'obs:connect': (password?: string) => void;
   'obs:disconnect': () => void;
   'obs:setScene': (scene: string) => void;
@@ -2215,6 +2311,9 @@ export interface IpcInvoke {
   'tts:forgetVoices': () => void;
   /** Re-read the installed Windows voices. */
   'tts:voices': () => TtsSystemVoice[];
+  /** Sample lines on the captions overlay, to set it up. */
+  'captions:test': () => void;
+  'captions:clear': () => void;
   'media:import': () => MediaFile | null;
   'media:list': () => MediaFile[];
   'shell:openExternal': (url: string) => void;

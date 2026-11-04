@@ -32,6 +32,7 @@ export const VARIANT_KEYS: Partial<Record<OverlayKind, SettingsKey>> = {
   portal: 'portal',
   focus: 'focus',
   shoutout: 'shoutout',
+  captions: 'captions',
   donations: 'donationsOverlay',
 };
 
