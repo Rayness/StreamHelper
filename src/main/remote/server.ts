@@ -69,7 +69,7 @@ export function readCookie(header: string | undefined, name: string): string | n
 
 /** What a moderator's browser may see of the runtime state: no dock key, no remote access details. */
 export function remoteView(state: RuntimeState): RuntimeState {
-  return { ...state, dockUrl: '', remote: { ...state.remote, moderators: [], clients: [], log: [], addresses: [] } };
+  return { ...state, dockUrl: '', captions: { ...state.captions, micUrl: '' }, remote: { ...state.remote, moderators: [], clients: [], log: [], addresses: [] } };
 }
 
 /**

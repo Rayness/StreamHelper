@@ -11,8 +11,10 @@ export interface DockOptions {
 }
 
 export function authorized(given: string | null, expected: string): boolean {
-  if (!given || given.length !== expected.length) return false;
-  return timingSafeEqual(Buffer.from(given), Buffer.from(expected));
+  if (!given) return false;
+  const actual = Buffer.from(given);
+  const secret = Buffer.from(expected);
+  return actual.length === secret.length && timingSafeEqual(actual, secret);
 }
 
 /** Authenticated localhost control surface for an OBS Custom Browser Dock. */

@@ -8,6 +8,8 @@ import { StateHub } from '../src/main/core/state';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { join } from 'node:path';
+import { readFileSync } from 'node:fs';
+import { createContext, runInContext } from 'node:vm';
 import { CaptionsService, createCaptionsRoutes, parseHeard } from '../src/main/features/captions';
 import { telegramChatId, TelegramService, validTelegramToken } from '../src/main/integrations/telegram';
 
@@ -158,6 +160,41 @@ describe('telegram announcements', () => {
 });
 
 describe('live captions', () => {
+  it('replaces recognition after a language change without restarting the replacement twice', async () => {
+    const instances: RecognitionStub[] = [];
+    class RecognitionStub {
+      onend: (() => void) | null = null;
+      onresult: unknown = null;
+      start = vi.fn();
+      constructor() { instances.push(this); }
+      abort() { queueMicrotask(() => this.onend?.()); }
+    }
+    const elements = new Map();
+    const document = {
+      documentElement: {}, querySelectorAll: () => [],
+      getElementById: (id: string) => {
+        if (!elements.has(id)) elements.set(id, { classList: { toggle() {} }, addEventListener() {} });
+        return elements.get(id);
+      },
+    };
+    let language = 'en-US';
+    const sandbox = createContext({
+      document, window: { SpeechRecognition: RecognitionStub }, self: {},
+      location: { search: '?token=secret' }, URLSearchParams, Date, setInterval: vi.fn(),
+      fetch: async () => ({ ok: true, json: async () => ({ enabled: true, language, translateTo: '', lang: 'en' }) }),
+    });
+    const html = readFileSync(join(__dirname, '..', 'resources/overlays/captions-mic.html'), 'utf8');
+    runInContext(/<script>([\s\S]*?)<\/script>/.exec(html)![1], sandbox);
+    await runInContext('start()', sandbox);
+    language = 'ru-RU';
+    await runInContext('loadConfig()', sandbox);
+    await Promise.resolve();
+    expect(instances).toHaveLength(2);
+    expect(instances[0].start).toHaveBeenCalledTimes(1);
+    expect(instances[1].start).toHaveBeenCalledTimes(1);
+    expect(instances[0].onresult).toBeNull();
+  });
+
   function setup(patch: Partial<Settings['captions']> = {}) {
     const env = context();
     env.ctx.settings.set('captions', { ...env.ctx.settings.get('captions'), enabled: true, maxLines: 2, ...patch });
@@ -221,6 +258,7 @@ describe('live captions', () => {
     try {
       expect((await fetch(`${base}/captions/mic`)).status).toBe(403);
       expect((await fetch(`${base}/captions/mic?token=wrong-token!`)).status).toBe(403);
+      expect((await fetch(`${base}/captions/mic?token=${encodeURIComponent('я'.repeat(12))}`)).status).toBe(403);
       const page = await fetch(`${base}/captions/mic?token=secret-token`);
       expect(page.status).toBe(200);
       expect(await page.text()).toContain('webkitSpeechRecognition');

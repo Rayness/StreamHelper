@@ -221,6 +221,9 @@
 
       function restart() {
         if (!rec) return;
+        // Aborting fires onend asynchronously. The old instance must never restart the new one.
+        rec.onend = null;
+        rec.onresult = null;
         try { rec.abort(); } catch { /* not started */ }
         build();
         try { rec.start(); } catch { /* onend retries */ }
