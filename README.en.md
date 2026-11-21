@@ -2,9 +2,9 @@
 
 [Русский](README.md) · [English](README.en.md)
 
-StreamHelper is a Windows desktop app for managing a stream, chat, and OBS browser sources from one place. Current version: **0.16.0**. The interface supports Russian and English.
+StreamHelper is a Windows desktop app for managing a stream, chat, and OBS browser sources from one place. Current version: **0.17.0**. The interface supports Russian and English.
 
-Release **0.16.0** adds DonateX, a dedicated YouTube Music source, and browser music identification. Song requests, favourites, and background mixes keep their YouTube Music links. [Release notes](docs/release-notes-0.16.0.md).
+Release **0.17.0** overhauls the UI/UX: a unified collapsible sidebar, beginner onboarding wizard, redesigned module catalog with starter bundles and in-place toggles, tabbed module settings, 1-click overlay style presets, and an upgraded Live Panel with a broadcast topbar and layout presets. [Release notes](docs/release-notes-0.17.0.md).
 
 > **Upgrading from 0.11.x:** "Add to OBS" now puts sources into a nested scene "StreamHelper · <scene>". Sources you already added stay where they are; move them into the group with the button in the OBS module, or turn the group off in **Connections → OBS**. Reconnect Twitch for clips and the raid shield.
 
@@ -32,7 +32,7 @@ These screenshots use fictional demo data; they contain no real accounts or toke
 
 ## Download and first run
 
-1. Download `StreamHelper-Setup-0.16.0.exe` from [release 0.16.0](https://github.com/Rayness/StreamHelper/releases/tag/v0.16.0) or the [update repository](https://github.com/Rayness/StreamHelper-Releases/releases/tag/v0.16.0). The Windows installer is unsigned.
+1. Download `StreamHelper-Setup-0.17.0.exe` from [release 0.17.0](https://github.com/Rayness/StreamHelper/releases/tag/v0.17.0) or the [update repository](https://github.com/Rayness/StreamHelper-Releases/releases/tag/v0.17.0). The Windows installer is unsigned.
 2. Open **Connections → Twitch** and sign in as the broadcaster. Authorization uses a device code on Twitch.
 3. If needed, open **Connections → OBS** and enter its WebSocket address, port and password. The usual port is 4455.
 4. Add the features you need: Alerts, Chat, Song Requests or individual activities. Select an added module to configure it and use **Add to OBS** for its browser source.
