@@ -88,6 +88,12 @@ const PATHS = {
   duplicate: 'M8 8h12v12H8zM16 8V4H4v12h4',
   align: 'M21 6H3M17 12H7M19 18H5',
   folder: 'M3 6a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z',
+  sidebar: 'M3 4h18v16H3zM9 4v16',
+  chevronDown: 'm6 9 6 6 6-6',
+  sliders: 'M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6',
+  rocket: 'M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09zM12 15l-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2zM9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5',
+  grid: 'M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z',
+  arrowLeft: 'M19 12H5M12 19l-7-7 7-7',
 } as const;
 
 export type IconName = keyof typeof PATHS;

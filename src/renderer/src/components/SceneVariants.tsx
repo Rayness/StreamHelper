@@ -3,7 +3,7 @@ import { uid } from '@shared/defaults';
 import { VARIANT_KEYS } from '@shared/variants';
 import type { OverlayKind } from '@shared/types';
 import { useT } from '../i18n';
-import { getData, saveSettings, setVariantScope, useApp, useVariantScope } from '../store';
+import { askConfirm, getData, saveSettings, setVariantScope, useApp, useVariantScope } from '../store';
 import { Icon } from './icons';
 import { Button } from './ui';
 
@@ -19,7 +19,6 @@ export function SceneVariants({ kind }: { kind: OverlayKind }) {
   const obs = useApp((d) => d.state!.obs);
   const [adding, setAdding] = useState(false);
   const [scene, setScene] = useState('');
-  // Leaving the module (or switching to another one) always returns to the common settings.
   useEffect(() => () => setVariantScope(null), [kind]);
   if (!key) return null;
   const all = variants;
@@ -36,6 +35,23 @@ export function SceneVariants({ kind }: { kind: OverlayKind }) {
     setScene('');
   };
   const changed = active ? Object.keys(active.overrides).length : 0;
+
+  // Compact unobtrusive inline row when no per-scene overrides exist yet.
+  if (all.length === 0 && !adding) {
+    return (
+      <div className="scene-variants-compact">
+        <span className="muted small">
+          <Icon name="video" size={13} />
+          {t('ui.sceneVariantAll')}
+        </span>
+        <button type="button" className="scene-variant-inline-add" onClick={() => setAdding(true)}>
+          <Icon name="plus" size={13} />
+          {t('ui.sceneVariantAdd')}
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className={`scene-variants ${active ? 'scoped' : ''}`}>
       <div className="scene-variants-row" role="tablist" aria-label={t('variants.title')}>
@@ -68,11 +84,11 @@ export function SceneVariants({ kind }: { kind: OverlayKind }) {
           {kind === 'alerts' && <span className="muted small">{t('variants.alertsNote')}</span>}
           <span className="scene-variants-actions">
             {changed > 0 && <Button size="sm" icon="replay" onClick={() => saveSettings('overlayVariants', (allVariants() ?? []).map((v) => (v.id === active.id ? { ...v, overrides: {} } : v)))}>{t('variants.reset')}</Button>}
-            <Button size="sm" variant="danger" icon="trash" onClick={() => {
-              if (!confirm(t('variants.deleteConfirm', { scene: active.scene }))) return;
+            <Button size="sm" variant="danger" icon="trash" onClick={() => void askConfirm({ message: t('variants.deleteConfirm', { scene: active.scene }), danger: true }).then((ok) => {
+              if (!ok) return;
               setVariantScope(null);
               saveSettings('overlayVariants', (allVariants() ?? []).filter((v) => v.id !== active.id));
-            }}>{t('variants.delete')}</Button>
+            })}>{t('variants.delete')}</Button>
           </span>
         </div>
       )}

@@ -4,7 +4,7 @@ import { renderAlert, sampleEvent } from '@shared/alerts';
 import { VARIANT_KEYS } from '@shared/variants';
 import { useT } from '../i18n';
 import { overlayDef, overlayPath } from '../overlayCatalog';
-import { call, callOk, useApp, useVariantScope } from '../store';
+import { call, callOk, navigate, useApp, useVariantScope } from '../store';
 import { Icon } from './icons';
 import { Button, IconButton } from './ui';
 
@@ -88,7 +88,14 @@ export function OverlayPreview({ kind, id, maxHeight, children, size }: { kind: 
   }, currency)! } : undefined;
   if (!base) return <p className="muted small">{t('overlays.serverDown')}</p>;
   return (
-    <div className="ov-preview">
+    <div className="ov-preview ov-preview-card">
+      <div className="ov-preview-head">
+        <span className="ov-preview-title">
+          <Icon name="eye" size={14} />
+          {t('ui.preview')}
+        </span>
+        <span className="pill">{w}×{h}</span>
+      </div>
       <ScaledFrame key={`${kind}:${id ?? ''}:${variant?.id ?? ''}`} src={previewUrl(base + overlayPath(kind, id, variant?.id))} width={w} height={h} maxHeight={maxHeight} message={message} />
       {children && <div className="ov-preview-actions">{children}</div>}
     </div>
@@ -103,6 +110,7 @@ export function OverlayBar({ kind, id, name, size }: { kind: OverlayKind; id?: s
   const t = useT();
   const base = useApp((d) => d.state!.overlayUrl);
   const obs = useApp((d) => d.state!.obs);
+  const remote = useApp((d) => !!d.remote);
   const obsReady = obs.status === 'connected';
   const connected = useApp((d) => d.state!.overlayKinds[kind] ?? 0);
   const variant = useActiveVariant(kind);
@@ -125,18 +133,19 @@ export function OverlayBar({ kind, id, name, size }: { kind: OverlayKind; id?: s
         <span className="ov-state-dot" />
         {placedScenes.length ? t('overlays.inScenes', { scenes: placedScenes.slice(0, 3).join(', ') + (placedScenes.length > 3 ? ` +${placedScenes.length - 3}` : '') }) : inObs ? t('overlays.inObs', { n: inObs }) : t('overlays.notInObs')}
       </span>
+      <span className="ov-bar-sep" aria-hidden />
       <button
         type="button"
-        className="ov-url mono"
-        title={t('common.copy')}
+        className="ov-url"
+        title={`${t('common.copy')}: ${url}`}
         onClick={() => {
           void call('clipboard:write', url);
           setCopied(true);
           setTimeout(() => setCopied(false), 1400);
         }}
       >
-        <Icon name={copied ? 'check' : 'link'} size={14} />
-        <span>{copied ? t('common.copied') : url.replace(/^https?:\/\//, '')}</span>
+        <Icon name={copied ? 'check' : 'copy'} size={13} />
+        <span>{copied ? t('common.copied') : t('ui.copyLink')}</span>
       </button>
       <span className="pill" title={t('overlays.sizeHint')}>
         {w}×{h}
@@ -147,6 +156,11 @@ export function OverlayBar({ kind, id, name, size }: { kind: OverlayKind; id?: s
           <select className="input select ov-scene" value={target} title={t('overlays.targetScene')} aria-label={t('overlays.targetScene')} onChange={(e) => setPicked(e.target.value)}>
             {scenes.map((s) => <option key={s} value={s}>{s === obs.currentScene ? `${s} ●` : s}</option>)}
           </select>
+        )}
+        {!obsReady && !remote && (
+          <Button size="sm" variant="secondary" icon="video" onClick={() => navigate('connections', 'obs')}>
+            {t('prereq.connectObs')}
+          </Button>
         )}
         <Button
           variant="primary"

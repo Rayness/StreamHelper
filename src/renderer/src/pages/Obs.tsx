@@ -1,10 +1,11 @@
+import { useState } from 'react';
 import { uid } from '@shared/defaults';
 import type { ActionStep, QuickAction } from '@shared/types';
 import { HotkeyInput } from '../components/HotkeyInput';
 import { Icon } from '../components/icons';
-import { Button, Card, ColorInput, Empty, Field, IconButton, NumberInput, PageHeader, Select, StatusText, TextInput, Toggle } from '../components/ui';
+import { Button, Card, ColorInput, Empty, Field, IconButton, NumberInput, PageHeader, Select, StatusText, Tabs, TextInput, Toggle } from '../components/ui';
 import { useT, type TFn } from '../i18n';
-import { call, callOk, openModule, saveSettings, toast, useApp } from '../store';
+import { askConfirm, call, callOk, openModule, saveSettings, toast, useApp } from '../store';
 import type { ObsAppSource, ObsGroupMode, WorkspaceCard } from '@shared/types';
 import { isWorkspaceModule } from '@shared/workspace';
 
@@ -13,71 +14,81 @@ export function Obs() {
   const obs = useApp((d) => d.state!.obs);
   const connected = obs.status === 'connected';
   const dockUrl = useApp((d) => d.state!.dockUrl);
+  const [tab, setTab] = useState<'control' | 'sources'>('control');
   return (
-    <div className="page">
-      {!connected ? (
-        <Card>
-          <Empty icon="video" title={t('obs.notConnected')}>
-            {t('obs.notConnectedHint')}
-          </Empty>
-        </Card>
+    <div className="page module-tabbed">
+      <Tabs value={tab} onChange={setTab} tabs={[
+        { id: 'control', label: t('obs.tab.control') },
+        { id: 'sources', label: t('obs.tab.sources') },
+      ]} />
+      {tab === 'control' ? (
+        !connected ? (
+          <Card>
+            <Empty icon="video" title={t('obs.notConnected')}>
+              {t('obs.notConnectedHint')}
+            </Empty>
+          </Card>
+        ) : (
+          <div className="obs-layout">
+            <Card
+              icon="layers"
+              title={t('obs.scenes')}
+              actions={
+                <>
+                  <Button size="sm" icon="broadcast" variant={obs.streaming ? 'danger' : 'secondary'} onClick={() => void call('obs:stream', 'toggle')}>
+                    {obs.streaming ? t('obs.stopStream') : t('obs.startStream')}
+                  </Button>
+                  <Button size="sm" icon="record" variant={obs.recording ? 'danger' : 'secondary'} onClick={() => void call('obs:record', 'toggle')}>
+                    {obs.recording ? t('obs.stopRecord') : t('obs.startRecord')}
+                  </Button>
+                </>
+              }
+            >
+              <div className="scene-grid big">
+                {obs.scenes.filter((s) => !(obs.containers ?? []).includes(s)).map((s) => (
+                  <button key={s} type="button" className={`scene-btn ${s === obs.currentScene ? 'active' : ''}`} onClick={() => void call('obs:setScene', s)}>
+                    {s}
+                  </button>
+                ))}
+              </div>
+            </Card>
+            <Card icon="eye" title={t('obs.sources', { scene: obs.currentScene })}>
+              {obs.sceneItems.length === 0 && <p className="muted">{t('obs.noSources')}</p>}
+              <ul className="source-list">
+                {obs.sceneItems.map((i) => (
+                  <li key={i.id} className={i.enabled ? '' : 'off'}>
+                    <span>{i.name}</span>
+                    <IconButton icon={i.enabled ? 'eye' : 'eyeOff'} label={t('obs.toggleVisibility')} onClick={() => void call('obs:toggleSource', obs.currentScene, i.id)} />
+                  </li>
+                ))}
+              </ul>
+            </Card>
+            <Card icon="mic" title={t('obs.audio')}>
+              {obs.inputs.length === 0 && <p className="muted">{t('obs.noAudio')}</p>}
+              <ul className="source-list">
+                {obs.inputs.map((i) => (
+                  <li key={i.name} className={i.muted ? 'off' : ''}>
+                    <span>{i.name}</span>
+                    <IconButton icon={i.muted ? 'micOff' : 'mic'} label={t('obs.toggleMute')} variant={i.muted ? 'danger' : 'ghost'} onClick={() => void call('obs:toggleMute', i.name)} />
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          </div>
+        )
       ) : (
-        <div className="obs-layout">
-          <Card
-            icon="layers"
-            title={t('obs.scenes')}
-            actions={
-              <>
-                <Button size="sm" icon="broadcast" variant={obs.streaming ? 'danger' : 'secondary'} onClick={() => void call('obs:stream', 'toggle')}>
-                  {obs.streaming ? t('obs.stopStream') : t('obs.startStream')}
-                </Button>
-                <Button size="sm" icon="record" variant={obs.recording ? 'danger' : 'secondary'} onClick={() => void call('obs:record', 'toggle')}>
-                  {obs.recording ? t('obs.stopRecord') : t('obs.startRecord')}
-                </Button>
-              </>
-            }
-          >
-            <div className="scene-grid big">
-              {obs.scenes.filter((s) => !(obs.containers ?? []).includes(s)).map((s) => (
-                <button key={s} type="button" className={`scene-btn ${s === obs.currentScene ? 'active' : ''}`} onClick={() => void call('obs:setScene', s)}>
-                  {s}
-                </button>
-              ))}
+        <div className="module-flow">
+          {connected && <AppSourcesCard />}
+          <Card title={t('obs.dock')}>
+            <p className="muted small">{t('obs.dockHint')}</p>
+            <div className="row-gap wrap">
+              <input className="input mono" value={dockUrl} readOnly aria-label={t('obs.dock')} />
+              <Button disabled={!dockUrl} onClick={() => void call('clipboard:write', dockUrl)}>{t('common.copy')}</Button>
+              <Button disabled={!dockUrl} onClick={() => void call('shell:openExternal', dockUrl)}>{t('overlays.open')}</Button>
             </div>
-          </Card>
-          <Card icon="eye" title={t('obs.sources', { scene: obs.currentScene })}>
-            {obs.sceneItems.length === 0 && <p className="muted">{t('obs.noSources')}</p>}
-            <ul className="source-list">
-              {obs.sceneItems.map((i) => (
-                <li key={i.id} className={i.enabled ? '' : 'off'}>
-                  <span>{i.name}</span>
-                  <IconButton icon={i.enabled ? 'eye' : 'eyeOff'} label={t('obs.toggleVisibility')} onClick={() => void call('obs:toggleSource', obs.currentScene, i.id)} />
-                </li>
-              ))}
-            </ul>
-          </Card>
-          <Card icon="mic" title={t('obs.audio')}>
-            {obs.inputs.length === 0 && <p className="muted">{t('obs.noAudio')}</p>}
-            <ul className="source-list">
-              {obs.inputs.map((i) => (
-                <li key={i.name} className={i.muted ? 'off' : ''}>
-                  <span>{i.name}</span>
-                  <IconButton icon={i.muted ? 'micOff' : 'mic'} label={t('obs.toggleMute')} variant={i.muted ? 'danger' : 'ghost'} onClick={() => void call('obs:toggleMute', i.name)} />
-                </li>
-              ))}
-            </ul>
           </Card>
         </div>
       )}
-      {connected && <AppSourcesCard />}
-      <Card title={t('obs.dock')}>
-        <p className="muted small">{t('obs.dockHint')}</p>
-        <div className="row-gap wrap">
-          <input className="input mono" value={dockUrl} readOnly aria-label={t('obs.dock')} />
-          <Button disabled={!dockUrl} onClick={() => void call('clipboard:write', dockUrl)}>{t('common.copy')}</Button>
-          <Button disabled={!dockUrl} onClick={() => void call('shell:openExternal', dockUrl)}>{t('overlays.open')}</Button>
-        </div>
-      </Card>
     </div>
   );
 }
@@ -252,7 +263,7 @@ export function Actions() {
                 <Button size="sm" icon="play" onClick={() => void call('actions:run', a.id)}>
                   {t('actions.run')}
                 </Button>
-                <IconButton icon="trash" label={t('common.delete')} variant="danger" onClick={() => confirm(t('common.confirmDelete')) && saveSettings('actions', actions.filter((x) => x.id !== a.id))} />
+                <IconButton icon="trash" label={t('common.delete')} variant="danger" onClick={() => void askConfirm({ message: t('common.confirmDelete'), danger: true }).then((ok) => ok && saveSettings('actions', actions.filter((x) => x.id !== a.id)))} />
               </>
             }
             title={
@@ -370,7 +381,7 @@ export function AppSourcesCard() {
                     </span>
                     {isWorkspaceModule(a.kind) && <IconButton icon="settings" label={t('workspace.settings')} onClick={() => openModule(a.kind as WorkspaceCard)} />}
                     <IconButton icon={a.enabled ? 'eye' : 'eyeOff'} label={t('obs.toggleVisibility')} onClick={() => void callOk('obs:setItemEnabled', a.itemScene, a.itemId, !a.enabled)} />
-                    <IconButton icon="trash" label={t('obs.removeFromScene')} onClick={() => confirm(t('obs.removeConfirm', { name: a.sourceName, scene })) && void callOk('obs:removeItem', a.itemScene, a.itemId)} />
+                    <IconButton icon="trash" label={t('obs.removeFromScene')} onClick={() => void askConfirm({ message: t('obs.removeConfirm', { name: a.sourceName, scene }), danger: true }).then((ok) => ok && void callOk('obs:removeItem', a.itemScene, a.itemId))} />
                   </li>
                 ))}
               </ul>}

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { FocusPhase, FocusSettings, ShoutoutSettings } from '@shared/types';
 import { formatDuration } from '@shared/template';
 import { OverlayBar, OverlayPreview } from '../components/overlay';
-import { Button, Card, ColorInput, Empty, Field, NumberInput, Select, TextArea, TextInput, Toggle } from '../components/ui';
+import { Button, Card, ColorInput, Empty, Field, NumberInput, Select, SettingList, SettingRow, Tabs, TextArea, TextInput, Toggle } from '../components/ui';
 import { useClock, useNow } from '../hooks';
 import { useT } from '../i18n';
 import { call, callOk, saveSettings, useApp } from '../store';
@@ -27,6 +27,7 @@ export function FocusModule() {
   const lang = useApp((d) => d.settings!.language);
   const f = useApp((d) => d.state!.focus);
   const obs = useApp((d) => d.state!.obs);
+  const [tab, setTab] = useState<'control' | 'settings'>('control');
   const now = useNow(500);
   const set = (patch: Partial<FocusSettings>) => saveSettings('focus', { ...cfg, ...patch });
   const left = f.status === 'running' && f.endsAt ? f.endsAt - now : f.status === 'paused' ? f.leftMs : 0;
@@ -36,73 +37,84 @@ export function FocusModule() {
   const scenes = obs.scenes.filter((s) => !(obs.containers ?? []).includes(s));
   const sceneOptions = [{ value: '', label: t('focus.noScene') }, ...(cfg.breakScene && !scenes.includes(cfg.breakScene) ? [cfg.breakScene] : []).concat(scenes).map((s) => ({ value: s, label: s }))];
   return (
-    <div className="fun-split">
-      <div className="fun-main">
-        <Card className="control-card">
-          <div className="control-row">
-            <div className="control-status">
-              <span className="muted small">{f.status === 'idle' ? t('focus.idle') : f.status === 'paused' ? `${label} · ${t('focus.paused')}` : label}</span>
-              <b className="focus-clock">{clock(f.status === 'idle' ? cfg.focusMin * 60_000 : left)}</b>
-            </div>
-            <Button variant="primary" icon={f.status === 'running' ? 'pause' : 'play'} className="btn-hero" onClick={() => void callOk('focus:toggle')}>{toggleLabel}</Button>
-          </div>
-          <div className="row-gap wrap">
-            <Button size="sm" icon="skip" disabled={f.status === 'idle'} onClick={() => void call('focus:skip')}>{t('focus.skip')}</Button>
-            <Button size="sm" disabled={f.status === 'idle'} onClick={() => void call('focus:add', -1)}>−1</Button>
-            <Button size="sm" disabled={f.status === 'idle'} onClick={() => void call('focus:add', 1)}>+1</Button>
-            <Button size="sm" disabled={f.status === 'idle'} onClick={() => void call('focus:add', 5)}>+5</Button>
-            <Button size="sm" variant="danger" disabled={f.status === 'idle'} onClick={() => void call('focus:stop')}>{t('focus.stop')}</Button>
-          </div>
-          <p className="muted small">
-            {t('focus.sessions', { n: f.done })} · {t('focus.total', { time: formatDuration(f.focusMs, lang) })}
-            {f.extendedMin > 0 && <> · {t('focus.extended', { n: f.extendedMin })}</>}
-          </p>
-          <div className="form">
-            <Field label={t('focus.task')} hint={t('focus.taskHint')} wide><TextInput value={cfg.task} onChange={(task) => set({ task })} /></Field>
-          </div>
-        </Card>
-        <Card title={t('focus.schedule')}>
-          <div className="form">
-            <Field label={t('focus.focusMin')}><NumberInput value={cfg.focusMin} min={1} max={240} onChange={(focusMin) => set({ focusMin })} /></Field>
-            <Field label={t('focus.breakMin')}><NumberInput value={cfg.breakMin} min={1} max={120} onChange={(breakMin) => set({ breakMin })} /></Field>
-            <Field label={t('focus.longBreakMin')}><NumberInput value={cfg.longBreakMin} min={1} max={180} onChange={(longBreakMin) => set({ longBreakMin })} /></Field>
-            <Field label={t('focus.longEvery')} hint={t('focus.longEveryHint')}><NumberInput value={cfg.longEvery} min={0} max={12} onChange={(longEvery) => set({ longEvery })} /></Field>
-            <Field label={t('overlays.options')} hint={t('focus.autoContinueHint')} wide><Toggle checked={cfg.autoContinue} onChange={(autoContinue) => set({ autoContinue })} label={t('focus.autoContinue')} /></Field>
-          </div>
-        </Card>
-        <Card title={t('focus.chat')}>
-          <div className="form">
-            <Field label={t('focus.reward')} hint={t('focus.rewardHint')} wide><TextInput value={cfg.rewardTitle} onChange={(rewardTitle) => set({ rewardTitle })} /></Field>
-            <Field label={t('focus.rewardMinutes')}><NumberInput value={cfg.rewardMinutes} min={1} max={60} onChange={(rewardMinutes) => set({ rewardMinutes })} /></Field>
-            <Field label={t('focus.maxExtend')}><NumberInput value={cfg.maxExtendMin} min={0} max={240} onChange={(maxExtendMin) => set({ maxExtendMin })} /></Field>
-            <Field label={t('focus.command')} hint={t('focus.commandHint')}><CommandInput value={cfg.command} onChange={(command) => set({ command })} /></Field>
-            <Field label={t('overlays.options')} wide><Toggle checked={cfg.announce} onChange={(announce) => set({ announce })} label={t('focus.announce')} /></Field>
-          </div>
-        </Card>
-        <Card title={t('focus.obs')}>
-          <div className="form">
-            <Field label={t('focus.breakScene')} hint={t('focus.breakSceneHint')} wide><Select value={cfg.breakScene} onChange={(breakScene) => set({ breakScene })} options={sceneOptions} /></Field>
-          </div>
-        </Card>
-        <Card title={t('focus.look')}>
-          <div className="form">
-            <Field label={t('focus.layout')}><Select value={cfg.layout} onChange={(layout) => set({ layout })} options={(['ring', 'bar'] as const).map((v) => ({ value: v, label: t(`focusLayout.${v}`) }))} /></Field>
-            {PHASES.map((p) => <Field key={p} label={t(`focus.label.${p}`)}><TextInput value={cfg.labels[p]} onChange={(v) => set({ labels: { ...cfg.labels, [p]: v } })} /></Field>)}
-            <LookFields accent={cfg.accentColor} font={cfg.fontFamily} onAccent={(accentColor) => set({ accentColor })} onFont={(fontFamily) => set({ fontFamily })} />
-            <Field label={t('focus.breakColor')}><ColorInput value={cfg.breakColor} onChange={(breakColor) => set({ breakColor })} /></Field>
-            <Field label={t('overlays.options')} wide>
-              <div className="stack">
-                <Toggle checked={cfg.showCycles} onChange={(showCycles) => set({ showCycles })} label={t('focus.showCycles')} />
-                <Toggle checked={cfg.chime} onChange={(chime) => set({ chime })} label={t('focus.chime')} />
-              </div>
-            </Field>
-          </div>
-        </Card>
+    <div className="module-tabbed">
+      <OverlayBar kind="focus" name={t('ov.focus')} />
+      <Tabs value={tab} onChange={setTab} tabs={[
+        { id: 'control', label: t('fun.tab.control') },
+        { id: 'settings', label: t('fun.tab.settings') },
+      ]} />
+      <div className="fun-split">
+        <div className="fun-main">
+          {tab === 'control' ? (
+            <>
+              <Card className="control-card">
+                <div className="control-row">
+                  <div className="control-status">
+                    <span className="muted small">{f.status === 'idle' ? t('focus.idle') : f.status === 'paused' ? `${label} · ${t('focus.paused')}` : label}</span>
+                    <b className="focus-clock">{clock(f.status === 'idle' ? cfg.focusMin * 60_000 : left)}</b>
+                  </div>
+                  <Button variant="primary" icon={f.status === 'running' ? 'pause' : 'play'} className="btn-hero" onClick={() => void callOk('focus:toggle')}>{toggleLabel}</Button>
+                </div>
+                <div className="row-gap wrap">
+                  <Button size="sm" icon="skip" disabled={f.status === 'idle'} onClick={() => void call('focus:skip')}>{t('focus.skip')}</Button>
+                  <Button size="sm" disabled={f.status === 'idle'} onClick={() => void call('focus:add', -1)}>−1</Button>
+                  <Button size="sm" disabled={f.status === 'idle'} onClick={() => void call('focus:add', 1)}>+1</Button>
+                  <Button size="sm" disabled={f.status === 'idle'} onClick={() => void call('focus:add', 5)}>+5</Button>
+                  <Button size="sm" variant="danger" disabled={f.status === 'idle'} onClick={() => void call('focus:stop')}>{t('focus.stop')}</Button>
+                </div>
+                <p className="muted small">
+                  {t('focus.sessions', { n: f.done })} · {t('focus.total', { time: formatDuration(f.focusMs, lang) })}
+                  {f.extendedMin > 0 && <> · {t('focus.extended', { n: f.extendedMin })}</>}
+                </p>
+                <div className="form">
+                  <Field label={t('focus.task')} hint={t('focus.taskHint')} wide><TextInput value={cfg.task} onChange={(task) => set({ task })} /></Field>
+                </div>
+              </Card>
+              <Card title={t('focus.schedule')}>
+                <div className="form">
+                  <Field label={t('focus.focusMin')}><NumberInput value={cfg.focusMin} min={1} max={240} onChange={(focusMin) => set({ focusMin })} /></Field>
+                  <Field label={t('focus.breakMin')}><NumberInput value={cfg.breakMin} min={1} max={120} onChange={(breakMin) => set({ breakMin })} /></Field>
+                  <Field label={t('focus.longBreakMin')}><NumberInput value={cfg.longBreakMin} min={1} max={180} onChange={(longBreakMin) => set({ longBreakMin })} /></Field>
+                  <Field label={t('focus.longEvery')} hint={t('focus.longEveryHint')}><NumberInput value={cfg.longEvery} min={0} max={12} onChange={(longEvery) => set({ longEvery })} /></Field>
+                </div>
+                <SettingList>
+                  <SettingRow label={t('focus.autoContinue')} hint={t('focus.autoContinueHint')}><Toggle checked={cfg.autoContinue} onChange={(autoContinue) => set({ autoContinue })} /></SettingRow>
+                </SettingList>
+              </Card>
+            </>
+          ) : (
+            <>
+              <Card title={t('focus.look')}>
+                <div className="form">
+                  <Field label={t('focus.layout')}><Select value={cfg.layout} onChange={(layout) => set({ layout })} options={(['ring', 'bar'] as const).map((v) => ({ value: v, label: t(`focusLayout.${v}`) }))} /></Field>
+                  {PHASES.map((p) => <Field key={p} label={t(`focus.label.${p}`)}><TextInput value={cfg.labels[p]} onChange={(v) => set({ labels: { ...cfg.labels, [p]: v } })} /></Field>)}
+                  <LookFields accent={cfg.accentColor} font={cfg.fontFamily} onAccent={(accentColor) => set({ accentColor })} onFont={(fontFamily) => set({ fontFamily })} />
+                  <Field label={t('focus.breakColor')}><ColorInput value={cfg.breakColor} onChange={(breakColor) => set({ breakColor })} /></Field>
+                </div>
+                <SettingList>
+                  <SettingRow label={t('focus.showCycles')}><Toggle checked={cfg.showCycles} onChange={(showCycles) => set({ showCycles })} /></SettingRow>
+                  <SettingRow label={t('focus.chime')}><Toggle checked={cfg.chime} onChange={(chime) => set({ chime })} /></SettingRow>
+                </SettingList>
+              </Card>
+              <Card title={t('focus.chat')}>
+                <div className="form">
+                  <Field label={t('focus.reward')} hint={t('focus.rewardHint')} wide><TextInput value={cfg.rewardTitle} onChange={(rewardTitle) => set({ rewardTitle })} /></Field>
+                  <Field label={t('focus.rewardMinutes')}><NumberInput value={cfg.rewardMinutes} min={1} max={60} onChange={(rewardMinutes) => set({ rewardMinutes })} /></Field>
+                  <Field label={t('focus.maxExtend')}><NumberInput value={cfg.maxExtendMin} min={0} max={240} onChange={(maxExtendMin) => set({ maxExtendMin })} /></Field>
+                  <Field label={t('focus.command')} hint={t('focus.commandHint')}><CommandInput value={cfg.command} onChange={(command) => set({ command })} /></Field>
+                  <Field label={t('focus.breakScene')} hint={t('focus.breakSceneHint')} wide><Select value={cfg.breakScene} onChange={(breakScene) => set({ breakScene })} options={sceneOptions} /></Field>
+                </div>
+                <SettingList>
+                  <SettingRow label={t('focus.announce')}><Toggle checked={cfg.announce} onChange={(announce) => set({ announce })} /></SettingRow>
+                </SettingList>
+              </Card>
+            </>
+          )}
+        </div>
+        <aside className="fun-side">
+          <OverlayPreview kind="focus" maxHeight={320} />
+        </aside>
       </div>
-      <aside className="fun-side">
-        <OverlayPreview kind="focus" maxHeight={320} />
-        <OverlayBar kind="focus" name={t('ov.focus')} />
-      </aside>
     </div>
   );
 }

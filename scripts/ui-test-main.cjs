@@ -66,7 +66,11 @@ app.whenReady().then(async () => {
   await window.loadFile(join(root,'out/renderer/index.html'));
   console.log('UI QA: app loaded');
   await until(`!!document.querySelector('.workspace-welcome')`,'empty workspace did not load');
-  assert.deepEqual(await js(`[...document.querySelectorAll('.sidebar .nav-group button')].map(b=>b.textContent.trim())`),['Рабочая область','Панель','Конструктор','Переменные','Подключения','Студия событий'],'main navigation includes the event studio');
+  assert.deepEqual(await js(`[...document.querySelectorAll('.sidebar .nav-primary button')].map(b=>b.querySelector('span')?.textContent.trim())`),['Пульт эфира','Модули','Подключения'],'primary navigation has Live Panel, Modules, Connections');
+  assert.equal(await js(`!!document.querySelector('[data-nav="eventStudio"]')`),false,'Pro tools should be collapsed by default for beginners');
+  await js(`document.querySelector('[data-sidebar-advanced]').click()`); await delay(100);
+  assert.deepEqual(await js(`[...document.querySelectorAll('.sidebar-pro ul button')].map(b=>b.querySelector('span')?.textContent.trim())`),['Конструктор','Переменные','Студия событий'],'Pro section reveals Designer, Variables, Event Studio');
+  await js(`document.querySelector('[data-sidebar-advanced]').click()`); await delay(100);
   assert.equal(await js(`document.querySelectorAll('.content input,.content textarea').length`),0,'empty workspace must not expose settings');
   await capture('workspace-empty');
   const legacy = async (page,sub) => {
@@ -74,14 +78,26 @@ app.whenReady().then(async () => {
     await window.reload(); await until(`!!document.querySelector('.workspace')`,'workspace reload failed'); await delay(150);
   };
   const editedModules = new Set();
+  const openCatalogBtn = async () => {
+    await js(`(()=>{const el=document.querySelector('.sidebar-mini-add')||[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='Добавить модуль'||b.textContent.trim()==='Пропустить и собрать вручную'||b.getAttribute('aria-label')==='Добавить модуль');if(!el)throw Error('Catalog opener missing');el.click()})()`);
+    await until(`!!document.querySelector('[data-testid="module-catalog"]')`,'module catalog did not open');
+    await delay(120);
+  };
   const add = async (id) => {
-    await click('Добавить модуль');
+    await openCatalogBtn();
     await until(`!!document.querySelector('[data-add-module="${id}"]')`,'catalog module missing: '+id);
     await js(`document.querySelector('[data-add-module="${id}"]').click()`);
+    // In-place toggle keeps the catalog open and reveals the Configure link on the card.
+    await until(`!!document.querySelector('[data-open-module="${id}"]')`,'module stayed uninstalled or missing open action: '+id);
+    assert.equal(await js(`!!document.querySelector('[data-testid="module-catalog"]')`),true,'adding a module should stay in catalog for multi-select');
+    await js(`document.querySelector('[data-open-module="${id}"]').click()`);
     await until(`!!document.querySelector('[data-editor-module="${id}"]')`,'module editor missing: '+id); await until(`!document.querySelector('[data-editor-module="${id}"] [role=status]')`,'module remained suspended: '+id); await delay(150);
     editedModules.add(id);
   };
-  const select = async (id) => { await js(`document.querySelector('[data-module="${id}"]').click()`); await until(`!!document.querySelector('[data-editor-module="${id}"]')`,'selected module missing: '+id); editedModules.add(id); await delay(150); };
+  const select = async (id) => {
+    await js(`(()=>{const b=document.querySelector('[data-module="${id}"]');if(b){b.click();return;}document.querySelector('.sidebar-section-toggle')?.click();setTimeout(()=>document.querySelector('[data-module="${id}"]')?.click(),50)})()`);
+    await until(`!!document.querySelector('[data-editor-module="${id}"]')`,'selected module missing: '+id); editedModules.add(id); await delay(150);
+  };
   const remove = async () => { await js(`document.querySelector('.workspace-module-menu summary').click()`); await click('Убрать модуль'); await delay(150); };
   await js(`document.querySelector('.search-btn').click()`); await delay(100);
   await fill('.palette-input input','алерты');
@@ -133,13 +149,16 @@ app.whenReady().then(async () => {
   await delay(250);
   assert.equal(fixture.settings.get('alerts').style.x,20);
   assert.equal(fixture.calls.filter(c=>c.channel==='settings:set').length-writesBefore,1,'rapid edits should be coalesced');
-  await click('2. Оформление'); await capture('alerts-appearance');
-  await click('Панель');
+  await click('2. Оформление');
+  assert.equal(await js(`document.querySelectorAll('[data-overlay-preset]').length`),5,'5 curated overlay style presets missing');
+  await capture('alerts-appearance');
+  await js(`document.querySelector('[data-nav="dashboard"]').click()`);
   await until(`!!document.querySelector('.monitor-grid')`,'monitor missing');
+  assert.equal(await js(`!!document.querySelector('[data-testid="live-topbar"]')`),true,'live broadcast topbar missing on Live Panel');
   assert.equal(await js(`document.querySelectorAll('.monitor-card').length`),1);
   assert.equal(await js(`document.querySelectorAll('.content input,.content textarea,.content select').length`),0,'monitor exposes configuration');
   await capture('monitor');
-  await click('Открыть в области'); await until(`!!document.querySelector('.alerts-layout')`,'monitor did not open installed module');
+  await click('Настроить модуль'); await until(`!!document.querySelector('.alerts-layout')`,'monitor did not open installed module');
   await remove();
   assert.deepEqual(fixture.settings.get('workspace').cards,[]);
   assert.equal(fixture.settings.get('alerts').style.x,20,'removing module erased configuration');
@@ -200,8 +219,9 @@ app.whenReady().then(async () => {
   assert.equal(await js(`document.querySelector('.content').scrollWidth>document.querySelector('.content').clientWidth+2`),false,'editor overflows small window');
   await window.setSize(1360,900);
   // Mount every remaining module through the actual catalog, without external service calls.
-  await click('Добавить модуль');
-  const remaining = await js(`[...document.querySelectorAll('[data-add-module]:not(:disabled)')].map(b=>b.dataset.addModule)`);
+  await openCatalogBtn();
+  await capture('workspace-catalog-full');
+  const remaining = await js(`[...document.querySelectorAll('[data-add-module]:not(.on)')].map(b=>b.dataset.addModule)`);
   await click('Отмена');
   const toolPack = ['clipper','curse','duel','melody','ducking','stocks','portal','report','shield','focus','shoutout','tts','captions'];
   for (const id of remaining) { await add(id); assert.equal(await js(`document.querySelectorAll('[data-editor-module]').length`),1,'more than one editor mounted'); if (toolPack.includes(id) || id === 'donations') { await delay(400); await capture('module-'+id); }
@@ -245,13 +265,13 @@ app.whenReady().then(async () => {
       await js(`document.querySelector('.font-picker-button').click()`); await until(`document.querySelectorAll('.font-option').length>20`,'font picker lists bundled fonts');
       await capture('font-picker'); await js(`document.querySelector('.font-picker-button').click()`);
     } }
-  await click('Рабочая область'); await capture('workspace-modules');
+  await js(`document.querySelector('[data-nav="workspace"]').click()`); await until(`!!document.querySelector('.workspace-installed')`,'installed modules grid missing'); await capture('workspace-modules');
   const moduleEditors = editedModules.size;
   assert.equal(moduleEditors,44,'catalog did not install every module, including TTS and captions');
   assert.deepEqual([...editedModules].sort(),[...fixture.settings.get('workspace').cards].sort(),'not every installed module editor was exercised');
   const tiles = await js(`[...document.querySelectorAll('.workspace-installed')].map((tile)=>tile.getBoundingClientRect().height)`);
-  assert(tiles.every((height)=>height<145),'module tiles are too tall');
-  await click('Подключения');
+  assert(tiles.every((height)=>height<215),'module tiles are too tall: '+Math.max(...tiles));
+  await js(`document.querySelector('[data-nav="connections"]').click()`);
   await until(`!!document.querySelector('[data-connection-editor]')`,'connections page missing');
   assert.equal(await js(`document.querySelectorAll('[data-add-module]').length`),0,'connections require installing a workspace module');
   const connectionEditors = ['twitch','donationalerts','streamlabs','streamelements','donatex','streamerbot','discord','telegram','obs','kawaki','subforstream'];
@@ -265,13 +285,14 @@ app.whenReady().then(async () => {
     }
   }
   await js(`document.querySelector('[data-connection="twitch"]').click()`); await capture('connections');
-  // Variables tab: a variable of your own, counters and live built-in values.
-  await click('Переменные'); await until(`!!document.querySelector('.variables-page')`,'variables page missing');
+  // Variables tab: inside collapsible Advanced section.
+  await js(`(()=>{if(!document.querySelector('[data-nav="variables"]'))document.querySelector('[data-sidebar-advanced]').click()})()`); await delay(100);
+  await js(`document.querySelector('[data-nav="variables"]').click()`); await until(`!!document.querySelector('.variables-page')`,'variables page missing');
   assert(await js(`document.querySelectorAll('.var-table .var-token').length`) > 30,'built-in variables are listed');
   await js(`document.querySelector('.variables-page .card-actions button').click()`); await until(`document.querySelectorAll('.var-row:not(.counter)').length===1`,'custom variable was not added');
   await capture('variables');
   // Designer tab: a template overlay with draggable layers and a live preview.
-  await click('Конструктор'); await until(`!!document.querySelector('.designer-page')`,'designer page missing');
+  await js(`document.querySelector('[data-nav="designer"]').click()`); await until(`!!document.querySelector('.designer-page')`,'designer page missing');
   await js(`[...document.querySelectorAll('.designer-starter')].find((b)=>b.textContent.includes('Инфо-полоса')).click()`);
   await until(`document.querySelectorAll('.designer-box').length===5`,'designer template layers missing');
   await until(`!!document.querySelector('.designer-canvas iframe')`,'designer preview missing');
@@ -279,9 +300,10 @@ app.whenReady().then(async () => {
   await until(`!!document.querySelector('.designer-box.selected')`,'designer selection missing');
   await until(`!!document.querySelector('.designer-props')`,'designer properties missing');
   await capture('designer');
-  await click('Панель'); await until(`!!document.querySelector('.monitor-grid')`,'full monitor missing'); await capture('monitor-modules');
+  await js(`document.querySelector('[data-nav="dashboard"]').click()`); await until(`!!document.querySelector('.monitor-grid')`,'full monitor missing'); await capture('monitor-modules');
   assert.equal(await js(`document.querySelectorAll('.monitor-card').length`),44,'monitor did not render every installed module, including TTS and captions');
-  assert.equal(await js(`document.querySelectorAll('.content input,.content textarea,.content select').length`),0,'monitor renders mutable settings');
+  assert.equal(await js(`!!document.querySelector('.monitor-chat .chat-input input')`),true,'live chat composer missing on Live Panel');
+  assert.equal(await js(`document.querySelectorAll('.monitor-card:not(.monitor-chat) input,.monitor-card:not(.monitor-chat) textarea,.monitor-card:not(.monitor-chat) select').length`),0,'monitor renders mutable settings outside live chat');
   await js(`document.querySelector('[data-monitor-edit]').click()`); await delay(150);
   // Free grid: drag by header and resize by corner with real pointer events; nothing may overlap.
   const rectsOf = () => js(`Object.fromEntries([...document.querySelectorAll('[data-monitor-card]')].map((el)=>[el.dataset.monitorCard,{x:+el.dataset.x,y:+el.dataset.y,w:+el.dataset.w,h:+el.dataset.h}]))`);
@@ -312,7 +334,7 @@ app.whenReady().then(async () => {
   await until(`!!document.querySelector('[data-monitor-card="chat"]')`,'monitor layout reload failed');
   assert.equal(await js(`document.querySelector('[data-monitor-card="chat"]').dataset.w`),chatWidth,'monitor layout not restored after reload');
   await assertNoOverlap('after reload');
-  await click('Рабочая область'); await select('chat');
+  await js(`document.querySelector('[data-nav="workspace"]').click()`); await select('chat');
   await until(`!!document.querySelector('.chat-input input')`,'live chat composer missing from module');
   await fill('.chat-input input','Проверка сообщения'); await click('Отправить');
   await until(`document.querySelector('.workspace-live-chat').textContent.includes('Проверка сообщения')`,'manual chat did not display');
@@ -340,14 +362,19 @@ app.whenReady().then(async () => {
   assert.equal(fixture.settings.get('activeProfileId'),originalProfile);
   assert.deepEqual(fixture.settings.get('workspace'),originalWorkspace,'fresh profile overwrote existing panel layout');
   await select('alerts');
-  await js(`document.querySelector('.workspace-module-menu summary').click();window.confirm=()=>false;void 0`);
+  await js(`document.querySelector('.workspace-module-menu summary').click()`);
   await click('Сбросить настройки модуля');
+  await until(`!!document.querySelector('[role="alertdialog"]')`,'in-app confirm dialog missing');
+  await click('Отмена');
+  await until(`!document.querySelector('[role="alertdialog"]')`,'confirm dialog did not close');
   assert.equal(fixture.settings.get('alerts').style.x,20,'canceling reset changes configuration');
   const moduleListBeforeReset = [...fixture.settings.get('workspace').cards];
   const songQueueBeforeReset = [...fixture.state.current.songRequests.queue];
   await click('3. Положение');
   await js(`document.querySelector('.alert-position-details').open=true`);
-  await js(`(()=>{window.confirm=()=>true;const input=document.querySelectorAll('.alert-editor .input-number')[1];Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'12');input.dispatchEvent(new Event('input',{bubbles:true}));[...document.querySelectorAll('.workspace-module-menu button')].find(b=>b.textContent.trim()==='Сбросить настройки модуля').click()})()`); await delay(300);
+  await js(`(()=>{const input=document.querySelectorAll('.alert-editor .input-number')[1];Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'12');input.dispatchEvent(new Event('input',{bubbles:true}));[...document.querySelectorAll('.workspace-module-menu button')].find(b=>b.textContent.trim()==='Сбросить настройки модуля').click()})()`);
+  await until(`!!document.querySelector('[data-confirm-accept]')`,'confirm accept button missing');
+  await js(`document.querySelector('[data-confirm-accept]').click()`); await delay(350);
   assert.equal(fixture.settings.get('alerts').style.x,50,'module reset did not restore defaults');
   assert.deepEqual(fixture.settings.get('workspace').cards,moduleListBeforeReset,'module reset changes installed modules');
   assert.deepEqual(fixture.state.current.songRequests.queue,songQueueBeforeReset,'module reset affects another module');
@@ -367,7 +394,7 @@ app.whenReady().then(async () => {
   await js(`document.querySelector('.settings-nav button:nth-child(2)').click()`); await until(`!!document.querySelector('[role=dialog] select')`,'language control missing');
   await js(`(()=>{const select=document.querySelector('[role=dialog] select');select.value='en';select.dispatchEvent(new Event('change',{bubbles:true}))})()`); await delay(250);
   await js(`document.querySelector('.workspace-dialog-close button').click()`);
-  await click('Workspace'); await capture('workspace-en'); await select('alerts'); await click('3. Position'); await capture('alerts-en');
+  await js(`document.querySelector('[data-nav="workspace"]').click()`); await until(`!!document.querySelector('.workspace-installed')`,'English module center missing'); await capture('workspace-en'); await select('alerts'); await click('3. Position'); await capture('alerts-en');
   assert.equal(await js(`document.documentElement.lang`),'en');
   const alertGeometryCases = await checkAlertBounds();
   assert.deepEqual(failures,[],'renderer console errors');

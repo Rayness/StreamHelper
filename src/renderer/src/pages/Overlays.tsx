@@ -9,12 +9,13 @@ import type { AdCampaign, AdEntrance, AlertType, Banner, BannerLayout, ChatBackg
 import { Icon } from '../components/icons';
 import { MediaPicker } from '../components/MediaPicker';
 import { InstancePicker, OverlayBar, OverlayPreview, pickInstance } from '../components/overlay';
-import { Button, Card, ColorInput, Field, IconButton, LinesInput, NumberInput, Select, StatusText, Tabs, TextInput, Toggle } from '../components/ui';
+import { AdvancedSection, Button, Card, ColorInput, Field, IconButton, LinesInput, NumberInput, RgbaColorInput, Select, SettingList, SettingRow, StatusText, Tabs, TextInput, Toggle } from '../components/ui';
 import { useNow } from '../hooks';
 import { FontPicker } from '../components/FontPicker';
+import { OverlayStylePresets } from '../overlayPresets';
 import { useT, type TFn } from '../i18n';
 import { CounterDetail, DonationsDetail, HypeDetail, LeadersDetail } from './OverlaysExtra';
-import { call, callOk, navigate, saveSettings, toast, useApp } from '../store';
+import { askConfirm, call, callOk, navigate, saveSettings, toast, useApp } from '../store';
 
 /** Settings on the left, the live preview on the right. */
 export function Split({ settings, preview, stacked }: { settings: ReactNode; preview: ReactNode; stacked?: boolean }) {
@@ -108,7 +109,7 @@ function EventsDetail() {
           <Field label={t('common.font')} hint={t('common.fontHint')}><FontPicker value={cfg.fontFamily} onChange={(fontFamily) => set({ fontFamily })} /></Field>
           <Field label={t('common.fontSize')}><NumberInput value={cfg.fontSize} min={10} max={72} onChange={(fontSize) => set({ fontSize })} /></Field>
           <Field label={t('common.textColor')}><ColorInput value={cfg.textColor} onChange={(textColor) => set({ textColor })} /></Field>
-          <Field label={t('common.background')} hint={t('overlays.chatBgHint')}><TextInput value={cfg.background} onChange={(background) => set({ background })} mono /></Field>
+          <Field label={t('common.background')} wide><RgbaColorInput value={cfg.background} onChange={(background) => set({ background })} /></Field>
         </div>
       </Card>}
       preview={<OverlayPreview kind="events" children={<TestAlertButtons kind="events" types={['follow', 'sub', 'donation']} />} />}
@@ -156,6 +157,7 @@ function MusicDetail() {
     <Split settings={<Card title={t('music.settings')}>
       <p className="muted small">{t('music.help')}</p>
       <p className="muted small">{music.status === 'unavailable' ? t('music.unavailable') : music.sources.length ? `${t('music.detected')}: ${music.sources.map(detectedName).join(', ')}` : t('music.noSource')}</p>
+      <OverlayStylePresets kind="music" compact />
       <Field label={t('music.source')} wide><Select value={cfg.source} onChange={(source) => set({ source })} options={[
         { value: 'auto', label: t('music.source.auto') },
         ...MUSIC_SOURCES.map((value) => ({ value, label: sourceName(value) })),
@@ -202,6 +204,8 @@ function MusicDetail() {
 function SongDetail() {
   const t = useT();
   const cfg = useApp((d) => d.settings!.songRequests);
+  const queueLen = useApp((d) => d.state!.songRequests.queue.length);
+  const [tab, setTab] = useState<'queue' | 'sources' | 'background' | 'rules'>('queue');
   const [rewards, setRewards] = useState<{ id: string; title: string; inputRequired: boolean; enabled: boolean; manageable: boolean }[]>([]);
   const [loadingRewards, setLoadingRewards] = useState(false);
   const twitch = useApp((d) => d.state!.twitch);
@@ -211,87 +215,134 @@ function SongDetail() {
   const [skipCost, setSkipCost] = useState(2000);
   const [creatingSkip, setCreatingSkip] = useState(false);
   const set = (patch: Partial<typeof cfg>) => saveSettings('songRequests', { ...cfg, ...patch });
-  return <>
+  return <div className="module-tabbed">
     <OverlayBar kind="song" name={t('ov.song')} />
-    <Split settings={<>
-      <SongSetup onRewards={setRewards} />
-      <SongListen />
-      <SongQueue />
-      <SongYandex />
-      <SongBackground />
-      <SongLimits />
-      <SongBans />
-      <Card title={t('song.settings')}><div className="form">
-        <Field label={t('song.enabled')} wide><Toggle checked={cfg.enabled} onChange={(enabled) => set({ enabled })} /></Field>
-        <Field label={t('song.reward')} hint={t('song.rewardHint')} wide><TextInput value={cfg.rewardTitle} onChange={(rewardTitle) => set({ rewardTitle, rewardId: '' })} /></Field>
-        <div className="field-wide stack">
-          <Button size="sm" disabled={twitch.status !== 'connected' || loadingRewards} onClick={async () => {
-            setLoadingRewards(true); const result = await call('twitch:rewards'); setLoadingRewards(false); if (result) setRewards(result);
-          }}>{t('song.loadRewards')}</Button>
-          {rewards.length > 0 && <Select value={cfg.rewardId} onChange={(rewardId) => { const reward = rewards.find((r) => r.id === rewardId); set({ rewardId, rewardTitle: reward?.title ?? cfg.rewardTitle }); }} options={[{ value: '', label: t('song.manualReward') },...rewards.map((r) => ({ value: r.id, label: r.title + (!r.inputRequired || !r.enabled ? ' ⚠' : '') + (r.manageable ? ` · ${t('song.refundable')}` : '') }))]} />}
-          {rewards.some((r) => r.id === cfg.rewardId && (!r.inputRequired || !r.enabled)) && <p className="error small">{t('song.rewardNeedsInput')}</p>}
-          {rewards.some((r) => r.id === cfg.rewardId && !r.manageable) && <p className="muted small">{t('song.notRefundable')}</p>}
-          {twitch.subscriptionErrors?.['channel.channel_points_custom_reward_redemption.add'] && <p className="error small">{t('song.redemptionUnavailable')} <Button size="sm" onClick={() => navigate('connections')}>{t('nav.connections')}</Button></p>}
-        </div>
-        <Field label={t('song.skipReward')} hint={t('song.skipRewardHint')} wide><TextInput value={cfg.skipRewardTitle ?? ''} onChange={(skipRewardTitle) => set({ skipRewardTitle, skipRewardId: '' })} /></Field>
-        <div className="field-wide stack">
-          {rewards.length > 0 && <Select value={cfg.skipRewardId ?? ''} onChange={(skipRewardId) => { const reward = rewards.find((r) => r.id === skipRewardId); set({ skipRewardId, skipRewardTitle: reward?.title ?? cfg.skipRewardTitle }); }} options={[{ value: '', label: t('song.manualReward') }, ...rewards.filter((r) => r.id !== cfg.rewardId).map((r) => ({ value: r.id, label: r.title + (!r.enabled ? ' ⚠' : '') + (r.manageable ? ` · ${t('song.refundable')}` : '') }))]} />}
-          {!cfg.skipRewardId && !(cfg.skipRewardTitle ?? '').trim() && twitch.status === 'connected' && <div className="song-create song-create-inline">
-            <Field label={t('song.rewardName')}><TextInput value={skipTitle} onChange={setSkipTitle} /></Field>
-            <Field label={t('song.rewardCost')}><NumberInput value={skipCost} min={1} max={1000000} onChange={setSkipCost} /></Field>
-            <Button icon="plus" disabled={creatingSkip || !skipTitle.trim()} onClick={async () => {
-              setCreatingSkip(true);
-              const reward = await call('twitch:createSongReward', skipTitle, skipCost, 'skip');
-              setCreatingSkip(false);
-              if (!reward) return;
-              set({ skipRewardId: reward.id, skipRewardTitle: reward.title });
-              toast('success', 'song.rewardCreated', { name: reward.title });
-              const list = await call('twitch:rewards');
-              if (list) setRewards(list);
-            }}>{t('song.createReward')}</Button>
+    <Tabs value={tab} onChange={setTab} tabs={[
+      { id: 'queue', label: queueLen > 0 ? `${t('song.tab.queue')} (${queueLen})` : t('song.tab.queue') },
+      { id: 'sources', label: t('song.tab.sources') },
+      { id: 'background', label: t('song.tab.background') },
+      { id: 'rules', label: t('song.tab.rules') },
+    ]} />
+
+    {tab === 'queue' && (
+      <div className="module-flow">
+        <SongSetup onRewards={setRewards} />
+        <SongQueue />
+        <SongListen />
+      </div>
+    )}
+
+    {tab === 'sources' && (
+      <div className="module-flow">
+        <Card title={t('song.sec.points')} icon="gift" actions={<Toggle checked={cfg.enabled} onChange={(enabled) => set({ enabled })} label={cfg.enabled ? t('common.on') : t('common.off')} />}>
+          <div className="form">
+            <Field label={t('song.reward')} hint={t('song.rewardHint')} wide><TextInput value={cfg.rewardTitle} onChange={(rewardTitle) => set({ rewardTitle, rewardId: '' })} /></Field>
+            <div className="field-wide stack">
+              <div className="row-gap wrap">
+                <Button size="sm" disabled={twitch.status !== 'connected' || loadingRewards} onClick={async () => {
+                  setLoadingRewards(true); const result = await call('twitch:rewards'); setLoadingRewards(false); if (result) setRewards(result);
+                }}>{t('song.loadRewards')}</Button>
+                {rewards.length > 0 && <Select value={cfg.rewardId} onChange={(rewardId) => { const reward = rewards.find((r) => r.id === rewardId); set({ rewardId, rewardTitle: reward?.title ?? cfg.rewardTitle }); }} options={[{ value: '', label: t('song.manualReward') },...rewards.map((r) => ({ value: r.id, label: r.title + (!r.inputRequired || !r.enabled ? ' ⚠' : '') + (r.manageable ? ` · ${t('song.refundable')}` : '') }))]} />}
+              </div>
+              {rewards.some((r) => r.id === cfg.rewardId && (!r.inputRequired || !r.enabled)) && <p className="error small">{t('song.rewardNeedsInput')}</p>}
+              {rewards.some((r) => r.id === cfg.rewardId && !r.manageable) && <p className="muted small">{t('song.notRefundable')}</p>}
+              {twitch.subscriptionErrors?.['channel.channel_points_custom_reward_redemption.add'] && <p className="error small">{t('song.redemptionUnavailable')} <Button size="sm" onClick={() => navigate('connections')}>{t('nav.connections')}</Button></p>}
+            </div>
+            <Field label={t('song.skipReward')} hint={t('song.skipRewardHint')} wide><TextInput value={cfg.skipRewardTitle ?? ''} onChange={(skipRewardTitle) => set({ skipRewardTitle, skipRewardId: '' })} /></Field>
+            <div className="field-wide stack">
+              {rewards.length > 0 && <Select value={cfg.skipRewardId ?? ''} onChange={(skipRewardId) => { const reward = rewards.find((r) => r.id === skipRewardId); set({ skipRewardId, skipRewardTitle: reward?.title ?? cfg.skipRewardTitle }); }} options={[{ value: '', label: t('song.manualReward') }, ...rewards.filter((r) => r.id !== cfg.rewardId).map((r) => ({ value: r.id, label: r.title + (!r.enabled ? ' ⚠' : '') + (r.manageable ? ` · ${t('song.refundable')}` : '') }))]} />}
+              {!cfg.skipRewardId && !(cfg.skipRewardTitle ?? '').trim() && twitch.status === 'connected' && <div className="song-create song-create-inline">
+                <Field label={t('song.rewardName')}><TextInput value={skipTitle} onChange={setSkipTitle} /></Field>
+                <Field label={t('song.rewardCost')}><NumberInput value={skipCost} min={1} max={1000000} onChange={setSkipCost} /></Field>
+                <Button icon="plus" disabled={creatingSkip || !skipTitle.trim()} onClick={async () => {
+                  setCreatingSkip(true);
+                  const reward = await call('twitch:createSongReward', skipTitle, skipCost, 'skip');
+                  setCreatingSkip(false);
+                  if (!reward) return;
+                  set({ skipRewardId: reward.id, skipRewardTitle: reward.title });
+                  toast('success', 'song.rewardCreated', { name: reward.title });
+                  const list = await call('twitch:rewards');
+                  if (list) setRewards(list);
+                }}>{t('song.createReward')}</Button>
+              </div>}
+            </div>
+          </div>
+          <SettingList>
+            <SettingRow label={t('song.replyInChat')} hint={t('song.replyInChatHint')}><Toggle checked={cfg.replyInChat} onChange={(replyInChat) => set({ replyInChat })} /></SettingRow>
+            <SettingRow label={t('song.refundRejected')} hint={t('song.refundRejectedHint')}><Toggle checked={cfg.refundRejected} onChange={(refundRejected) => set({ refundRejected })} /></SettingRow>
+          </SettingList>
+        </Card>
+
+        <Card title={t('song.sec.chat')} icon="chat">
+          <SettingList>
+            <SettingRow label={t('song.chatEnabled')}><Toggle checked={cfg.chatEnabled} onChange={(chatEnabled) => set({ chatEnabled })} /></SettingRow>
+          </SettingList>
+          {cfg.chatEnabled && <div className="form" style={{ marginTop: 12, marginBottom: 12 }}>
+            <Field label={t('song.chatCommand')} hint={`${prefix}${cfg.chatCommand} https://youtu.be/…${cfg.allowSearch !== false ? ` · ${prefix}${cfg.chatCommand} Artist - Song` : ''}`}><TextInput value={cfg.chatCommand} onChange={(chatCommand) => set({ chatCommand })} /></Field>
+            <Field label={t('song.chatPermission')}><Select value={cfg.chatPermission} onChange={(chatPermission) => set({ chatPermission })} options={(['everyone', 'subscriber', 'vip', 'moderator', 'broadcaster'] as const).map((value) => ({ value, label: t(`perm.${value}`) }))} /></Field>
+            <Field label={t('song.chatCooldown')}><NumberInput value={cfg.chatCooldownSec} min={0} max={600} onChange={(chatCooldownSec) => set({ chatCooldownSec })} /></Field>
+            {!bot.enabled && <p className="error small field-wide">{t('song.enableBot')} <Button size="sm" onClick={() => saveSettings('bot', { ...bot, enabled: true })}>{t('bot.on')}</Button></p>}
           </div>}
+          <div className="form" style={{ marginTop: 8 }}>
+            <Field label={t('song.minDonation')} hint={t('song.minDonationHint')}><NumberInput value={cfg.minDonation} min={0} onChange={(minDonation) => set({ minDonation })} /></Field>
+          </div>
+          <SettingList>
+            <SettingRow label={t('song.allowSearch')} hint={t('song.allowSearchHint')}><Toggle checked={cfg.allowSearch !== false} onChange={(allowSearch) => set({ allowSearch })} /></SettingRow>
+            <SettingRow label={t('song.autoPlay')}><Toggle checked={cfg.autoPlay} onChange={(autoPlay) => set({ autoPlay })} /></SettingRow>
+            <SettingRow label={t('song.pauseWindows')}><Toggle checked={cfg.pauseWindowsMusic} onChange={(pauseWindowsMusic) => set({ pauseWindowsMusic })} /></SettingRow>
+            <SettingRow label={t('song.resumeWindows')}><Toggle checked={cfg.resumeWindowsMusic} onChange={(resumeWindowsMusic) => set({ resumeWindowsMusic })} /></SettingRow>
+          </SettingList>
+        </Card>
+
+        <SongYandex />
+      </div>
+    )}
+
+    {tab === 'background' && (
+      <div className="module-flow">
+        <SongBackground />
+      </div>
+    )}
+
+    {tab === 'rules' && (
+      <div className="module-flow-wide">
+        <Split
+          settings={
+            <Card title={t('song.display')} icon="palette">
+              <div className="form">
+                <Field label={t('song.videoLayout')} wide><Select value={cfg.videoLayout} onChange={(videoLayout) => set({ videoLayout })} options={[
+                  { value: 'full', label: t('song.video.full') },
+                  { value: 'compact', label: t('song.video.compact') },
+                  { value: 'queue', label: t('song.video.queue') },
+                ]} /></Field>
+                {cfg.videoLayout === 'queue' ? <p className="muted small field-wide">{t('song.queueOnlyHint')}</p> : <>
+                  {cfg.videoLayout === 'compact' && <>
+                    <Field label={t('song.videoPosition')}><Select value={cfg.videoPosition} onChange={(videoPosition) => set({ videoPosition })} options={[{ value: 'left', label: t('song.left') }, { value: 'right', label: t('song.right') }]} /></Field>
+                    <Field label={t('song.videoWidth')}><NumberInput value={cfg.videoWidth} min={25} max={70} onChange={(videoWidth) => set({ videoWidth })} /></Field>
+                  </>}
+                  <Field label={t('song.volume')} wide><VolumeSlider value={cfg.volume} label={t('song.volume')} onChange={(volume) => set({ volume })} /></Field>
+                </>}
+                <Field label={t('common.font')} hint={t('common.fontHint')}><FontPicker value={cfg.fontFamily} onChange={(fontFamily) => set({ fontFamily })} /></Field>
+                <Field label={t('common.accent')}><ColorInput value={cfg.accentColor} onChange={(accentColor) => set({ accentColor })} /></Field>
+                <Field label={t('song.opacity')}><NumberInput value={cfg.backgroundOpacity} min={0} max={100} onChange={(backgroundOpacity) => set({ backgroundOpacity })} /></Field>
+              </div>
+              <SettingList>
+                {cfg.videoLayout !== 'queue' && <SettingRow label={t('song.showControls')} hint={t('song.youtubeHint')}><Toggle checked={cfg.showControls} onChange={(showControls) => set({ showControls })} /></SettingRow>}
+                <SettingRow label={t('song.showTitle')}><Toggle checked={cfg.showTitle} onChange={(showTitle) => set({ showTitle })} /></SettingRow>
+                <SettingRow label={t('song.showRequester')}><Toggle checked={cfg.showRequester} onChange={(showRequester) => set({ showRequester })} /></SettingRow>
+                <SettingRow label={t('song.showQueueCount')}><Toggle checked={cfg.showQueueCount} onChange={(showQueueCount) => set({ showQueueCount })} /></SettingRow>
+              </SettingList>
+            </Card>
+          }
+          preview={<OverlayPreview kind="song" maxHeight={340} />}
+        />
+        <div className="two-col">
+          <SongLimits />
+          <SongBans />
         </div>
-        <Field label={t('song.replyInChat')} hint={t('song.replyInChatHint')} wide><Toggle checked={cfg.replyInChat} onChange={(replyInChat) => set({ replyInChat })} /></Field>
-        <Field label={t('song.refundRejected')} hint={t('song.refundRejectedHint')} wide><Toggle checked={cfg.refundRejected} onChange={(refundRejected) => set({ refundRejected })} /></Field>
-        <Field label={t('song.chatEnabled')} wide><Toggle checked={cfg.chatEnabled} onChange={(chatEnabled) => set({ chatEnabled })} /></Field>
-        {cfg.chatEnabled && <>
-          <Field label={t('song.chatCommand')} hint={`${prefix}${cfg.chatCommand} https://youtu.be/…${cfg.allowSearch !== false ? ` · ${prefix}${cfg.chatCommand} Artist - Song` : ''}`}><TextInput value={cfg.chatCommand} onChange={(chatCommand) => set({ chatCommand })} /></Field>
-          <Field label={t('song.chatPermission')}><Select value={cfg.chatPermission} onChange={(chatPermission) => set({ chatPermission })} options={(['everyone', 'subscriber', 'vip', 'moderator', 'broadcaster'] as const).map((value) => ({ value, label: t(`perm.${value}`) }))} /></Field>
-          <Field label={t('song.chatCooldown')}><NumberInput value={cfg.chatCooldownSec} min={0} max={600} onChange={(chatCooldownSec) => set({ chatCooldownSec })} /></Field>
-          {!bot.enabled && <p className="error small field-wide">{t('song.enableBot')} <Button size="sm" onClick={() => saveSettings('bot', { ...bot, enabled: true })}>{t('bot.on')}</Button></p>}
-        </>}
-        <Field label={t('song.allowSearch')} hint={t('song.allowSearchHint')} wide><Toggle checked={cfg.allowSearch !== false} onChange={(allowSearch) => set({ allowSearch })} /></Field>
-        <Field label={t('song.minDonation')} hint={t('song.minDonationHint')}><NumberInput value={cfg.minDonation} min={0} onChange={(minDonation) => set({ minDonation })} /></Field>
-        <Field label={t('song.autoPlay')} wide><Toggle checked={cfg.autoPlay} onChange={(autoPlay) => set({ autoPlay })} /></Field>
-        <Field label={t('song.pauseWindows')} wide><Toggle checked={cfg.pauseWindowsMusic} onChange={(pauseWindowsMusic) => set({ pauseWindowsMusic })} /></Field>
-        <Field label={t('song.resumeWindows')} wide><Toggle checked={cfg.resumeWindowsMusic} onChange={(resumeWindowsMusic) => set({ resumeWindowsMusic })} /></Field>
-      </div></Card>
-      <Card title={t('song.display')}><div className="form">
-        <Field label={t('song.videoLayout')} wide><Select value={cfg.videoLayout} onChange={(videoLayout) => set({ videoLayout })} options={[
-          { value: 'full', label: t('song.video.full') },
-          { value: 'compact', label: t('song.video.compact') },
-          { value: 'queue', label: t('song.video.queue') },
-        ]} /></Field>
-        {cfg.videoLayout === 'queue' ? <p className="muted small">{t('song.queueOnlyHint')}</p> : <>
-          {cfg.videoLayout === 'compact' && <>
-            <Field label={t('song.videoPosition')}><Select value={cfg.videoPosition} onChange={(videoPosition) => set({ videoPosition })} options={[{ value: 'left', label: t('song.left') }, { value: 'right', label: t('song.right') }]} /></Field>
-            <Field label={t('song.videoWidth')}><NumberInput value={cfg.videoWidth} min={25} max={70} onChange={(videoWidth) => set({ videoWidth })} /></Field>
-          </>}
-          <Field label={t('song.volume')}><VolumeSlider value={cfg.volume} label={t('song.volume')} onChange={(volume) => set({ volume })} /></Field>
-          <Field label={t('song.showControls')} wide><Toggle checked={cfg.showControls} onChange={(showControls) => set({ showControls })} /></Field>
-          <p className="muted small">{t('song.youtubeHint')}</p>
-        </>}
-        <Field label={t('song.opacity')}><NumberInput value={cfg.backgroundOpacity} min={0} max={100} onChange={(backgroundOpacity) => set({ backgroundOpacity })} /></Field>
-        <Field label={t('common.font')} hint={t('common.fontHint')}><FontPicker value={cfg.fontFamily} onChange={(fontFamily) => set({ fontFamily })} /></Field>
-        <Field label={t('common.accent')}><ColorInput value={cfg.accentColor} onChange={(accentColor) => set({ accentColor })} /></Field>
-        <Field label={t('overlays.options')} wide><div className="stack">
-          <Toggle checked={cfg.showTitle} onChange={(showTitle) => set({ showTitle })} label={t('song.showTitle')} />
-          <Toggle checked={cfg.showRequester} onChange={(showRequester) => set({ showRequester })} label={t('song.showRequester')} />
-          <Toggle checked={cfg.showQueueCount} onChange={(showQueueCount) => set({ showQueueCount })} label={t('song.showQueueCount')} />
-        </div></Field>
-      </div></Card>
-    </>} preview={<OverlayPreview kind="song" maxHeight={360} />} />
-  </>;
+      </div>
+    )}
+  </div>;
 }
 
 /** 0–100 % slider; the OBS player follows it while it is dragged. */
@@ -345,10 +396,10 @@ function SongListen() {
     { id: 'me', stream: false, me: true },
   ];
   const status = obsStatus !== 'connected'
-    ? <p className="song-listen-status warn"><Icon name="alert" size={14} />{t('song.listen.noObs')} <Button size="sm" onClick={() => navigate('connections', 'obs')}>{t('nav.connections')}</Button></p>
-    : audio?.error ? <p className="song-listen-status error"><Icon name="x" size={14} />{t('song.listen.failed', { error: audio.error })}</p>
-    : !audio?.sources ? <p className="song-listen-status warn"><Icon name="alert" size={14} />{t('song.listen.noSource')}</p>
-    : <p className="song-listen-status ok"><Icon name="check" size={14} />{t('song.listen.applied', { n: audio.sources })}</p>;
+    ? <p className="song-listen-status warn"><Icon name="alert" size={14} /><span>{t('song.listen.noObs')}</span></p>
+    : audio?.error ? <p className="song-listen-status error"><Icon name="x" size={14} /><span>{t('song.listen.failed', { error: audio.error })}</span></p>
+    : !audio?.sources ? <p className="song-listen-status warn"><Icon name="alert" size={14} /><span>{t('song.listen.noSource')}</span></p>
+    : <p className="song-listen-status ok"><Icon name="check" size={14} /><span>{t('song.listen.applied', { n: audio.sources })}</span></p>;
   return (
     <Card title={t('song.listen.title')} icon="headphones">
       <p className="muted small">{t('song.listen.hint')}</p>
@@ -716,9 +767,17 @@ function SongSetup({ onRewards }: { onRewards: (rewards: { id: string; title: st
     { done: cfg.enabled, label: t('song.step.enabled'), action: !cfg.enabled && <Button size="sm" variant="primary" onClick={() => set({ enabled: true })}>{t('song.turnOn')}</Button> },
   ];
   const ready = steps.every((step) => step.done);
+  if (ready) {
+    return (
+      <div className="song-ready-bar">
+        <Icon name="check" size={15} />
+        <span>{t('song.ready')}</span>
+      </div>
+    );
+  }
   return (
-    <Card title={t('song.setupTitle')} icon="gift" className={`song-setup ${ready ? 'ready' : ''}`}>
-      <p className={ready ? 'song-ready small' : 'muted small'}>{ready ? t('song.ready') : t('song.setupHint')}</p>
+    <Card title={t('song.setupTitle')} icon="gift" className="song-setup">
+      <p className="muted small">{t('song.setupHint')}</p>
       <ol className="song-steps">
         {steps.map((step, i) => <li key={i} className={step.done ? 'done' : ''}><span className="song-step-mark">{step.done ? <Icon name="check" size={13} /> : i + 1}</span><span>{step.label}</span>{step.action}</li>)}
       </ol>
@@ -771,6 +830,7 @@ function ChatDetail() {
             { id: 'filters', label: t('overlays.options') },
           ]} />
           {section === 'look' && <Card title={t('chatSettings.appearance')}>
+            <OverlayStylePresets kind="chat" compact />
             <div className="form">
               <Field label={t('common.font')} hint={t('common.fontHint')}><FontPicker value={c.fontFamily} onChange={(fontFamily) => set({ fontFamily })} /></Field>
               <Field label={t('common.fontSize')}><NumberInput value={c.fontSize} min={10} max={72} onChange={(fontSize) => set({ fontSize })} /></Field>
@@ -790,11 +850,17 @@ function ChatDetail() {
                   ))}
                 </div>
               </div>
-              <Field label={t('overlays.chatBg')} hint={t('overlays.chatBgHint')}><TextInput value={c.background} onChange={(background) => set({ background })} mono /></Field>
-              <Field label={t('chatSettings.backgroundMedia')} hint={t('chatSettings.backgroundMediaHint')} wide><MediaPicker kind="image" value={c.backgroundMedia} onChange={(backgroundMedia) => set({ backgroundMedia })} /></Field>
-              {c.backgroundMedia && <Field label={t('chatSettings.mediaOpacity')}><NumberInput value={c.backgroundMediaOpacity} min={0} max={100} step={5} onChange={(backgroundMediaOpacity) => set({ backgroundMediaOpacity })} /></Field>}
-              <Field label={t('chatSettings.shadow')}><Toggle checked={c.shadow} onChange={(shadow) => set({ shadow })} /></Field>
-              <Field label={t('chatSettings.radius')}><NumberInput value={c.borderRadius} min={0} max={48} onChange={(borderRadius) => set({ borderRadius })} /></Field>
+              <Field label={t('overlays.chatBg')} wide><RgbaColorInput value={c.background} onChange={(background) => set({ background })} /></Field>
+              <div className="field field-wide">
+                <AdvancedSection>
+                  <div className="form">
+                    <Field label={t('chatSettings.backgroundMedia')} hint={t('chatSettings.backgroundMediaHint')} wide><MediaPicker kind="image" value={c.backgroundMedia} onChange={(backgroundMedia) => set({ backgroundMedia })} /></Field>
+                    {c.backgroundMedia && <Field label={t('chatSettings.mediaOpacity')}><NumberInput value={c.backgroundMediaOpacity} min={0} max={100} step={5} onChange={(backgroundMediaOpacity) => set({ backgroundMediaOpacity })} /></Field>}
+                    <Field label={t('chatSettings.shadow')}><Toggle checked={c.shadow} onChange={(shadow) => set({ shadow })} /></Field>
+                    <Field label={t('chatSettings.radius')}><NumberInput value={c.borderRadius} min={0} max={48} onChange={(borderRadius) => set({ borderRadius })} /></Field>
+                  </div>
+                </AdvancedSection>
+              </div>
             </div>
           </Card>}
           {section === 'motion' && <Card title={t('chatSettings.animation')}>
@@ -1060,8 +1126,8 @@ function BannersDetail() {
                     <Field label={t('common.accent')}>
                       <ColorInput value={b.accentColor} onChange={(accentColor) => update({ accentColor })} />
                     </Field>
-                    <Field label={t('common.background')} hint={t('overlays.chatBgHint')}>
-                      <TextInput value={b.background} onChange={(background) => update({ background })} mono />
+                    <Field label={t('common.background')} wide>
+                      <RgbaColorInput value={b.background} onChange={(background) => update({ background })} />
                     </Field>
                   </div>
                 </Card>
@@ -1081,7 +1147,7 @@ export function DeleteInstance({ onDelete }: { onDelete: () => void }) {
   const t = useT();
   return (
     <div className="danger-row">
-      <Button variant="danger" size="sm" icon="trash" onClick={() => confirm(t('common.confirmDelete')) && onDelete()}>
+      <Button variant="danger" size="sm" icon="trash" onClick={() => void askConfirm({ message: t('common.confirmDelete'), danger: true }).then((ok) => ok && onDelete())}>
         {t('common.delete')}
       </Button>
     </div>
@@ -1140,7 +1206,7 @@ function LabelsDetail() {
                 <Card
                   title={t('labels.stats')}
                   actions={
-                    <Button size="sm" icon="replay" onClick={() => confirm(t('labels.resetConfirm')) && void call('stats:reset')}>
+                    <Button size="sm" icon="replay" onClick={() => void askConfirm({ message: t('labels.resetConfirm'), danger: true }).then((ok) => ok && void call('stats:reset'))}>
                       {t('labels.reset')}
                     </Button>
                   }
@@ -1233,6 +1299,7 @@ function GoalsDetail() {
                     </>}
                     <Field label={t('goals.showAmounts')}><Toggle checked={g.showAmounts ?? true} onChange={(showAmounts) => update({ showAmounts })} /></Field>
                     <Field label={t('goals.showPercent')}><Toggle checked={g.showPercent ?? true} onChange={(showPercent) => update({ showPercent })} /></Field>
+                    <div className="field-wide"><OverlayStylePresets kind="goal" compact /></div>
                     <Field label={t('common.font')} hint={t('common.fontHint')}>
                       <FontPicker value={g.fontFamily ?? 'Montserrat'} onChange={(fontFamily) => update({ fontFamily })} />
                     </Field>

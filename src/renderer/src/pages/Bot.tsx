@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { uid } from '@shared/defaults';
 import { ALERT_TYPES, type BotCommand, type BotSettings, type BotTimer, type ModAction, type ModFilter, type Permission } from '@shared/types';
-import { Button, Card, Empty, Field, IconButton, LinesInput, NumberInput, PageHeader, Select, Tabs, TextArea, TextInput, Toggle } from '../components/ui';
+import { AdvancedSection, Button, Card, Empty, Field, IconButton, LinesInput, NumberInput, PageHeader, Select, Tabs, TextArea, TextInput, Toggle } from '../components/ui';
 import { useT, type TFn } from '../i18n';
-import { navigate, saveSettings, useApp, useSub } from '../store';
+import { askConfirm, navigate, saveSettings, useApp, useSub } from '../store';
 
 type Tab = 'commands' | 'builtins' | 'timers' | 'counters' | 'moderation' | 'events';
 const TABS: Tab[] = ['commands', 'builtins', 'timers', 'counters', 'moderation', 'events'];
@@ -96,22 +96,32 @@ function Commands({ bot, save }: SectionProps) {
                 />
               </div>
               <Select<Permission> value={c.permission} onChange={(permission) => update(c.id, { permission })} options={permOptions(t)} />
-              <IconButton icon="trash" label={t('common.delete')} variant="danger" onClick={() => confirm(t('common.confirmDelete')) && save({ commands: bot.commands.filter((x) => x.id !== c.id) })} />
+              <IconButton icon="trash" label={t('common.delete')} variant="danger" onClick={() => void askConfirm({ message: t('common.confirmDelete'), danger: true }).then((ok) => ok && save({ commands: bot.commands.filter((x) => x.id !== c.id) }))} />
             </div>
             <TextArea value={c.response} onChange={(response) => update(c.id, { response })} rows={2} placeholder={t('bot.responsePh')} />
-            <div className="form compact">
-              <Field label={t('bot.aliases')} hint={t('bot.aliasesHint')}>
-                <TextInput value={c.aliases.join(', ')} onChange={(v) => update(c.id, { aliases: v.split(',').map((a) => a.trim().replace(/^\W/, '')).filter(Boolean) })} />
-              </Field>
-              <Field label={t('bot.cooldown')}>
-                <NumberInput value={c.cooldownSec} min={0} onChange={(cooldownSec) => update(c.id, { cooldownSec })} />
-              </Field>
-              <Field label={t('bot.userCooldown')}>
-                <NumberInput value={c.userCooldownSec} min={0} onChange={(userCooldownSec) => update(c.id, { userCooldownSec })} />
-              </Field>
-              <Field label={t('bot.reply')}>
-                <Toggle checked={c.reply} onChange={(reply) => update(c.id, { reply })} />
-              </Field>
+            <div style={{ marginTop: 10 }}>
+              <AdvancedSection title={
+                <span className="row-gap">
+                  <span>{t('bot.cmdParams')}</span>
+                  {c.cooldownSec > 0 && <span className="pill">{c.cooldownSec}s</span>}
+                  {c.aliases.length > 0 && <span className="pill">+{c.aliases.length}</span>}
+                </span>
+              }>
+                <div className="form compact">
+                  <Field label={t('bot.aliases')} hint={t('bot.aliasesHint')}>
+                    <TextInput value={c.aliases.join(', ')} onChange={(v) => update(c.id, { aliases: v.split(',').map((a) => a.trim().replace(/^\W/, '')).filter(Boolean) })} />
+                  </Field>
+                  <Field label={t('bot.cooldown')}>
+                    <NumberInput value={c.cooldownSec} min={0} onChange={(cooldownSec) => update(c.id, { cooldownSec })} />
+                  </Field>
+                  <Field label={t('bot.userCooldown')}>
+                    <NumberInput value={c.userCooldownSec} min={0} onChange={(userCooldownSec) => update(c.id, { userCooldownSec })} />
+                  </Field>
+                  <Field label={t('bot.reply')}>
+                    <Toggle checked={c.reply} onChange={(reply) => update(c.id, { reply })} />
+                  </Field>
+                </div>
+              </AdvancedSection>
             </div>
             {dup && <p className="error small">{t('bot.duplicate')}</p>}
           </Card>
@@ -182,7 +192,7 @@ function Timers({ bot, save }: SectionProps) {
           <div className="command-head">
             <Toggle checked={tm.enabled} onChange={(enabled) => update(tm.id, { enabled })} />
             <input className="input" value={tm.name} placeholder={t('bot.timerName')} onChange={(e) => update(tm.id, { name: e.target.value })} />
-            <IconButton icon="trash" label={t('common.delete')} variant="danger" onClick={() => confirm(t('common.confirmDelete')) && save({ timers: bot.timers.filter((x) => x.id !== tm.id) })} />
+            <IconButton icon="trash" label={t('common.delete')} variant="danger" onClick={() => void askConfirm({ message: t('common.confirmDelete'), danger: true }).then((ok) => ok && save({ timers: bot.timers.filter((x) => x.id !== tm.id) }))} />
           </div>
           <Field label={t('bot.timerMessages')} hint={t('bot.timerMessagesHint')} wide>
             <LinesInput value={tm.messages} onChange={(messages) => update(tm.id, { messages })} rows={3} />

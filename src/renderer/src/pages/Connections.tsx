@@ -16,8 +16,16 @@ export function Connections() {
   const t = useT();
   const [selected, setSelected] = useSub<ConnectionTab>('connections', 'twitch', CONNECTION_TABS);
   const state = useApp((d) => d.state!);
-  return <div className="workspace connections-page">
+  const connectedCount = CONNECTION_TABS.filter((id) => state[id === 'subforstream' ? 'subForStream' : id].status === 'connected').length;
+  return <div className="workspace workspace-single connections-page">
     <header className="workspace-header"><div><h1>{t('nav.connections')}</h1><p className="muted small">{t('connections.hint')}</p></div></header>
+    <div className="conn-summary">
+      <div className="conn-summary-icon"><Icon name="plug" size={18} /></div>
+      <div>
+        <strong>{t('conn.summaryTitle')}</strong>
+        <p className="muted small">{t('conn.summaryHint', { connected: connectedCount, total: CONNECTION_TABS.length })}</p>
+      </div>
+    </div>
     <div className="connections-layout"><aside className="connections-list" aria-label={t('nav.connections')}>
       {CONNECTION_TABS.map((id) => <button key={id} data-connection={id} className={selected === id ? 'active' : ''} onClick={() => setSelected(id)}><Icon name={moduleDef(id).icon} size={18} /><span>{id === 'kawaki' ? 'Kawaki' : moduleDef(id).name}</span><span className={`status-dot status-${state[id === 'subforstream' ? 'subForStream' : id].status}`} /></button>)}
     </aside><section className="connection-editor" data-connection-editor={selected} key={selected}>
@@ -372,6 +380,7 @@ function ObsCard() {
       actions={<StatusText status={state.status} error={state.error} />}
     >
       <p className="muted small">{t('conn.obsHint')}</p>
+      {!connected && <p className="conn-steps-tip"><Icon name="info" size={14} /><span>{t('conn.obsSteps')}</span></p>}
       <div className="form compact">
         <Field label={t('conn.host')}>
           <TextInput value={obs.host} onChange={(host) => saveSettings('obs', { ...obs, host })} mono />

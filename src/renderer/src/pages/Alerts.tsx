@@ -6,8 +6,9 @@ import { EVENT_ICON } from '../components/EventFeed';
 import { Icon } from '../components/icons';
 import { MediaPicker } from '../components/MediaPicker';
 import { OverlayBar, ScaledFrame } from '../components/overlay';
-import { Button, Card, ColorInput, CopyField, Field, IconButton, NumberInput, PageHeader, Select, TextInput, Toggle } from '../components/ui';
+import { Button, Card, ColorInput, CopyField, Field, IconButton, NumberInput, Select, TextInput, Toggle } from '../components/ui';
 import { FontPicker } from '../components/FontPicker';
+import { OverlayStylePresets } from '../overlayPresets';
 import { useT } from '../i18n';
 import { call, navigate, saveSettings, useApp, useSub } from '../store';
 
@@ -65,9 +66,16 @@ export function Alerts() {
 
   return (
     <div className="page alerts-page">
-      <PageHeader title={t('nav.alerts')} subtitle={t('alerts.subtitle')} actions={!remote && <Button icon="sparkle" onClick={() => navigate('eventStudio')}>{lang === 'ru' ? 'Студия событий' : 'Event Studio'}</Button>} />
       <OverlayBar kind="alerts" name={t('nav.alerts')} />
-      <div className="workspace-alert-run"><div><strong>{queue.current || t(queue.paused ? 'dash.alertsPaused' : 'workspace.alertIdle')}</strong><span className="muted small">{t('dash.alertQueue',{n:queue.queueLength})}</span></div><Button data-alert-control="pause" icon={queue.paused ? 'play' : 'pause'} onClick={() => void call('alerts:pause', !queue.paused)}>{t(queue.paused ? 'dash.alertsResume' : 'dash.alertsPause')}</Button><Button data-alert-control="skip" icon="skip" disabled={!queue.current} onClick={() => void call('alerts:skip')}>{t('dash.alertsSkip')}</Button></div>
+      <div className="workspace-alert-run">
+        <div>
+          <strong>{queue.current || t(queue.paused ? 'dash.alertsPaused' : 'workspace.alertIdle')}</strong>
+          <span className="muted small">{t('dash.alertQueue',{n:queue.queueLength})}</span>
+        </div>
+        <Button size="sm" data-alert-control="pause" icon={queue.paused ? 'play' : 'pause'} onClick={() => void call('alerts:pause', !queue.paused)}>{t(queue.paused ? 'dash.alertsResume' : 'dash.alertsPause')}</Button>
+        <Button size="sm" data-alert-control="skip" icon="skip" disabled={!queue.current} onClick={() => void call('alerts:skip')}>{t('dash.alertsSkip')}</Button>
+        {!remote && <Button size="sm" variant="ghost" icon="sparkle" onClick={() => navigate('eventStudio')}>{t('nav.eventStudio')}</Button>}
+      </div>
       <div className="alert-type-picker">
           <ul className="type-list">
             {ALERT_TYPES.map((type) => (
@@ -144,6 +152,7 @@ export function Alerts() {
           {step === 'appearance' && <>
           <Card title={tier ? `${t('alerts.style')} · ≥ ${tier.minAmount}` : t('alerts.style')}>
             <p className="muted small">{t(tier ? 'alerts.tierStyleHint' : 'alerts.sharedStyleHint')}</p>
+            {!tier && <OverlayStylePresets kind="alerts" compact />}
             <div className="form">
               <Field label={t('common.font')} hint={t('common.fontHint')}>
                 <FontPicker value={style.fontFamily} onChange={(fontFamily) => setStyle({ fontFamily })} />

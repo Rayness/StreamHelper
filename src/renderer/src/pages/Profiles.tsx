@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Button, Card, PageHeader, TextInput } from '../components/ui';
 import { useT } from '../i18n';
-import { profileAction, useApp } from '../store';
+import { askConfirm, profileAction, useApp } from '../store';
 
 export function Profiles() {
   const t = useT();
@@ -38,7 +38,7 @@ export function Profiles() {
             <div className="row-gap wrap">
               <TextInput value={editName} onChange={setEditName} onKeyDown={(e) => { if (e.key === 'Enter') void profileAction('profiles:rename', active.id, editName); }} />
               <Button icon="edit" disabled={!editName.trim() || editName.trim() === active.name} onClick={() => void profileAction('profiles:rename', active.id, editName)}>{t('profiles.rename')}</Button>
-              <Button variant="danger" icon="trash" disabled={profiles.length < 2} onClick={() => { if (window.confirm(t('profiles.deleteConfirm'))) void profileAction('profiles:delete', active.id); }}>{t('profiles.delete')}</Button>
+              <Button variant="danger" icon="trash" disabled={profiles.length < 2} onClick={() => void askConfirm({ title: t('profiles.delete'), message: t('profiles.deleteConfirm'), confirmLabel: t('profiles.delete'), danger: true }).then((ok) => ok && void profileAction('profiles:delete', active.id))}>{t('profiles.delete')}</Button>
             </div>
           </Card>
         </div>

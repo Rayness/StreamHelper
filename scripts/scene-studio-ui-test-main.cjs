@@ -22,8 +22,10 @@ async function select(selector, value) { await js(`(()=>{const el=document.query
 async function action(name) { await click(`[data-studio-action="${name}"]`); }
 async function tab(name) { await click(`[data-studio-tab="${name}"]`); }
 async function openStudio() {
-  await until(`[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='Студия событий'||b.textContent.trim()==='Event Scene Studio')`, 'Scene Studio navigation missing');
-  await js(`[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='Студия событий'||b.textContent.trim()==='Event Scene Studio').click()`);
+  await until(`!!document.querySelector('[data-sidebar-advanced]') || !!document.querySelector('[data-nav="eventStudio"]')`, 'Scene Studio navigation missing');
+  await js(`(()=>{if(!document.querySelector('[data-nav="eventStudio"]'))document.querySelector('[data-sidebar-advanced]')?.click()})()`);
+  await until(`!!document.querySelector('[data-nav="eventStudio"]')`, 'Scene Studio button missing after expanding Advanced');
+  await js(`document.querySelector('[data-nav="eventStudio"]').click()`);
   await until(`!!document.querySelector('[data-event-studio]')`, 'Scene Studio page missing');
 }
 async function ready() { await until(`document.querySelector('[data-studio-runtime]')?.dataset.studioRuntime==='ready'`, 'Scene runtime never became ready'); }
@@ -110,7 +112,7 @@ app.whenReady().then(async () => {
   await js(`void(window.confirm=()=>false)`);
   await click('[data-studio-preset="3"]');
   assert.equal(await js(`document.querySelector('[data-studio-code="html"]').value`), html + '<i>revision</i>', 'Scene switch ignored unsaved-edit cancellation');
-  await js(`[...document.querySelectorAll('.sidebar button')].find(button=>button.textContent.trim()==='Рабочая область').click()`);
+  await js(`document.querySelector('[data-nav="workspace"]').click()`);
   assert.equal(await js(`!!document.querySelector('[data-event-studio]')`), true, 'Navigation ignored unsaved-edit cancellation');
   await js(`void(window.confirm=()=>true)`);
   await action('save'); await flush();

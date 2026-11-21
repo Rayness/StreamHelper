@@ -47,9 +47,9 @@ app.whenReady().then(async () => {
   assert.equal(new URL(window.webContents.getURL()).search, '', 'key left in the address bar');
   await until(`!!document.querySelector('.sidebar')`, 'app did not start over remote access');
   assert.match(await js(`document.querySelector('.remote-badge').innerText`), /Анна/, 'moderator badge missing');
-  const nav = await js(`[...document.querySelectorAll('.nav-group button')].map(b=>b.innerText.trim())`);
+  const nav = await js(`[...document.querySelectorAll('.nav-primary button')].map(b=>b.innerText.trim())`);
   assert(!nav.some((t) => /Подключения/.test(t)), 'connections visible to a moderator: ' + nav);
-  assert(!/Подключения/.test(await js(`document.querySelector('.workspace-rail').innerText`)), 'connections hint shown to a moderator');
+  assert(!/Подключения/.test(await js(`document.querySelector('.sidebar').innerText`)), 'connections hint shown to a moderator');
   assert.equal(h.clients.at(-1).length, 1, 'session not tracked');
   await capture('remote-moderator');
   ok('app renders from the invite link, key removed from the URL');

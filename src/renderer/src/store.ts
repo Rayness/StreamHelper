@@ -95,6 +95,50 @@ export function dismissToast(id: number): void {
   set({ toasts: data.toasts.filter((x) => x.id !== id) });
 }
 
+// ---------- in-app confirmation modal ----------
+
+export interface ConfirmRequest {
+  message: string;
+  title?: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  danger?: boolean;
+}
+
+let activeConfirm: { req: ConfirmRequest; resolve: (ok: boolean) => void } | null = null;
+const confirmListeners = new Set<() => void>();
+const notifyConfirm = () => confirmListeners.forEach((l) => l());
+
+export function askConfirm(req: string | ConfirmRequest): Promise<boolean> {
+  if (activeConfirm) {
+    activeConfirm.resolve(false);
+    activeConfirm = null;
+  }
+  const normalized: ConfirmRequest = typeof req === 'string' ? { message: req } : req;
+  return new Promise<boolean>((resolve) => {
+    activeConfirm = { req: normalized, resolve };
+    notifyConfirm();
+  });
+}
+
+export function resolveConfirm(ok: boolean): void {
+  const current = activeConfirm;
+  if (!current) return;
+  activeConfirm = null;
+  notifyConfirm();
+  current.resolve(ok);
+}
+
+export function useConfirm(): ConfirmRequest | null {
+  return useSyncExternalStore(
+    (l) => {
+      confirmListeners.add(l);
+      return () => confirmListeners.delete(l);
+    },
+    () => activeConfirm?.req ?? null,
+  );
+}
+
 /** Call the main process; failures become an error toast and resolve to undefined. */
 export async function call<K extends keyof IpcInvoke>(
   channel: K,

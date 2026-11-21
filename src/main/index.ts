@@ -89,6 +89,11 @@ let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let quitting = false;
 
+// Isolate dev-mode cache & lock from any installed StreamHelper instance.
+if (!app.isPackaged && process.env.ELECTRON_RENDERER_URL) {
+  app.setPath('userData', join(app.getPath('appData'), 'streamhelper-dev'));
+}
+
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {

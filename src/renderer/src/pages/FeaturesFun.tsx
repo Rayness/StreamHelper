@@ -2,11 +2,11 @@ import { useEffect, useState } from 'react';
 import { defaultCurse } from '@shared/defaults';
 import type { Curse, CurseSettings, CurseStep, DuelSettings, MarketSettings, MelodySettings, MelodyTrack, PortalSettings } from '@shared/types';
 import { OverlayBar, OverlayPreview } from '../components/overlay';
-import { Button, Card, ColorInput, Empty, Field, IconButton, LinesInput, NumberInput, Select, StatusText, TextArea, TextInput, Toggle } from '../components/ui';
+import { Button, Card, ColorInput, Empty, Field, IconButton, LinesInput, NumberInput, Select, StatusText, Tabs, TextArea, TextInput, Toggle } from '../components/ui';
 import { useClock, useNow } from '../hooks';
 import { FontPicker } from '../components/FontPicker';
 import { useT, type TFn } from '../i18n';
-import { call, callOk, saveSettings, useApp } from '../store';
+import { askConfirm, call, callOk, saveSettings, useApp } from '../store';
 
 function left(ms: number): string {
   const s = Math.max(0, Math.ceil(ms / 1000));
@@ -118,7 +118,7 @@ function CurseEditor({ curse, onChange, onRemove, sources }: { curse: Curse; onC
       </div>
       <div className="row-gap">
         <Button size="sm" icon="play" disabled={active || !curse.name.trim()} onClick={() => void callOk('curse:apply', curse.id)}>{t('curse.applyNow')}</Button>
-        <Button size="sm" variant="danger" icon="trash" onClick={() => confirm(t('common.confirmDelete')) && onRemove()}>{t('common.delete')}</Button>
+        <Button size="sm" variant="danger" icon="trash" onClick={() => void askConfirm({ message: t('common.confirmDelete'), danger: true }).then((ok) => ok && onRemove())}>{t('common.delete')}</Button>
       </div>
     </details>
   );
@@ -130,53 +130,62 @@ export function CurseModule() {
   const lang = useApp((d) => d.settings!.language);
   const c = useApp((d) => d.state!.curse);
   const obsOn = useApp((d) => d.state!.obs.status === 'connected');
+  const [tab, setTab] = useState<'control' | 'settings'>('control');
   const now = useNow(500);
   const sources = useObsSources();
   const set = (patch: Partial<CurseSettings>) => saveSettings('curses', { ...cfg, ...patch });
   const setCurse = (id: string, next: Curse) => set({ curses: cfg.curses.map((x) => (x.id === id ? next : x)) });
   return (
-    <div className="fun-split">
-      <div className="fun-main">
-        <Card className="control-card">
-          <div className="control-row">
-            {c.status === 'voting' ? <Button variant="secondary" icon="x" className="btn-hero" onClick={() => void call('curse:cancel')}>{t('curse.cancel')}</Button>
-              : c.status === 'active' ? <Button variant="danger" icon="sparkle" className="btn-hero" onClick={() => void call('curse:lift')}>{t('curse.lift')}</Button>
-              : <Button variant="primary" icon="skull" className="btn-hero" onClick={() => void callOk('curse:vote')}>{t('curse.vote')}</Button>}
-            <div className="control-status">
-              <span className="muted small">{t(`curseStatus.${c.status}`)}</span>
-              <b>{c.status === 'active' && c.active ? c.active.name : c.status === 'voting' ? t('curse.votes', { n: c.total }) : '—'}{c.endsAt && c.status !== 'idle' ? ` · ${left(c.endsAt - now)}` : ''}</b>
-            </div>
-          </div>
-          {c.status === 'voting' && (
-            <div className="poll-live">
-              {c.options.map((o, i) => {
-                const pct = c.total ? Math.round((o.votes / c.total) * 100) : 0;
-                return <div key={o.id} className="poll-row"><div className="poll-fill" style={{ width: `${pct}%` }} /><span className="poll-num">{i + 1}</span><span className="poll-label">{o.name}</span><span className="poll-pct">{pct}% · {o.votes}</span></div>;
-              })}
-            </div>
+    <div className="module-tabbed">
+      <OverlayBar kind="curse" name={t('ov.curse')} />
+      <Tabs value={tab} onChange={setTab} tabs={[{ id: 'control', label: t('fun.tab.control') }, { id: 'settings', label: t('fun.tab.settings') }]} />
+      <div className="fun-split">
+        <div className="fun-main">
+          {tab === 'control' ? (
+            <>
+              <Card className="control-card">
+                <div className="control-row">
+                  {c.status === 'voting' ? <Button variant="secondary" icon="x" className="btn-hero" onClick={() => void call('curse:cancel')}>{t('curse.cancel')}</Button>
+                    : c.status === 'active' ? <Button variant="danger" icon="sparkle" className="btn-hero" onClick={() => void call('curse:lift')}>{t('curse.lift')}</Button>
+                    : <Button variant="primary" icon="skull" className="btn-hero" onClick={() => void callOk('curse:vote')}>{t('curse.vote')}</Button>}
+                  <div className="control-status">
+                    <span className="muted small">{t(`curseStatus.${c.status}`)}</span>
+                    <b>{c.status === 'active' && c.active ? c.active.name : c.status === 'voting' ? t('curse.votes', { n: c.total }) : '—'}{c.endsAt && c.status !== 'idle' ? ` · ${left(c.endsAt - now)}` : ''}</b>
+                  </div>
+                </div>
+                {c.status === 'voting' && (
+                  <div className="poll-live">
+                    {c.options.map((o, i) => {
+                      const pct = c.total ? Math.round((o.votes / c.total) * 100) : 0;
+                      return <div key={o.id} className="poll-row"><div className="poll-fill" style={{ width: `${pct}%` }} /><span className="poll-num">{i + 1}</span><span className="poll-label">{o.name}</span><span className="poll-pct">{pct}% · {o.votes}</span></div>;
+                    })}
+                  </div>
+                )}
+                {c.lastError && <p className="error small">{c.lastError}</p>}
+                <p className="muted small">{t('curse.howto')}</p>
+                {!obsOn && <p className="muted small">{t('curse.noObs')}</p>}
+              </Card>
+              <Card title={t('curse.list')} actions={<Button size="sm" icon="plus" onClick={() => set({ curses: [...cfg.curses, defaultCurse(lang)] })}>{t('curse.add')}</Button>}>
+                {cfg.curses.length === 0 ? <Empty icon="skull" title={t('curse.empty')} /> : <div className="curse-list">{cfg.curses.map((x) => <CurseEditor key={x.id} curse={x} sources={sources} onChange={(next) => setCurse(x.id, next)} onRemove={() => set({ curses: cfg.curses.filter((y) => y.id !== x.id) })} />)}</div>}
+              </Card>
+            </>
+          ) : (
+            <Card title={t('curse.settings')}>
+              <div className="form">
+                <Field label={t('curse.choices')}><NumberInput value={cfg.choices} min={1} max={5} onChange={(choices) => set({ choices })} /></Field>
+                <Field label={t('curse.voteSec')}><NumberInput value={cfg.voteSec} min={5} max={600} onChange={(voteSec) => set({ voteSec })} /></Field>
+                <Field label={t('curse.auto')} hint={t('curse.autoHint')}><NumberInput value={cfg.autoEveryMin} min={0} max={600} onChange={(autoEveryMin) => set({ autoEveryMin })} /></Field>
+                <Field label={t('actions.redemption')} hint={t('curse.redemptionHint')}><TextInput value={cfg.redemptionTitle} onChange={(redemptionTitle) => set({ redemptionTitle })} placeholder={t('actions.redemptionPh')} /></Field>
+                <Field label={t('overlays.options')} wide><Toggle checked={cfg.announce} onChange={(announce) => set({ announce })} label={t('feat.announce')} /></Field>
+                <LookFields accent={cfg.accentColor} font={cfg.fontFamily} onAccent={(accentColor) => set({ accentColor })} onFont={(fontFamily) => set({ fontFamily })} />
+              </div>
+            </Card>
           )}
-          {c.lastError && <p className="error small">{c.lastError}</p>}
-          <p className="muted small">{t('curse.howto')}</p>
-          {!obsOn && <p className="muted small">{t('curse.noObs')}</p>}
-        </Card>
-        <Card title={t('curse.list')} actions={<Button size="sm" icon="plus" onClick={() => set({ curses: [...cfg.curses, defaultCurse(lang)] })}>{t('curse.add')}</Button>}>
-          {cfg.curses.length === 0 ? <Empty icon="skull" title={t('curse.empty')} /> : <div className="curse-list">{cfg.curses.map((x) => <CurseEditor key={x.id} curse={x} sources={sources} onChange={(next) => setCurse(x.id, next)} onRemove={() => set({ curses: cfg.curses.filter((y) => y.id !== x.id) })} />)}</div>}
-        </Card>
-        <Card title={t('curse.settings')}>
-          <div className="form">
-            <Field label={t('curse.choices')}><NumberInput value={cfg.choices} min={1} max={5} onChange={(choices) => set({ choices })} /></Field>
-            <Field label={t('curse.voteSec')}><NumberInput value={cfg.voteSec} min={5} max={600} onChange={(voteSec) => set({ voteSec })} /></Field>
-            <Field label={t('curse.auto')} hint={t('curse.autoHint')}><NumberInput value={cfg.autoEveryMin} min={0} max={600} onChange={(autoEveryMin) => set({ autoEveryMin })} /></Field>
-            <Field label={t('actions.redemption')} hint={t('curse.redemptionHint')}><TextInput value={cfg.redemptionTitle} onChange={(redemptionTitle) => set({ redemptionTitle })} placeholder={t('actions.redemptionPh')} /></Field>
-            <Field label={t('overlays.options')} wide><Toggle checked={cfg.announce} onChange={(announce) => set({ announce })} label={t('feat.announce')} /></Field>
-            <LookFields accent={cfg.accentColor} font={cfg.fontFamily} onAccent={(accentColor) => set({ accentColor })} onFont={(fontFamily) => set({ fontFamily })} />
-          </div>
-        </Card>
+        </div>
+        <aside className="fun-side">
+          <OverlayPreview kind="curse" maxHeight={320} />
+        </aside>
       </div>
-      <aside className="fun-side">
-        <OverlayPreview kind="curse" maxHeight={320} />
-        <OverlayBar kind="curse" name={t('ov.curse')} />
-      </aside>
     </div>
   );
 }
@@ -188,6 +197,7 @@ export function DuelModule() {
   const cfg = useApp((d) => d.settings!.duel);
   const duel = useApp((d) => d.state!.duel);
   const queue = useApp((d) => d.state!.songRequests.queue);
+  const [tab, setTab] = useState<'control' | 'settings'>('control');
   const now = useNow(500);
   const [a, setA] = useState('');
   const [b, setB] = useState('');
@@ -195,55 +205,63 @@ export function DuelModule() {
   const running = duel.status !== 'idle' && duel.status !== 'done';
   const options = [{ value: '', label: t('duel.auto') }, ...queue.map((r) => ({ value: r.id, label: `${r.userName} · ${r.title ?? r.url}` }))];
   return (
-    <div className="fun-split">
-      <div className="fun-main">
-        <Card className="control-card">
-          <div className="control-row">
-            {running ? <Button variant="danger" icon="x" className="btn-hero" onClick={() => void call('duel:stop')}>{t('duel.stop')}</Button>
-              : <Button variant="primary" icon="swords" className="btn-hero" disabled={queue.length < 2} onClick={() => void callOk('duel:start', a || undefined, b || undefined)}>{t('duel.start')}</Button>}
-            <div className="control-status">
-              <span className="muted small">{t(`duelStatus.${duel.status}`)}</span>
-              <b>{duel.a && duel.b ? `${duel.a.votes} : ${duel.b.votes}` : t('duel.inQueue', { n: queue.length })}{running && duel.endsAt ? ` · ${left(duel.endsAt - now)}` : ''}</b>
-            </div>
-          </div>
-          {duel.a && duel.b && (
-            <div className="duel-now">
-              {(['a', 'b'] as const).map((k, i) => (
-                <div key={k} className={`duel-side ${duel.winner === k ? 'win' : ''}`}>
-                  <span className="pill">{i + 1}</span>
-                  <b>{duel[k]!.title}</b>
-                  <span className="muted small">{duel[k]!.userName} · {t('duel.votes', { n: duel[k]!.votes })}</span>
+    <div className="module-tabbed">
+      <OverlayBar kind="duel" name={t('ov.duel')} />
+      <Tabs value={tab} onChange={setTab} tabs={[{ id: 'control', label: t('fun.tab.control') }, { id: 'settings', label: t('fun.tab.settings') }]} />
+      <div className="fun-split">
+        <div className="fun-main">
+          {tab === 'control' ? (
+            <>
+              <Card className="control-card">
+                <div className="control-row">
+                  {running ? <Button variant="danger" icon="x" className="btn-hero" onClick={() => void call('duel:stop')}>{t('duel.stop')}</Button>
+                    : <Button variant="primary" icon="swords" className="btn-hero" disabled={queue.length < 2} onClick={() => void callOk('duel:start', a || undefined, b || undefined)}>{t('duel.start')}</Button>}
+                  <div className="control-status">
+                    <span className="muted small">{t(`duelStatus.${duel.status}`)}</span>
+                    <b>{duel.a && duel.b ? `${duel.a.votes} : ${duel.b.votes}` : t('duel.inQueue', { n: queue.length })}{running && duel.endsAt ? ` · ${left(duel.endsAt - now)}` : ''}</b>
+                  </div>
                 </div>
-              ))}
-            </div>
+                {duel.a && duel.b && (
+                  <div className="duel-now">
+                    {(['a', 'b'] as const).map((k, i) => (
+                      <div key={k} className={`duel-side ${duel.winner === k ? 'win' : ''}`}>
+                        <span className="pill">{i + 1}</span>
+                        <b>{duel[k]!.title}</b>
+                        <span className="muted small">{duel[k]!.userName} · {t('duel.votes', { n: duel[k]!.votes })}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {duel.error && <p className="error small">{duel.error}</p>}
+                <p className="muted small">{queue.length < 2 ? t('duel.needTwo') : t('duel.howto')}</p>
+              </Card>
+              <Card title={t('duel.pick')}>
+                <div className="form">
+                  <Field label={t('duel.trackA')}><Select value={a} onChange={setA} options={options} /></Field>
+                  <Field label={t('duel.trackB')}><Select value={b} onChange={setB} options={options} /></Field>
+                </div>
+              </Card>
+            </>
+          ) : (
+            <Card title={t('duel.settings')}>
+              <div className="form">
+                <Field label={t('duel.snippet')}><NumberInput value={cfg.snippetSec} min={5} max={120} onChange={(snippetSec) => set({ snippetSec })} /></Field>
+                <Field label={t('duel.offset')} hint={t('duel.offsetHint')}><NumberInput value={cfg.startOffsetSec} min={0} max={600} onChange={(startOffsetSec) => set({ startOffsetSec })} /></Field>
+                <Field label={t('duel.voteSec')}><NumberInput value={cfg.voteSec} min={5} max={300} onChange={(voteSec) => set({ voteSec })} /></Field>
+                <Field label={t('duel.winner')}><Select value={cfg.winnerAction} onChange={(winnerAction) => set({ winnerAction })} options={(['playNext', 'playNow', 'none'] as const).map((v) => ({ value: v, label: t(`duelWin.${v}`) }))} /></Field>
+                <Field label={t('duel.loser')}><Select value={cfg.loserAction} onChange={(loserAction) => set({ loserAction })} options={(['remove', 'keep'] as const).map((v) => ({ value: v, label: t(`duelLose.${v}`) }))} /></Field>
+                <Field label={t('feat.volume')}><input type="range" min={0} max={100} step={5} value={cfg.volume} onChange={(e) => set({ volume: Number(e.target.value) })} /></Field>
+                <Field label={t('overlays.options')} wide><Toggle checked={cfg.announce} onChange={(announce) => set({ announce })} label={t('feat.announce')} /></Field>
+                <LookFields accent={cfg.accentColor} font={cfg.fontFamily} onAccent={(accentColor) => set({ accentColor })} onFont={(fontFamily) => set({ fontFamily })} />
+              </div>
+            </Card>
           )}
-          {duel.error && <p className="error small">{duel.error}</p>}
-          <p className="muted small">{queue.length < 2 ? t('duel.needTwo') : t('duel.howto')}</p>
-        </Card>
-        <Card title={t('duel.pick')}>
-          <div className="form">
-            <Field label={t('duel.trackA')}><Select value={a} onChange={setA} options={options} /></Field>
-            <Field label={t('duel.trackB')}><Select value={b} onChange={setB} options={options} /></Field>
-          </div>
-        </Card>
-        <Card title={t('duel.settings')}>
-          <div className="form">
-            <Field label={t('duel.snippet')}><NumberInput value={cfg.snippetSec} min={5} max={120} onChange={(snippetSec) => set({ snippetSec })} /></Field>
-            <Field label={t('duel.offset')} hint={t('duel.offsetHint')}><NumberInput value={cfg.startOffsetSec} min={0} max={600} onChange={(startOffsetSec) => set({ startOffsetSec })} /></Field>
-            <Field label={t('duel.voteSec')}><NumberInput value={cfg.voteSec} min={5} max={300} onChange={(voteSec) => set({ voteSec })} /></Field>
-            <Field label={t('duel.winner')}><Select value={cfg.winnerAction} onChange={(winnerAction) => set({ winnerAction })} options={(['playNext', 'playNow', 'none'] as const).map((v) => ({ value: v, label: t(`duelWin.${v}`) }))} /></Field>
-            <Field label={t('duel.loser')}><Select value={cfg.loserAction} onChange={(loserAction) => set({ loserAction })} options={(['remove', 'keep'] as const).map((v) => ({ value: v, label: t(`duelLose.${v}`) }))} /></Field>
-            <Field label={t('feat.volume')}><input type="range" min={0} max={100} step={5} value={cfg.volume} onChange={(e) => set({ volume: Number(e.target.value) })} /></Field>
-            <Field label={t('overlays.options')} wide><Toggle checked={cfg.announce} onChange={(announce) => set({ announce })} label={t('feat.announce')} /></Field>
-            <LookFields accent={cfg.accentColor} font={cfg.fontFamily} onAccent={(accentColor) => set({ accentColor })} onFont={(fontFamily) => set({ fontFamily })} />
-          </div>
-        </Card>
+        </div>
+        <aside className="fun-side">
+          <OverlayPreview kind="duel" maxHeight={260} />
+          <p className="muted small">{t('feat.audioHint')}</p>
+        </aside>
       </div>
-      <aside className="fun-side">
-        <OverlayPreview kind="duel" maxHeight={260} />
-        <OverlayBar kind="duel" name={t('ov.duel')} />
-        <p className="muted small">{t('feat.audioHint')}</p>
-      </aside>
     </div>
   );
 }
@@ -274,6 +292,7 @@ export function MelodyModule() {
   const cfg = useApp((d) => d.settings!.melody);
   const m = useApp((d) => d.state!.melody);
   const songs = useApp((d) => d.state!.songRequests.queue.length + (d.state!.songRequests.current ? 1 : 0));
+  const [tab, setTab] = useState<'control' | 'settings'>('control');
   const now = useNow(500);
   const [links, setLinks] = useState('');
   const [adding, setAdding] = useState(false);
@@ -286,61 +305,69 @@ export function MelodyModule() {
     if (n !== undefined) setLinks('');
   };
   return (
-    <div className="fun-split">
-      <div className="fun-main">
-        <Card className="control-card">
-          <div className="control-row">
-            {running ? (
-              <>
-                <Button variant="primary" icon="skip" className="btn-hero" onClick={() => void call('melody:skip')}>{m.status === 'playing' ? t('melody.reveal') : t('melody.next')}</Button>
-                <Button variant="danger" icon="x" onClick={() => void call('melody:stop')}>{t('melody.stop')}</Button>
-              </>
-            ) : <Button variant="primary" icon="play" className="btn-hero" disabled={!cfg.playlist.length} onClick={() => void callOk('melody:start')}>{m.status === 'finished' ? t('melody.again') : t('melody.start')}</Button>}
-            <div className="control-status">
-              <span className="muted small">{t(`melodyStatus.${m.status}`)}</span>
-              <b>{m.round ? `${m.round} / ${m.rounds}` : t('melody.tracks', { n: cfg.playlist.length })}{m.status === 'playing' && m.endsAt ? ` · ${left(m.endsAt - now)}` : ''}</b>
-            </div>
-            {m.status === 'finished' && <Button size="sm" icon="x" onClick={() => void call('melody:stop')}>{t('poll.clear')}</Button>}
-          </div>
-          {running && <p className="small"><span className="muted">{t('melody.secret')}</span> <b>{m.status === 'reveal' ? m.answer?.title : m.hint}</b>{m.winner && <> · {t('quiz.guessedBy', { name: m.winner })}</>}</p>}
-          {m.leaderboard.length > 0 && <ol className="leaderboard">{m.leaderboard.map((r) => <li key={r.userName}><span>{r.userName}</span><b>{r.points}</b></li>)}</ol>}
-          {m.error && <p className="error small">{m.error}</p>}
-          <p className="muted small">{t('melody.howto')}</p>
-        </Card>
-        <Card title={t('melody.playlist', { n: cfg.playlist.length })} actions={cfg.playlist.length > 0 ? <Button size="sm" icon="trash" onClick={() => confirm(t('melody.clearConfirm')) && set({ playlist: [] })}>{t('melody.clear')}</Button> : undefined}>
-          <div className="stack">
-            <TextArea value={links} onChange={setLinks} rows={3} placeholder={t('melody.linksPh')} />
-            <div className="row-gap wrap">
-              <Button size="sm" variant="primary" icon="plus" disabled={!links.trim() || adding} onClick={() => void add()}>{adding ? '…' : t('melody.addLinks')}</Button>
-              <Button size="sm" icon="music" disabled={!songs} onClick={() => void call('melody:fromSongs')}>{t('melody.fromSongs', { n: songs })}</Button>
-            </div>
-            {cfg.playlist.length === 0 ? <Empty icon="disc" title={t('melody.empty')}>{t('melody.emptyHint')}</Empty>
-              : <ol className="melody-list">{cfg.playlist.map((tr) => <TrackRow key={tr.id} track={tr} onChange={(next) => set({ playlist: cfg.playlist.map((x) => (x.id === tr.id ? next : x)) })} onRemove={() => set({ playlist: cfg.playlist.filter((x) => x.id !== tr.id) })} />)}</ol>}
-          </div>
-        </Card>
-        <Card title={t('melody.settings')}>
-          <div className="form">
-            <Field label={t('quiz.rounds')}><NumberInput value={cfg.rounds} min={1} max={50} onChange={(rounds) => set({ rounds })} /></Field>
-            <Field label={t('melody.snippet')}><NumberInput value={cfg.snippetSec} min={3} max={30} onChange={(snippetSec) => set({ snippetSec })} /></Field>
-            <Field label={t('quiz.roundSec')}><NumberInput value={cfg.roundSec} min={10} max={180} onChange={(roundSec) => set({ roundSec })} /></Field>
-            <Field label={t('melody.hintAfter')} hint={t('melody.hintAfterHint')}><NumberInput value={cfg.hintAfterSec} min={0} max={170} onChange={(hintAfterSec) => set({ hintAfterSec })} /></Field>
-            <Field label={t('quiz.revealSec')}><NumberInput value={cfg.revealSec} min={3} max={60} onChange={(revealSec) => set({ revealSec })} /></Field>
-            <Field label={t('feat.volume')}><input type="range" min={0} max={100} step={5} value={cfg.volume} onChange={(e) => set({ volume: Number(e.target.value) })} /></Field>
-            <Field label={t('overlays.options')} wide>
-              <div className="stack">
-                <Toggle checked={cfg.acceptArtist} onChange={(acceptArtist) => set({ acceptArtist })} label={t('melody.acceptArtist')} />
-                <Toggle checked={cfg.announce} onChange={(announce) => set({ announce })} label={t('feat.announce')} />
+    <div className="module-tabbed">
+      <OverlayBar kind="melody" name={t('ov.melody')} />
+      <Tabs value={tab} onChange={setTab} tabs={[{ id: 'control', label: t('fun.tab.control') }, { id: 'settings', label: t('fun.tab.settings') }]} />
+      <div className="fun-split">
+        <div className="fun-main">
+          {tab === 'control' ? (
+            <>
+              <Card className="control-card">
+                <div className="control-row">
+                  {running ? (
+                    <>
+                      <Button variant="primary" icon="skip" className="btn-hero" onClick={() => void call('melody:skip')}>{m.status === 'playing' ? t('melody.reveal') : t('melody.next')}</Button>
+                      <Button variant="danger" icon="x" onClick={() => void call('melody:stop')}>{t('melody.stop')}</Button>
+                    </>
+                  ) : <Button variant="primary" icon="play" className="btn-hero" disabled={!cfg.playlist.length} onClick={() => void callOk('melody:start')}>{m.status === 'finished' ? t('melody.again') : t('melody.start')}</Button>}
+                  <div className="control-status">
+                    <span className="muted small">{t(`melodyStatus.${m.status}`)}</span>
+                    <b>{m.round ? `${m.round} / ${m.rounds}` : t('melody.tracks', { n: cfg.playlist.length })}{m.status === 'playing' && m.endsAt ? ` · ${left(m.endsAt - now)}` : ''}</b>
+                  </div>
+                  {m.status === 'finished' && <Button size="sm" icon="x" onClick={() => void call('melody:stop')}>{t('poll.clear')}</Button>}
+                </div>
+                {running && <p className="small"><span className="muted">{t('melody.secret')}</span> <b>{m.status === 'reveal' ? m.answer?.title : m.hint}</b>{m.winner && <> · {t('quiz.guessedBy', { name: m.winner })}</>}</p>}
+                {m.leaderboard.length > 0 && <ol className="leaderboard">{m.leaderboard.map((r) => <li key={r.userName}><span>{r.userName}</span><b>{r.points}</b></li>)}</ol>}
+                {m.error && <p className="error small">{m.error}</p>}
+                <p className="muted small">{t('melody.howto')}</p>
+              </Card>
+              <Card title={t('melody.playlist', { n: cfg.playlist.length })} actions={cfg.playlist.length > 0 ? <Button size="sm" icon="trash" onClick={() => void askConfirm({ message: t('melody.clearConfirm'), danger: true }).then((ok) => ok && set({ playlist: [] }))}>{t('melody.clear')}</Button> : undefined}>
+                <div className="stack">
+                  <TextArea value={links} onChange={setLinks} rows={3} placeholder={t('melody.linksPh')} />
+                  <div className="row-gap wrap">
+                    <Button size="sm" variant="primary" icon="plus" disabled={!links.trim() || adding} onClick={() => void add()}>{adding ? '…' : t('melody.addLinks')}</Button>
+                    <Button size="sm" icon="music" disabled={!songs} onClick={() => void call('melody:fromSongs')}>{t('melody.fromSongs', { n: songs })}</Button>
+                  </div>
+                  {cfg.playlist.length === 0 ? <Empty icon="disc" title={t('melody.empty')}>{t('melody.emptyHint')}</Empty>
+                    : <ol className="melody-list">{cfg.playlist.map((tr) => <TrackRow key={tr.id} track={tr} onChange={(next) => set({ playlist: cfg.playlist.map((x) => (x.id === tr.id ? next : x)) })} onRemove={() => set({ playlist: cfg.playlist.filter((x) => x.id !== tr.id) })} />)}</ol>}
+                </div>
+              </Card>
+            </>
+          ) : (
+            <Card title={t('melody.settings')}>
+              <div className="form">
+                <Field label={t('quiz.rounds')}><NumberInput value={cfg.rounds} min={1} max={50} onChange={(rounds) => set({ rounds })} /></Field>
+                <Field label={t('melody.snippet')}><NumberInput value={cfg.snippetSec} min={3} max={30} onChange={(snippetSec) => set({ snippetSec })} /></Field>
+                <Field label={t('quiz.roundSec')}><NumberInput value={cfg.roundSec} min={10} max={180} onChange={(roundSec) => set({ roundSec })} /></Field>
+                <Field label={t('melody.hintAfter')} hint={t('melody.hintAfterHint')}><NumberInput value={cfg.hintAfterSec} min={0} max={170} onChange={(hintAfterSec) => set({ hintAfterSec })} /></Field>
+                <Field label={t('quiz.revealSec')}><NumberInput value={cfg.revealSec} min={3} max={60} onChange={(revealSec) => set({ revealSec })} /></Field>
+                <Field label={t('feat.volume')}><input type="range" min={0} max={100} step={5} value={cfg.volume} onChange={(e) => set({ volume: Number(e.target.value) })} /></Field>
+                <Field label={t('overlays.options')} wide>
+                  <div className="stack">
+                    <Toggle checked={cfg.acceptArtist} onChange={(acceptArtist) => set({ acceptArtist })} label={t('melody.acceptArtist')} />
+                    <Toggle checked={cfg.announce} onChange={(announce) => set({ announce })} label={t('feat.announce')} />
+                  </div>
+                </Field>
+                <LookFields accent={cfg.accentColor} font={cfg.fontFamily} onAccent={(accentColor) => set({ accentColor })} onFont={(fontFamily) => set({ fontFamily })} />
               </div>
-            </Field>
-            <LookFields accent={cfg.accentColor} font={cfg.fontFamily} onAccent={(accentColor) => set({ accentColor })} onFont={(fontFamily) => set({ fontFamily })} />
-          </div>
-        </Card>
+            </Card>
+          )}
+        </div>
+        <aside className="fun-side">
+          <OverlayPreview kind="melody" maxHeight={240} />
+          <p className="muted small">{t('feat.audioHint')}</p>
+        </aside>
       </div>
-      <aside className="fun-side">
-        <OverlayPreview kind="melody" maxHeight={240} />
-        <OverlayBar kind="melody" name={t('ov.melody')} />
-        <p className="muted small">{t('feat.audioHint')}</p>
-      </aside>
     </div>
   );
 }
@@ -366,69 +393,78 @@ export function StocksModule() {
   const prefix = useApp((d) => d.settings!.bot.prefix);
   const market = useApp((d) => d.state!.market);
   const clock = useClock();
+  const [tab, setTab] = useState<'control' | 'settings'>('control');
   const [login, setLogin] = useState('');
   const [amount, setAmount] = useState(500);
   const set = (patch: Partial<MarketSettings>) => saveSettings('market', { ...cfg, ...patch });
   return (
-    <div className="fun-split">
-      <div className="fun-main">
-        <Card className="control-card">
-          <div className="control-row">
-            <Toggle checked={cfg.enabled} onChange={(enabled) => set({ enabled })} label={<b>{t('market.enabled')}</b>} />
-            <div className="control-status">
-              <span className="muted small">{t('market.listed')}</span>
-              <b>{market.quotes.length} · {t('market.traders', { n: market.traders })}</b>
-            </div>
-          </div>
-          <p className="muted small">{t('market.howto', { n: cfg.listMinMessages, currency: cfg.currencyName })}</p>
-          <ul className="command-help">{commandHelp(t, prefix, cfg.commands).map((h) => <li key={h.cmd}><code>{h.cmd}</code><span className="muted small">{h.text}</span></li>)}</ul>
-          {market.lastTrade && <p className="small">{market.lastTrade.side === 'buy' ? '🟢' : '🔴'} {clock(market.lastTrade.at)} · {market.lastTrade.user} {t(market.lastTrade.side === 'buy' ? 'market.bought' : 'market.sold')} {market.lastTrade.qty} ${market.lastTrade.stock} @ {market.lastTrade.price}</p>}
-        </Card>
-        <Card title={t('market.board')}>
-          {market.quotes.length === 0 ? <Empty icon="trend" title={t('market.empty')}>{t('market.emptyHint')}</Empty> : (
-            <table className="market-table">
-              <thead><tr><th>{t('market.stock')}</th><th>{t('market.price')}</th><th>{t('market.change')}</th><th>{t('market.holders')}</th></tr></thead>
-              <tbody>{market.quotes.slice(0, 15).map((q) => <tr key={q.userId}><td>${q.name}</td><td>{q.price}</td><td className={q.change > 0 ? 'up' : q.change < 0 ? 'down' : ''}>{q.change > 0 ? '+' : ''}{q.change}%</td><td>{q.holders}</td></tr>)}</tbody>
-            </table>
+    <div className="module-tabbed">
+      <OverlayBar kind="stocks" name={t('ov.stocks')} />
+      <Tabs value={tab} onChange={setTab} tabs={[{ id: 'control', label: t('fun.tab.control') }, { id: 'settings', label: t('fun.tab.settings') }]} />
+      <div className="fun-split">
+        <div className="fun-main">
+          {tab === 'control' ? (
+            <>
+              <Card className="control-card">
+                <div className="control-row">
+                  <Toggle checked={cfg.enabled} onChange={(enabled) => set({ enabled })} label={<b>{t('market.enabled')}</b>} />
+                  <div className="control-status">
+                    <span className="muted small">{t('market.listed')}</span>
+                    <b>{market.quotes.length} · {t('market.traders', { n: market.traders })}</b>
+                  </div>
+                </div>
+                <p className="muted small">{t('market.howto', { n: cfg.listMinMessages, currency: cfg.currencyName })}</p>
+                <ul className="command-help">{commandHelp(t, prefix, cfg.commands).map((h) => <li key={h.cmd}><code>{h.cmd}</code><span className="muted small">{h.text}</span></li>)}</ul>
+                {market.lastTrade && <p className="small">{market.lastTrade.side === 'buy' ? '🟢' : '🔴'} {clock(market.lastTrade.at)} · {market.lastTrade.user} {t(market.lastTrade.side === 'buy' ? 'market.bought' : 'market.sold')} {market.lastTrade.qty} ${market.lastTrade.stock} @ {market.lastTrade.price}</p>}
+              </Card>
+              <Card title={t('market.board')}>
+                {market.quotes.length === 0 ? <Empty icon="trend" title={t('market.empty')}>{t('market.emptyHint')}</Empty> : (
+                  <table className="market-table">
+                    <thead><tr><th>{t('market.stock')}</th><th>{t('market.price')}</th><th>{t('market.change')}</th><th>{t('market.holders')}</th></tr></thead>
+                    <tbody>{market.quotes.slice(0, 15).map((q) => <tr key={q.userId}><td>${q.name}</td><td>{q.price}</td><td className={q.change > 0 ? 'up' : q.change < 0 ? 'down' : ''}>{q.change > 0 ? '+' : ''}{q.change}%</td><td>{q.holders}</td></tr>)}</tbody>
+                  </table>
+                )}
+                {market.richest.length > 0 && <><h4 className="muted small">{t('market.richest')}</h4><ol className="leaderboard">{market.richest.map((r) => <li key={r.name}><span>{r.name}</span><b>{r.worth} {cfg.currencyName}</b></li>)}</ol></>}
+              </Card>
+              <Card title={t('market.admin')}>
+                <div className="form">
+                  <Field label={t('market.grantWho')}><TextInput value={login} onChange={setLogin} placeholder="@nick" /></Field>
+                  <Field label={t('market.grantAmount')} hint={t('market.grantHint')}><NumberInput value={amount} min={-1000000} max={1000000} onChange={setAmount} /></Field>
+                </div>
+                <div className="row-gap">
+                  <Button size="sm" icon="coin" disabled={!login.trim()} onClick={() => void callOk('market:grant', login, amount).then((ok) => ok && setLogin(''))}>{t('market.grant')}</Button>
+                  <Button size="sm" variant="danger" icon="trash" onClick={() => void askConfirm({ message: t('market.resetConfirm'), danger: true }).then((ok) => ok && void call('market:reset'))}>{t('market.reset')}</Button>
+                </div>
+              </Card>
+            </>
+          ) : (
+            <Card title={t('market.settings')}>
+              <div className="form">
+                <Field label={t('market.currency')}><TextInput value={cfg.currencyName} onChange={(currencyName) => set({ currencyName })} /></Field>
+                <Field label={t('market.startBalance')}><NumberInput value={cfg.startBalance} min={0} max={1000000} onChange={(startBalance) => set({ startBalance })} /></Field>
+                <Field label={t('market.earn')} hint={t('market.earnHint')}><NumberInput value={cfg.earnPerMessage} min={0} max={10000} onChange={(earnPerMessage) => set({ earnPerMessage })} /></Field>
+                <Field label={t('market.earnCooldown')}><NumberInput value={cfg.earnCooldownSec} min={0} max={3600} onChange={(earnCooldownSec) => set({ earnCooldownSec })} /></Field>
+                <Field label={t('market.income')} hint={t('market.incomeHint')}><NumberInput value={cfg.activeIncome} min={0} max={10000} onChange={(activeIncome) => set({ activeIncome })} /></Field>
+                <Field label={t('market.listMin')}><NumberInput value={cfg.listMinMessages} min={1} max={10000} onChange={(listMinMessages) => set({ listMinMessages })} /></Field>
+                <Field label={t('market.ipo')}><NumberInput value={cfg.ipoPrice} min={1} max={100000} onChange={(ipoPrice) => set({ ipoPrice })} /></Field>
+                <Field label={t('market.tick')}><NumberInput value={cfg.tickSec} min={15} max={3600} onChange={(tickSec) => set({ tickSec })} /></Field>
+                <Field label={t('market.volatility')} hint={t('market.volatilityHint')}><NumberInput value={cfg.volatility} min={0} max={50} step={0.5} onChange={(volatility) => set({ volatility })} /></Field>
+                <Field label={t('market.decay')} hint={t('market.decayHint')}><NumberInput value={cfg.decayPct} min={0} max={50} step={0.5} onChange={(decayPct) => set({ decayPct })} /></Field>
+                <Field label={t('market.impact')} hint={t('market.impactHint')}><NumberInput value={cfg.impactPct} min={0} max={20} step={0.1} onChange={(impactPct) => set({ impactPct })} /></Field>
+                <Field label={t('market.dividend')} hint={t('market.dividendHint')}><NumberInput value={cfg.dividendPct} min={0} max={20} step={0.1} onChange={(dividendPct) => set({ dividendPct })} /></Field>
+                {COMMAND_KEYS.map((k) => <Field key={k} label={t(`marketCmd.${k}`)}><CommandInput value={cfg.commands[k]} onChange={(v) => set({ commands: { ...cfg.commands, [k]: v } })} /></Field>)}
+                <Field label={t('market.exclude')} hint={t('market.excludeHint')} wide><LinesInput value={cfg.exclude} onChange={(exclude) => set({ exclude })} rows={3} /></Field>
+                <Field label={t('market.tickerCount')}><NumberInput value={cfg.tickerCount} min={1} max={40} onChange={(tickerCount) => set({ tickerCount })} /></Field>
+                <Field label={t('overlays.options')}><Toggle checked={cfg.announceNews} onChange={(announceNews) => set({ announceNews })} label={t('market.news')} /></Field>
+                <LookFields accent={cfg.accentColor} font={cfg.fontFamily} onAccent={(accentColor) => set({ accentColor })} onFont={(fontFamily) => set({ fontFamily })} />
+              </div>
+            </Card>
           )}
-          {market.richest.length > 0 && <><h4 className="muted small">{t('market.richest')}</h4><ol className="leaderboard">{market.richest.map((r) => <li key={r.name}><span>{r.name}</span><b>{r.worth} {cfg.currencyName}</b></li>)}</ol></>}
-        </Card>
-        <Card title={t('market.admin')}>
-          <div className="form">
-            <Field label={t('market.grantWho')}><TextInput value={login} onChange={setLogin} placeholder="@nick" /></Field>
-            <Field label={t('market.grantAmount')} hint={t('market.grantHint')}><NumberInput value={amount} min={-1000000} max={1000000} onChange={setAmount} /></Field>
-          </div>
-          <div className="row-gap">
-            <Button size="sm" icon="coin" disabled={!login.trim()} onClick={() => void callOk('market:grant', login, amount).then((ok) => ok && setLogin(''))}>{t('market.grant')}</Button>
-            <Button size="sm" variant="danger" icon="trash" onClick={() => confirm(t('market.resetConfirm')) && void call('market:reset')}>{t('market.reset')}</Button>
-          </div>
-        </Card>
-        <Card title={t('market.settings')}>
-          <div className="form">
-            <Field label={t('market.currency')}><TextInput value={cfg.currencyName} onChange={(currencyName) => set({ currencyName })} /></Field>
-            <Field label={t('market.startBalance')}><NumberInput value={cfg.startBalance} min={0} max={1000000} onChange={(startBalance) => set({ startBalance })} /></Field>
-            <Field label={t('market.earn')} hint={t('market.earnHint')}><NumberInput value={cfg.earnPerMessage} min={0} max={10000} onChange={(earnPerMessage) => set({ earnPerMessage })} /></Field>
-            <Field label={t('market.earnCooldown')}><NumberInput value={cfg.earnCooldownSec} min={0} max={3600} onChange={(earnCooldownSec) => set({ earnCooldownSec })} /></Field>
-            <Field label={t('market.income')} hint={t('market.incomeHint')}><NumberInput value={cfg.activeIncome} min={0} max={10000} onChange={(activeIncome) => set({ activeIncome })} /></Field>
-            <Field label={t('market.listMin')}><NumberInput value={cfg.listMinMessages} min={1} max={10000} onChange={(listMinMessages) => set({ listMinMessages })} /></Field>
-            <Field label={t('market.ipo')}><NumberInput value={cfg.ipoPrice} min={1} max={100000} onChange={(ipoPrice) => set({ ipoPrice })} /></Field>
-            <Field label={t('market.tick')}><NumberInput value={cfg.tickSec} min={15} max={3600} onChange={(tickSec) => set({ tickSec })} /></Field>
-            <Field label={t('market.volatility')} hint={t('market.volatilityHint')}><NumberInput value={cfg.volatility} min={0} max={50} step={0.5} onChange={(volatility) => set({ volatility })} /></Field>
-            <Field label={t('market.decay')} hint={t('market.decayHint')}><NumberInput value={cfg.decayPct} min={0} max={50} step={0.5} onChange={(decayPct) => set({ decayPct })} /></Field>
-            <Field label={t('market.impact')} hint={t('market.impactHint')}><NumberInput value={cfg.impactPct} min={0} max={20} step={0.1} onChange={(impactPct) => set({ impactPct })} /></Field>
-            <Field label={t('market.dividend')} hint={t('market.dividendHint')}><NumberInput value={cfg.dividendPct} min={0} max={20} step={0.1} onChange={(dividendPct) => set({ dividendPct })} /></Field>
-            {COMMAND_KEYS.map((k) => <Field key={k} label={t(`marketCmd.${k}`)}><CommandInput value={cfg.commands[k]} onChange={(v) => set({ commands: { ...cfg.commands, [k]: v } })} /></Field>)}
-            <Field label={t('market.exclude')} hint={t('market.excludeHint')} wide><LinesInput value={cfg.exclude} onChange={(exclude) => set({ exclude })} rows={3} /></Field>
-            <Field label={t('market.tickerCount')}><NumberInput value={cfg.tickerCount} min={1} max={40} onChange={(tickerCount) => set({ tickerCount })} /></Field>
-            <Field label={t('overlays.options')}><Toggle checked={cfg.announceNews} onChange={(announceNews) => set({ announceNews })} label={t('market.news')} /></Field>
-            <LookFields accent={cfg.accentColor} font={cfg.fontFamily} onAccent={(accentColor) => set({ accentColor })} onFont={(fontFamily) => set({ fontFamily })} />
-          </div>
-        </Card>
+        </div>
+        <aside className="fun-side">
+          <OverlayPreview kind="stocks" maxHeight={80} />
+        </aside>
       </div>
-      <aside className="fun-side">
-        <OverlayPreview kind="stocks" maxHeight={80} />
-        <OverlayBar kind="stocks" name={t('ov.stocks')} />
-      </aside>
     </div>
   );
 }
@@ -441,53 +477,62 @@ export function PortalModule() {
   const prefix = useApp((d) => d.settings!.bot.prefix);
   const portal = useApp((d) => d.state!.portal);
   const clock = useClock();
+  const [tab, setTab] = useState<'control' | 'settings'>('control');
   const set = (patch: Partial<PortalSettings>) => saveSettings('portal', { ...cfg, ...patch });
   return (
-    <div className="fun-split">
-      <div className="fun-main">
-        <Card className="control-card">
-          <div className="control-row">
-            <Toggle checked={cfg.enabled} onChange={(enabled) => set({ enabled })} label={<b>{t('portal.open')}</b>} />
-            <div className="control-status">
-              <span className="muted small">{portal.channel ? `twitch.tv/${portal.channel}` : t('portal.noPartner')}</span>
-              <b><StatusText status={portal.status} error={portal.error} /></b>
-            </div>
-            <Button size="sm" icon="sparkle" onClick={() => void call('portal:test')}>{t('portal.test')}</Button>
-          </div>
-          <div className="form">
-            <Field label={t('portal.partner')} hint={t('portal.partnerHint')} wide><TextInput value={cfg.partner} onChange={(partner) => set({ partner })} placeholder="twitch.tv/…" /></Field>
-          </div>
-          <p className="muted small">{t('portal.howto', { command: `${prefix}${cfg.command}` })}</p>
-        </Card>
-        <Card title={t('portal.recent')}>
-          {portal.messages.length === 0 ? <Empty icon="portal" title={t('portal.quiet')} /> : (
-            <ul className="portal-log">
-              {portal.messages.map((m) => <li key={m.id}><span className="muted small">{clock(m.at)} {m.direction === 'in' ? '⬅' : '➡'}</span> <b style={m.color ? { color: m.color } : undefined}>{m.userName}</b> {m.text}</li>)}
-            </ul>
-          )}
-        </Card>
-        <Card title={t('portal.settings')}>
-          <div className="form">
-            <Field label={t('portal.mode')}><Select value={cfg.mode} onChange={(mode) => set({ mode })} options={(['command', 'all'] as const).map((v) => ({ value: v, label: t(`portalMode.${v}`) }))} /></Field>
-            <Field label={t('portal.command')}><CommandInput value={cfg.command} onChange={(command) => set({ command })} /></Field>
-            <Field label={t('portal.rate')}><NumberInput value={cfg.maxPerMinute} min={1} max={120} onChange={(maxPerMinute) => set({ maxPerMinute })} /></Field>
-            <Field label={t('portal.duration')}><NumberInput value={cfg.durationSec} min={3} max={60} onChange={(durationSec) => set({ durationSec })} /></Field>
-            <Field label={t('portal.side')}><Select value={cfg.side} onChange={(side) => set({ side })} options={(['left', 'right'] as const).map((v) => ({ value: v, label: t(`portalSide.${v}`) }))} /></Field>
-            <Field label={t('overlays.options')} wide>
-              <div className="stack">
-                <Toggle checked={cfg.showOutgoing} onChange={(showOutgoing) => set({ showOutgoing })} label={t('portal.outgoing')} />
-                <Toggle checked={cfg.relayToChat} onChange={(relayToChat) => set({ relayToChat })} label={t('portal.relay')} />
+    <div className="module-tabbed">
+      <OverlayBar kind="portal" name={t('ov.portal')} />
+      <Tabs value={tab} onChange={setTab} tabs={[{ id: 'control', label: t('fun.tab.control') }, { id: 'settings', label: t('fun.tab.settings') }]} />
+      <div className="fun-split">
+        <div className="fun-main">
+          {tab === 'control' ? (
+            <>
+              <Card className="control-card">
+                <div className="control-row">
+                  <Toggle checked={cfg.enabled} onChange={(enabled) => set({ enabled })} label={<b>{t('portal.open')}</b>} />
+                  <div className="control-status">
+                    <span className="muted small">{portal.channel ? `twitch.tv/${portal.channel}` : t('portal.noPartner')}</span>
+                    <b><StatusText status={portal.status} error={portal.error} /></b>
+                  </div>
+                  <Button size="sm" icon="sparkle" onClick={() => void call('portal:test')}>{t('portal.test')}</Button>
+                </div>
+                <div className="form">
+                  <Field label={t('portal.partner')} hint={t('portal.partnerHint')} wide><TextInput value={cfg.partner} onChange={(partner) => set({ partner })} placeholder="twitch.tv/…" /></Field>
+                </div>
+                <p className="muted small">{t('portal.howto', { command: `${prefix}${cfg.command}` })}</p>
+              </Card>
+              <Card title={t('portal.recent')}>
+                {portal.messages.length === 0 ? <Empty icon="portal" title={t('portal.quiet')} /> : (
+                  <ul className="portal-log">
+                    {portal.messages.map((m) => <li key={m.id}><span className="muted small">{clock(m.at)} {m.direction === 'in' ? '⬅' : '➡'}</span> <b style={m.color ? { color: m.color } : undefined}>{m.userName}</b> {m.text}</li>)}
+                  </ul>
+                )}
+              </Card>
+            </>
+          ) : (
+            <Card title={t('portal.settings')}>
+              <div className="form">
+                <Field label={t('portal.mode')}><Select value={cfg.mode} onChange={(mode) => set({ mode })} options={(['command', 'all'] as const).map((v) => ({ value: v, label: t(`portalMode.${v}`) }))} /></Field>
+                <Field label={t('portal.command')}><CommandInput value={cfg.command} onChange={(command) => set({ command })} /></Field>
+                <Field label={t('portal.rate')}><NumberInput value={cfg.maxPerMinute} min={1} max={120} onChange={(maxPerMinute) => set({ maxPerMinute })} /></Field>
+                <Field label={t('portal.duration')}><NumberInput value={cfg.durationSec} min={3} max={60} onChange={(durationSec) => set({ durationSec })} /></Field>
+                <Field label={t('portal.side')}><Select value={cfg.side} onChange={(side) => set({ side })} options={(['left', 'right'] as const).map((v) => ({ value: v, label: t(`portalSide.${v}`) }))} /></Field>
+                <Field label={t('overlays.options')} wide>
+                  <div className="stack">
+                    <Toggle checked={cfg.showOutgoing} onChange={(showOutgoing) => set({ showOutgoing })} label={t('portal.outgoing')} />
+                    <Toggle checked={cfg.relayToChat} onChange={(relayToChat) => set({ relayToChat })} label={t('portal.relay')} />
+                  </div>
+                </Field>
+                <LookFields accent={cfg.accentColor} font={cfg.fontFamily} onAccent={(accentColor) => set({ accentColor })} onFont={(fontFamily) => set({ fontFamily })} />
               </div>
-            </Field>
-            <LookFields accent={cfg.accentColor} font={cfg.fontFamily} onAccent={(accentColor) => set({ accentColor })} onFont={(fontFamily) => set({ fontFamily })} />
-          </div>
-          <p className="muted small">{t('portal.safety')}</p>
-        </Card>
+              <p className="muted small">{t('portal.safety')}</p>
+            </Card>
+          )}
+        </div>
+        <aside className="fun-side">
+          <OverlayPreview kind="portal" maxHeight={300} />
+        </aside>
       </div>
-      <aside className="fun-side">
-        <OverlayPreview kind="portal" maxHeight={300} />
-        <OverlayBar kind="portal" name={t('ov.portal')} />
-      </aside>
     </div>
   );
 }

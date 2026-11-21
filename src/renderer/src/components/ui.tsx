@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from 'react';
 import type { ConnectionStatus } from '@shared/types';
 import { useT } from '../i18n';
-import { call } from '../store';
+import { call, resolveConfirm, useConfirm } from '../store';
 import { Icon, type IconName } from './icons';
 
 type Variant = 'primary' | 'secondary' | 'ghost' | 'danger';
@@ -185,6 +185,146 @@ export function ColorInput({ value, onChange }: { value: string; onChange: (v: s
     <div className="color-input">
       <input type="color" value={hex} onChange={(e) => onChange(e.target.value)} />
       <input className="input mono" value={value} onChange={(e) => onChange(e.target.value)} spellCheck={false} />
+    </div>
+  );
+}
+
+function parseRgba(raw: string): { hex: string; alpha: number; transparent: boolean } {
+  const trimmed = raw.trim().toLowerCase();
+  if (!trimmed || trimmed === 'transparent') return { hex: '#14121c', alpha: 0, transparent: true };
+  const hex6 = /^#([0-9a-f]{6})$/i.exec(trimmed);
+  if (hex6) return { hex: `#${hex6[1]}`, alpha: 100, transparent: false };
+  const hex8 = /^#([0-9a-f]{6})([0-9a-f]{2})$/i.exec(trimmed);
+  if (hex8) {
+    const alpha = Math.round((parseInt(hex8[2], 16) / 255) * 100);
+    return { hex: `#${hex8[1]}`, alpha, transparent: alpha === 0 };
+  }
+  const rgba = /^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*([\d.]+))?\s*\)$/i.exec(trimmed);
+  if (rgba) {
+    const toHex = (n: string) => Math.max(0, Math.min(255, Number(n))).toString(16).padStart(2, '0');
+    const alpha = rgba[4] === undefined ? 100 : Math.round(Math.max(0, Math.min(1, Number(rgba[4]))) * 100);
+    return { hex: `#${toHex(rgba[1])}${toHex(rgba[2])}${toHex(rgba[3])}`, alpha, transparent: alpha === 0 };
+  }
+  return { hex: '#14121c', alpha: 80, transparent: false };
+}
+
+function formatRgba(hex: string, alpha: number): string {
+  if (alpha <= 0) return 'transparent';
+  const clean = /^#([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!clean) return hex;
+  const n = parseInt(clean[1], 16);
+  const r = (n >> 16) & 255;
+  const g = (n >> 8) & 255;
+  const b = n & 255;
+  if (alpha >= 100) return `rgb(${r},${g},${b})`;
+  return `rgba(${r},${g},${b},${Number((alpha / 100).toFixed(2))})`;
+}
+
+/** Visual color + opacity picker that stores standard CSS rgba(...) / transparent strings. */
+export function RgbaColorInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const t = useT();
+  const parsed = parseRgba(value);
+  return (
+    <div className="rgba-input">
+      <div className="rgba-top">
+        <label className="rgba-swatch" title={t('ui.pickColor')}>
+          <span className="rgba-swatch-preview" style={{ background: parsed.transparent ? 'transparent' : value }} />
+          <input
+            type="color"
+            value={parsed.hex}
+            onChange={(e) => onChange(formatRgba(e.target.value, parsed.alpha || 75))}
+          />
+        </label>
+        <div className="rgba-slider">
+          <input
+            type="range"
+            min={0}
+            max={100}
+            step={5}
+            value={parsed.alpha}
+            aria-label={t('ui.opacity')}
+            onChange={(e) => onChange(formatRgba(parsed.hex, Number(e.target.value)))}
+          />
+          <output>{parsed.alpha}%</output>
+        </div>
+        <button
+          type="button"
+          className={`btn btn-ghost btn-sm rgba-clear ${parsed.transparent ? 'active' : ''}`}
+          onClick={() => onChange(parsed.transparent ? formatRgba(parsed.hex, 75) : 'transparent')}
+        >
+          {t('ui.transparent')}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** Horizontal setting row: title + hint on the left, control aligned on the right. */
+export function SettingRow({ label, hint, children }: { label: ReactNode; hint?: ReactNode; children: ReactNode }) {
+  return (
+    <div className="setting-row">
+      <div className="setting-row-info">
+        <span className="setting-row-label">{label}</span>
+        {hint && <span className="setting-row-hint">{hint}</span>}
+      </div>
+      <div className="setting-row-control">{children}</div>
+    </div>
+  );
+}
+
+/** Stacked SettingRow items with clean hairline dividers. */
+export function SettingList({ children }: { children: ReactNode }) {
+  return <div className="setting-list">{children}</div>;
+}
+
+/** Progressive-disclosure block for secondary / technical settings. */
+export function AdvancedSection({ title, children, defaultOpen = false }: { title?: ReactNode; children: ReactNode; defaultOpen?: boolean }) {
+  const t = useT();
+  return (
+    <details className="advanced-section" open={defaultOpen || undefined}>
+      <summary>
+        <Icon name="sliders" size={14} />
+        <span>{title ?? t('ui.advanced')}</span>
+        <Icon name="chevronDown" size={14} className="advanced-chevron" />
+      </summary>
+      <div className="advanced-body">{children}</div>
+    </details>
+  );
+}
+
+/** In-app confirmation modal replacing native window.confirm(). */
+export function ConfirmModal() {
+  const t = useT();
+  const req = useConfirm();
+  const confirmBtn = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (!req) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { e.preventDefault(); resolveConfirm(false); }
+    };
+    window.addEventListener('keydown', onKey);
+    const id = setTimeout(() => confirmBtn.current?.focus(), 0);
+    return () => { window.removeEventListener('keydown', onKey); clearTimeout(id); };
+  }, [req]);
+  if (!req) return null;
+  return (
+    <div className="confirm-backdrop" onMouseDown={() => resolveConfirm(false)}>
+      <section className="confirm-dialog" role="alertdialog" aria-modal="true" aria-label={req.title ?? t('ui.confirmTitle')} onMouseDown={(e) => e.stopPropagation()}>
+        <h3>{req.title ?? t('ui.confirmTitle')}</h3>
+        <p>{req.message}</p>
+        <div className="confirm-actions">
+          <Button variant="secondary" onClick={() => resolveConfirm(false)}>{req.cancelLabel ?? t('common.cancel')}</Button>
+          <button
+            ref={confirmBtn}
+            type="button"
+            className={`btn btn-${req.danger ? 'danger' : 'primary'} btn-md`}
+            data-confirm-accept
+            onClick={() => resolveConfirm(true)}
+          >
+            {req.confirmLabel ?? t('ui.confirmOk')}
+          </button>
+        </div>
+      </section>
     </div>
   );
 }

@@ -133,8 +133,12 @@ p {
 
 .app {
   display: grid;
-  grid-template-columns: 224px minmax(0, 1fr);
+  grid-template-columns: 244px minmax(0, 1fr);
   height: 100%;
+  transition: grid-template-columns 0.18s var(--ease-out);
+}
+.app.sidebar-collapsed {
+  grid-template-columns: 64px minmax(0, 1fr);
 }
 
 .sidebar {
@@ -142,43 +146,72 @@ p {
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
-  padding: 16px 10px 12px;
+  padding: 14px 10px 10px;
   min-height: 0;
-  overflow-y: auto;
-  scrollbar-gutter: stable;
+  overflow: hidden;
+  gap: 8px;
 }
 .sidebar > * { flex-shrink: 0; }
+
+.sidebar-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-right: 2px;
+  margin-right: -2px;
+}
 
 .brand-logo {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 2px 8px 18px;
+  gap: 9px;
+  padding: 2px 4px 6px;
+}
+.sidebar-collapsed .brand-logo {
+  flex-direction: column;
+  gap: 6px;
+  padding: 2px 0 4px;
+}
+.sidebar-collapse-btn {
+  margin-left: auto;
+  width: 26px;
+  height: 26px;
+  color: var(--muted);
+}
+.sidebar-collapse-btn:hover {
+  color: var(--text);
+  background: var(--panel-2);
+}
+.sidebar-collapsed .sidebar-collapse-btn {
+  margin-left: 0;
 }
 .logo-mark {
-  width: 30px;
-  height: 30px;
-  border-radius: 9px;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  flex: none;
   display: grid;
   place-items: center;
   color: #fff;
   background: linear-gradient(135deg, var(--accent-text), var(--accent-strong));
-  box-shadow: 0 4px 14px color-mix(in srgb, var(--accent) 33%, transparent);
+  box-shadow: 0 3px 10px color-mix(in srgb, var(--accent) 28%, transparent);
 }
 .logo-text {
   font-weight: 700;
-  font-size: 15px;
-  letter-spacing: -0.01em;
+  font-size: 14.5px;
+  letter-spacing: -0.02em;
 }
 .live-pill {
-  margin-left: auto;
-  font-size: 10px;
+  font-size: 9.5px;
   font-weight: 800;
   letter-spacing: 0.08em;
   background: var(--danger);
   color: #fff;
   border-radius: 5px;
-  padding: 1px 6px;
+  padding: 1px 5px;
   animation: pulse 2s infinite;
 }
 @keyframes pulse {
@@ -199,19 +232,31 @@ p {
   width: 100%;
   display: flex;
   align-items: center;
-  gap: 11px;
-  padding: 9px 12px;
+  gap: 10px;
+  padding: 8px 10px;
   border: 0;
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-2);
   font: inherit;
+  font-size: 13.5px;
   font-weight: 500;
   cursor: pointer;
   text-align: left;
   transition:
-    background 0.15s,
-    color 0.15s;
+    background 0.14s,
+    color 0.14s;
+}
+.sidebar li button > span:first-of-type {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sidebar-collapsed .sidebar li button {
+  justify-content: center;
+  padding: 9px 0;
 }
 .sidebar li button:hover {
   background: var(--panel-2);
@@ -220,9 +265,116 @@ p {
 .sidebar li button.active {
   background: var(--accent-soft);
   color: var(--text-strong);
+  font-weight: 550;
 }
 .sidebar li button.active svg {
   color: var(--accent);
+}
+.nav-pill {
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  padding: 1px 6px;
+  border-radius: 99px;
+  background: var(--panel-2);
+  color: var(--muted);
+}
+.nav-pill.ok {
+  background: color-mix(in srgb, var(--success) 16%, transparent);
+  color: var(--success);
+}
+
+.sidebar-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+.sidebar-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+}
+.sidebar-section-toggle {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  text-align: left;
+}
+.sidebar-section-toggle:hover {
+  color: var(--text-2);
+  background: var(--panel-2);
+}
+.sidebar-section-toggle b {
+  margin-left: auto;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--faint);
+}
+.sidebar-section-toggle svg,
+.sidebar-group-label svg {
+  transition: transform 0.15s;
+}
+.sidebar-section-toggle svg.rotated,
+.sidebar-group-label svg.rotated {
+  transform: rotate(-90deg);
+}
+.sidebar-mini-add {
+  width: 24px;
+  height: 24px;
+  color: var(--muted);
+}
+.sidebar-mini-add:hover {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.sidebar-module-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.sidebar-group-label {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 3px 10px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--faint);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+}
+.sidebar-group-label:hover {
+  color: var(--muted);
+}
+.sidebar .sidebar-module-btn {
+  padding: 6px 10px;
+  font-size: 13px;
+}
+.sidebar-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 6px;
 }
 
 .profile-current {
@@ -230,16 +382,23 @@ p {
   align-items: center;
   gap: 8px;
   width: 100%;
-  padding: 8px 10px;
+  padding: 7px 10px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--panel);
   color: var(--text-2);
   font: inherit;
+  font-size: 13px;
   cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+.sidebar-collapsed .profile-current,
+.sidebar-collapsed .search-btn {
+  justify-content: center;
+  padding: 8px 0;
 }
 .profile-current span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
-.profile-current:hover { border-color: var(--accent); color: var(--text); }
+.profile-current:hover { border-color: var(--border-hover); color: var(--text); }
 
 .side-status {
   margin-top: auto;
@@ -333,6 +492,7 @@ p {
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: var(--radius);
+  box-shadow: var(--shadow-card, none);
   min-width: 0;
 }
 .card.disabled > .card-body,

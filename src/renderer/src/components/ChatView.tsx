@@ -2,7 +2,7 @@ import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { ChatMessage } from '@shared/types';
 import { useClock } from '../hooks';
 import { useT } from '../i18n';
-import { call, callOk, useApp } from '../store';
+import { askConfirm, call, callOk, useApp } from '../store';
 import { Icon } from './icons';
 import { Empty, IconButton } from './ui';
 
@@ -70,7 +70,7 @@ const Message = memo(function Message({ m, canModerate, onReply }: { m: ChatMess
             <>
               <IconButton icon="trash" label={t('chat.delete')} onClick={() => void call('chat:delete', m.id)} />
               <IconButton icon="clock" label={t('chat.timeout')} onClick={() => void call('chat:timeout', m.userId, 600)} />
-              <IconButton icon="ban" label={t('chat.ban')} variant="danger" onClick={() => confirm(t('chat.banConfirm', { user: m.userName })) && void call('chat:ban', m.userId)} />
+              <IconButton icon="ban" label={t('chat.ban')} variant="danger" onClick={() => void askConfirm({ message: t('chat.banConfirm', { user: m.userName }), danger: true }).then((ok) => ok && void call('chat:ban', m.userId))} />
             </>
           )}
         </span>

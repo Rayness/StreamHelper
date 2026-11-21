@@ -4,6 +4,7 @@ import type { AppearanceSettings, Language } from '@shared/types';
 import { ACCENTS, saveAppearance, THEMES, useAppearance } from '../appearance';
 import { Icon, type IconName } from '../components/icons';
 import { Button, Card, Field, NumberInput, PageHeader, Select, TextInput, Toggle } from '../components/ui';
+import { OverlayStylePresets } from '../overlayPresets';
 import { useT, type TKey } from '../i18n';
 import { call, saveSettings, useApp, useSub } from '../store';
 import { RemoteAccess } from './RemoteAccess';
@@ -110,6 +111,10 @@ function Appearance() {
         </div>
       </Card>
 
+      <Card title={t('ovStyle.titleAll')} icon="sparkle">
+        <OverlayStylePresets bare />
+      </Card>
+
       <Card title={t('look.glass')} icon="sparkle" actions={<Toggle checked={look.glass} onChange={(glass) => set({ glass })} label={look.glass ? t('common.on') : t('common.off')} />}>
         <p className="muted small">{t('look.glassHint')}</p>
         {look.glass && (
@@ -211,9 +216,13 @@ function Updates() {
 
 export const SHORTCUTS: { keys: string; label: TKey }[] = [
   { keys: 'Ctrl K', label: 'keys.palette' },
-  { keys: 'Ctrl 1', label: 'keys.workspace' },
-  { keys: 'Ctrl 2', label: 'keys.monitor' },
+  { keys: 'Ctrl 1', label: 'keys.monitor' },
+  { keys: 'Ctrl 2', label: 'keys.workspace' },
   { keys: 'Ctrl 3', label: 'keys.connections' },
+  { keys: 'Ctrl 4', label: 'keys.designer' },
+  { keys: 'Ctrl 5', label: 'keys.variables' },
+  { keys: 'Ctrl 6', label: 'keys.eventStudio' },
+  { keys: 'Ctrl B', label: 'keys.sidebar' },
   { keys: 'Ctrl ,', label: 'keys.settings' },
   { keys: 'Ctrl Shift L', label: 'keys.theme' },
   { keys: 'Esc', label: 'keys.close' },

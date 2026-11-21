@@ -216,8 +216,8 @@
 }
 .ov-split {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(360px, 0.9fr);
-  gap: 16px;
+  grid-template-columns: minmax(0, 1.25fr) minmax(300px, 0.75fr);
+  gap: 18px;
   align-items: start;
 }
 .ov-split.stacked {
@@ -275,11 +275,25 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  padding: 8px 8px 8px 12px;
+  padding: 8px 10px 8px 14px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--panel);
+  box-shadow: var(--shadow-card, none);
   min-width: 0;
+}
+.ov-bar-sep {
+  width: 1px;
+  height: 16px;
+  background: var(--border);
+  flex: none;
+}
+.ov-add {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 .ov-state {
   display: inline-flex;
@@ -305,22 +319,26 @@
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--success) 13%, transparent);
 }
 .ov-url {
-  flex: 1 1 240px;
+  flex: 0 1 auto;
   min-width: 0;
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 7px;
-  height: 30px;
+  gap: 6px;
+  height: 28px;
   padding: 0 10px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  background: var(--input-bg);
+  background: var(--panel-2);
   color: var(--text-2);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
   cursor: copy;
-  transition: border-color 0.15s;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
 }
 .ov-url:hover {
   border-color: var(--border-hover);
+  background: var(--panel-3);
   color: var(--text);
 }
 .ov-url span {
@@ -337,6 +355,30 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+.ov-preview-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+  box-shadow: var(--shadow-card, none);
+}
+.ov-preview-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.ov-preview-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+.ov-preview-title svg {
+  color: var(--muted);
 }
 .ov-preview-actions {
   display: flex;
@@ -417,8 +459,8 @@
 }
 .fun-split {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(360px, 0.8fr);
-  gap: 16px;
+  grid-template-columns: minmax(0, 1.25fr) minmax(300px, 0.75fr);
+  gap: 18px;
   align-items: start;
 }
 .fun-main {
