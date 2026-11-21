@@ -66,8 +66,8 @@
     let lastKey = '';
     function sourceLabel(source) {
       const names = lang === 'en'
-        ? { spotify: 'Spotify', yandex: 'Yandex Music', browser: 'Browser', other: 'Now playing' }
-        : { spotify: 'Spotify', yandex: 'Яндекс Музыка', browser: 'Браузер', other: 'Сейчас играет' };
+        ? { spotify: 'Spotify', yandex: 'Yandex Music', youtubeMusic: 'YouTube Music', youtube: 'YouTube', browser: 'Browser', other: 'Now playing' }
+        : { spotify: 'Spotify', yandex: 'Яндекс Музыка', youtubeMusic: 'YouTube Music', youtube: 'YouTube', browser: 'Браузер', other: 'Сейчас играет' };
       return names[source] || names.other;
     }
     function progress() {
@@ -99,7 +99,7 @@
       document.documentElement.style.setProperty('--title-size', `${Math.max(16, Math.min(48, Number(config.fontSize) || 25))}px`);
       document.documentElement.style.setProperty('--accent', /^#[0-9a-fA-F]{6}$/.test(config.accentColor) ? config.accentColor : '#1db954');
       if (!current) return;
-      $('source').textContent = sourceLabel(current.source);
+      $('source').textContent = current.site || sourceLabel(current.source);
       $('paused').textContent = lang === 'en' ? 'Paused' : 'Пауза';
       $('title').textContent = current.title;
       $('artist').textContent = current.artist || (lang === 'en' ? 'Unknown artist' : 'Неизвестный исполнитель');

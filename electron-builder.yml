@@ -15,6 +15,8 @@ files:
 extraResources:
   - from: resources/overlays
     to: overlays
+  - from: resources/browser-music
+    to: browser-music
   - from: resources/icon.png
     to: icon.png
 asarUnpack:

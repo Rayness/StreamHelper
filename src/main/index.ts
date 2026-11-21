@@ -20,6 +20,7 @@ import { SecretStore } from './core/secrets';
 import { StateHub } from './core/state';
 import { SettingsStore } from './core/store';
 import { DonationAlertsService } from './donations/donationalerts';
+import { DonateXService } from './donations/donatex';
 import { StreamlabsService } from './donations/streamlabs';
 import { YandexMusicService, tokenFromRedirect } from './integrations/yandexMusic';
 import { LOCAL_SONGS_DIR } from './features/songRequests';
@@ -37,6 +38,8 @@ import { BossService } from './features/boss';
 import { ChatHistory, sampleChatMessage } from './features/chatHistory';
 import { EmoteRain } from './features/emotes';
 import { MusicService } from './features/music';
+import { BrowserMusicBridge } from './features/browserMusic';
+import { isMusicSource } from '@shared/musicSources';
 import { SongRequestService } from './features/songRequests';
 import { GiveawayService } from './features/giveaway';
 import { PollService } from './features/poll';
@@ -155,6 +158,7 @@ async function bootstrap(): Promise<void> {
   const streamlabs = new StreamlabsService(ctx);
   const yandexMusic = new YandexMusicService(ctx, undefined, openYandexLogin);
   const streamelements = new StreamElementsService(ctx);
+  const donatex = new DonateXService(ctx);
   const streamerbot = new StreamerBotService(ctx);
   const discord = new DiscordService(ctx);
   const telegram = new TelegramService(ctx);
@@ -196,6 +200,7 @@ async function bootstrap(): Promise<void> {
       if (await authRoute(req, res, url)) return true;
       if (await dockRoute(req, res, url)) return true;
       if (await captionsRoute(req, res, url)) return true;
+      if (await music.browserBridge.route(req, res, url)) return true;
       if (url.pathname === '/overlay/fonts/system.json' && req.method === 'GET') {
         // Overlays only fetch web fonts for families that aren't installed.
         res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
@@ -455,9 +460,9 @@ async function bootstrap(): Promise<void> {
         case 'songVideoLayout': if (id === 'full' || id === 'compact' || id === 'queue') return void settings.set('songRequests', { ...settings.get('songRequests'), videoLayout: id }); break;
         case 'songVolume': if (id !== undefined && /^\d{1,3}$/.test(id)) return void settings.set('songRequests', { ...settings.get('songRequests'), volume: Math.max(0, Math.min(100, Number(id))) }); break;
         case 'musicArtwork': return void settings.set('musicOverlay', { ...settings.get('musicOverlay'), showArtwork: !settings.get('musicOverlay').showArtwork });
-        case 'musicPlay': if (id === 'spotify' || id === 'yandex' || id === 'browser' || id === 'other') return music.control(id, 'play'); break;
-        case 'musicPause': if (id === 'spotify' || id === 'yandex' || id === 'browser' || id === 'other') return music.control(id, 'pause'); break;
-        case 'musicNext': if (id === 'spotify' || id === 'yandex' || id === 'browser' || id === 'other') return music.control(id, 'next'); break;
+        case 'musicPlay': if (isMusicSource(id)) return music.control(id, 'play'); break;
+        case 'musicPause': if (isMusicSource(id)) return music.control(id, 'pause'); break;
+        case 'musicNext': if (isMusicSource(id)) return music.control(id, 'next'); break;
         case 'bannerToggle': if (id) return text.toggle(id); break;
         case 'goalReset': if (id) { const goal = settings.get('goals').find((item) => item.id === id); if (goal) return progress.addToGoal(id, -goal.current); } break;
         case 'goalAdd': if (id) return progress.addToGoal(id, 1); break;
@@ -619,6 +624,8 @@ async function bootstrap(): Promise<void> {
     'streamlabs:disconnect': () => streamlabs.disconnect(),
     'streamelements:connect': (channelId, token) => streamelements.connect(channelId, token),
     'streamelements:disconnect': () => streamelements.disconnect(),
+    'donatex:connect': (token) => donatex.connect(token),
+    'donatex:disconnect': () => donatex.disconnect(),
     'streamerbot:connect': (port) => streamerbot.connect(port),
     'streamerbot:disconnect': () => streamerbot.disconnect(),
     'streamerbot:refresh': () => streamerbot.refresh(),
@@ -687,6 +694,18 @@ async function bootstrap(): Promise<void> {
     },
     'song:jamAdd': (url, name) => songRequests.addJam(url, name),
     'music:control': (source, action) => music.control(source, action),
+    'music:browserPairing': () => {
+      let token = secrets.get('browserMusicToken');
+      if (!token) {
+        token = randomBytes(32).toString('hex');
+        secrets.set('browserMusicToken', token);
+      }
+      return BrowserMusicBridge.pairing(overlay.port, token);
+    },
+    'music:browserExtension': async () => {
+      const error = await shell.openPath(join(resourcesDir(), 'browser-music'));
+      if (error) throw new Error(error);
+    },
     'subs:check': () => subForStream.check(),
     'subs:clear': () => subForStream.clear(),
     'stats:reset': () => progress.resetStats(),
@@ -829,6 +848,7 @@ async function bootstrap(): Promise<void> {
   streamlabs.start();
   yandexMusic.start();
   streamelements.start();
+  void donatex.start();
   streamerbot.start();
   discord.start();
   telegram.start();
@@ -861,6 +881,7 @@ async function bootstrap(): Promise<void> {
     yandexMusic.release(true);
     yandexMusic.stop();
     streamelements.stop();
+    donatex.stop();
     streamerbot.stop();
     subForStream.stop();
     kawaki.stop();

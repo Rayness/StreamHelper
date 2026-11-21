@@ -1,7 +1,7 @@
 import { timerAdd, timerPause, timerReset, timerStart } from '@shared/timer';
 import type { ChatMessage, Goal, OverlayTimer, StreamEvent } from '@shared/types';
 import { emptyStats } from '@shared/defaults';
-import { donationAmount } from '@shared/events';
+import { donationAmount, isDonationSource } from '@shared/events';
 import type { AppContext } from '../core/context';
 import { appendDonation, donationRecord } from '@shared/donations';
 import { applyEventToStats } from './vars';
@@ -17,8 +17,7 @@ export function goalIncrement(goal: Goal, e: StreamEvent): number {
       return e.type === 'cheer' ? e.bits : 0;
     case 'donations':
       if (e.type !== 'donation') return 0;
-      if (goal.donationSources && ['donationalerts', 'streamlabs', 'streamelements'].includes(e.source)
-        && !goal.donationSources.includes(e.source as import('@shared/types').DonationSource)) return 0;
+      if (goal.donationSources && isDonationSource(e.source) && !goal.donationSources.includes(e.source)) return 0;
       // Prefer the provider's conversion into the streamer's currency; otherwise only count matching currency.
       {
         const amount = donationAmount(e, goal.currency) ?? 0;

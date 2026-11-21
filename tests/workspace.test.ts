@@ -4,7 +4,7 @@ import { isWorkspaceModule, monitorCards, normalizeMonitorLayout, reorderCards, 
 
 describe('module-owned workspace', () => {
   it('moves services out of the workspace while retaining OBS controls', () => {
-    expect(workspaceCards(['twitch','obs','donationalerts','chat','subforstream'])).toEqual(['obs','chat']);
+    expect(workspaceCards(['twitch','obs','donationalerts','donatex','chat','subforstream'])).toEqual(['obs','chat']);
   });
   it('keeps a monitor order independent from installed module order and restores hidden cards', () => {
     const layout={order:['events','chat','alerts'],hidden:['chat'],sizes:{chat:{width:2,height:'tall'}}};
@@ -34,6 +34,7 @@ describe('module-owned workspace', () => {
     expect(workspaceTarget('interactive','quiz')).toBe('quiz');
     expect(workspaceTarget('connections')).toBe('twitch');
     expect(workspaceTarget('connections','donationalerts')).toBe('donationalerts');
+    expect(workspaceTarget('connections','donatex')).toBe('donatex');
     expect(workspaceTarget('settings')).toBeUndefined();
     expect(workspaceTarget('unknown','alerts')).toBeUndefined();
     expect(resolveModuleAccess(workspaceTarget('interactive','quiz'),['poll'])).toEqual({catalog:'quiz'});
@@ -43,7 +44,7 @@ describe('module-owned workspace', () => {
     expect(normalizeWorkspaceCards(['activities','counters','counter','chat','chat','unknown'])).toEqual(['wheel','poll','giveaway','queue','guess','quiz','boss','counter','chat']);
   });
   it('module registry contains only unique supported IDs', () => {
-    expect(WORKSPACE_CARDS.length).toBe(52);
+    expect(WORKSPACE_CARDS.length).toBe(53);
     expect(WORKSPACE_CARDS).toContain('telegram');
     expect(WORKSPACE_CARDS).toContain('captions');
     expect(WORKSPACE_CARDS).toContain('donations');

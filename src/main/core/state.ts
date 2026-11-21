@@ -12,6 +12,7 @@ export function initialRuntimeState(): RuntimeState {
     streamlabs: { ...disconnected },
     yandexMusic: { ...disconnected },
     streamelements: { ...disconnected },
+    donatex: { ...disconnected },
     streamerbot: { ...disconnected, actions: [] },
     discord: { ...disconnected },
     telegram: { ...disconnected },

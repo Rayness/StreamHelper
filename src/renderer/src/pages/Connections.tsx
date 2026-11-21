@@ -227,6 +227,33 @@ function StreamElementsCard() {
   );
 }
 
+function DonateXCard() {
+  const t = useT();
+  const state = useApp((d) => d.state!.donatex);
+  const enabled = useApp((d) => d.settings!.donatex.enabled);
+  const [token, setToken] = useState('');
+  const [busy, setBusy] = useState(false);
+  return (
+    <Card className="conn-card" title={<span className="conn-title">DonateX</span>} actions={<StatusText status={state.status} error={state.error} />}>
+      <p className="muted small">{t('conn.donatexHint')}</p>
+      {enabled ? (
+        <Button icon="logout" onClick={() => void call('donatex:disconnect')}>{t('common.disconnect')}</Button>
+      ) : (
+        <form className="form compact" onSubmit={async (e) => {
+          e.preventDefault();
+          if (busy || !token.trim()) return;
+          setBusy(true);
+          if (await callOk('donatex:connect', token)) setToken('');
+          setBusy(false);
+        }}>
+          <Field label={t('conn.donatexToken')}><TextInput type="password" value={token} onChange={setToken} mono /></Field>
+          <Button type="submit" variant="primary" icon="plug" disabled={busy || !token.trim()}>{t('common.connect')}</Button>
+        </form>
+      )}
+    </Card>
+  );
+}
+
 function StreamerBotCard() {
   const t = useT();
   const state = useApp((d) => d.state!.streamerbot);
@@ -384,7 +411,7 @@ function ObsCard() {
   );
 }
 
-export function ConnectionDetail({ kind }: { kind: 'twitch' | 'obs' | 'donationalerts' | 'streamlabs' | 'streamelements' | 'streamerbot' | 'discord' | 'telegram' }) {
+export function ConnectionDetail({ kind }: { kind: Exclude<ConnectionTab, 'kawaki' | 'subforstream'> }) {
   const t = useT();
   const cfg = useApp((d) => d.settings!.twitch);
   switch (kind) {
@@ -393,6 +420,7 @@ export function ConnectionDetail({ kind }: { kind: 'twitch' | 'obs' | 'donationa
     case 'donationalerts': return <DonationAlertsCard />;
     case 'streamlabs': return <StreamlabsCard />;
     case 'streamelements': return <StreamElementsCard />;
+    case 'donatex': return <DonateXCard />;
     case 'streamerbot': return <StreamerBotCard />;
     case 'discord': return <DiscordCard />;
     case 'telegram': return <TelegramCard />;

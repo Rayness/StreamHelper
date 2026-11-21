@@ -144,9 +144,10 @@
       $('song-layout').value=d.songDisplay.videoLayout;$('song-volume').value=d.songDisplay.volume;$('song-volume-value').textContent=d.songDisplay.volume+'%';$('song-volume').disabled=d.songDisplay.videoLayout==='queue';
       $('song-current').textContent=d.songRequests.current?`${d.songRequests.current.userName}: ${d.songRequests.current.url}`:(lang==='ru'?'Сейчас ничего не играет':'Nothing playing');$('song-skip').disabled=!d.songRequests.current;
       buttons($('song-queue'),d.songRequests.queue,s=>{const play=btn(l.play,'songPlay',s.id);play.disabled=d.songDisplay.videoLayout==='queue';return item(`${s.userName}: ${s.url}`,[play,btn('×','songRemove',s.id)])});
-      $('music-current').textContent=d.music.track?`${d.music.track.artist} — ${d.music.track.title}`:l.empty;
+      $('music-current').textContent=d.music.track?[d.music.track.artist,d.music.track.title].filter(Boolean).join(' — '):l.empty;
       $('music-artwork').textContent=d.musicDisplay.showArtwork?(lang==='ru'?'Скрыть обложку':'Hide artwork'):(lang==='ru'?'Показать обложку':'Show artwork');
-      buttons($('music-sources'),d.music.sources,s=>item(s,[btn('▶','musicPlay',s),btn('Ⅱ','musicPause',s),btn('⏭','musicNext',s)]));
+      const musicNames={spotify:'Spotify',yandex:lang==='ru'?'Яндекс Музыка':'Yandex Music',youtubeMusic:'YouTube Music',youtube:'YouTube',browser:lang==='ru'?'Браузер':'Browser',other:lang==='ru'?'Другой плеер':'Other player'};
+      buttons($('music-sources'),d.music.sources,s=>item((d.music.track?.source===s&&d.music.track.site)||musicNames[s]||s,[btn('▶','musicPlay',s),btn('Ⅱ','musicPause',s),btn('⏭','musicNext',s)]));
       $('subs-status').textContent=d.subForStream.status==='connected'?(lang==='ru'?'Субтитры подключены':'Captions connected'):(lang==='ru'?'SubForStream не подключён':'SubForStream disconnected');
       $('kawaki').textContent=d.kawaki.nowWatching?`${d.kawaki.nowWatching.title} · ${d.kawaki.nowWatching.episode??'—'}`:(lang==='ru'?'Сейчас ничего не смотрим':'Nothing playing');
       $('overlay-status').textContent=Object.entries(d.overlayKinds).filter(([,count])=>count>0).map(([kind,count])=>`${kind}: ${count}`).join(' · ')||l.empty;

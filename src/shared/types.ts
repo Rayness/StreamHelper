@@ -3,7 +3,7 @@
 import type { RemoteModerator, RemotePermission, RemoteSession, RemoteState } from './remote';
 
 export type Platform = 'twitch' | 'youtube' | 'vkplay' | 'kick';
-export type DonationSource = 'donationalerts' | 'streamlabs' | 'streamelements';
+export type DonationSource = 'donationalerts' | 'streamlabs' | 'streamelements' | 'donatex';
 export type EventSource = Platform | DonationSource | 'test';
 export type Language = 'ru' | 'en';
 
@@ -184,6 +184,7 @@ export interface RuntimeState {
   donationalerts: ConnectionState;
   streamlabs: ConnectionState;
   streamelements: ConnectionState;
+  donatex: ConnectionState;
   streamerbot: ConnectionState & { actions: { id: string; name: string }[] };
   discord: ConnectionState;
   telegram: ConnectionState;
@@ -542,11 +543,13 @@ export interface CollabOverlaySettings {
   fontFamily: string;
 }
 
-export type MusicSourceKind = 'spotify' | 'yandex' | 'browser' | 'other';
+export type MusicSourceKind = 'spotify' | 'yandex' | 'youtubeMusic' | 'youtube' | 'browser' | 'other';
 export type MusicSourcePreference = 'auto' | MusicSourceKind | 'any';
 
 export interface MusicTrack {
   source: MusicSourceKind;
+  /** Website label when the browser publishes a domain outside the named sources. */
+  site?: string;
   title: string;
   artist: string;
   album: string;
@@ -561,6 +564,7 @@ export interface MusicRuntimeState {
   status: 'connecting' | 'ready' | 'unavailable';
   track: MusicTrack | null;
   sources: MusicSourceKind[];
+  browserConnected?: boolean;
 }
 
 export interface SongRequest {
@@ -576,8 +580,8 @@ export interface SongRequest {
   redemption?: { id: string; rewardId: string };
   /** Background jam: the player runs this whole YouTube mix / playlist instead of one video. */
   playlistId?: string;
-  /** `yandex`: plays in the streamer's Yandex Music app / site (`videoId` = `ym:<trackId>`); `local`: a file from the computer. */
-  provider?: 'yandex' | 'local';
+  /** YouTube Music uses the YouTube OBS player. Yandex Music uses its own player; local tracks use a file. */
+  provider?: 'youtubeMusic' | 'yandex' | 'local';
   yandexTrackId?: string;
   yandexAlbumId?: string;
   cover?: string;
@@ -652,6 +656,7 @@ export interface SongJam {
   listId: string;
   /** Video the mix starts from; also gives the cover. */
   videoId?: string;
+  provider?: 'youtubeMusic';
 }
 
 /**
@@ -661,7 +666,7 @@ export interface SongJam {
 export interface SongTrack {
   videoId: string;
   title?: string;
-  kind?: 'yandex' | 'local';
+  kind?: SongRequest['provider'];
   /** Local file name in the app's `media/songs` folder. */
   file?: string;
   cover?: string;
@@ -1916,6 +1921,7 @@ export interface Settings {
   donationalerts: { clientId: string; enabled: boolean };
   streamlabs: { enabled: boolean };
   streamelements: { enabled: boolean; channelId: string };
+  donatex: { enabled: boolean };
   streamerbot: { enabled: boolean; port: number };
   discord: { enabled: boolean; notifyLive: boolean; notifyOffline: boolean; notifyDonations: boolean };
   telegram: TelegramSettings;
@@ -2015,7 +2021,7 @@ export interface MonitorRect { x: number; y: number; w: number; h: number }
 /** Modules without an overlay of their own. */
 export type ToolModule = 'clipper' | 'ducking' | 'shield' | 'report';
 
-export type WorkspaceCard = 'stream' | 'obs' | 'actions' | 'bot' | 'twitch' | 'donationalerts' | 'streamlabs' | 'streamelements' | 'streamerbot' | 'discord' | 'telegram' | 'subforstream' | ToolModule | OverlayKind;
+export type WorkspaceCard = 'stream' | 'obs' | 'actions' | 'bot' | 'twitch' | DonationSource | 'streamerbot' | 'discord' | 'telegram' | 'subforstream' | ToolModule | OverlayKind;
 
 export type ProfileSettingsKey = 'workspace' | 'bot' | 'alerts' | 'chatOverlay' | 'spotlightOverlay' | 'rewardsOverlay' | 'eventsOverlay' | 'liveOverlay' | 'donationsOverlay' | 'customOverlays' | 'overlayVariants' | 'collabOverlay' | 'musicOverlay' | 'songRequests' | 'goals' | 'timers' | 'actions' | 'banners' | 'ads' | 'labels' | 'emoteRain' | 'wheels' | 'poll' | 'giveaway' | 'quiz' | 'boss' | 'kawaki' | 'viewerQueue' | 'guess' | 'counterOverlays' | 'hype' | 'leadersOverlay'
   | 'clipper' | 'curses' | 'duel' | 'melody' | 'ducking' | 'market' | 'portal' | 'report' | 'shield' | 'focus' | 'shoutout' | 'tts' | 'captions';
@@ -2165,6 +2171,8 @@ export interface IpcInvoke {
   'streamlabs:disconnect': () => void;
   'streamelements:connect': (channelId: string, token: string) => void;
   'streamelements:disconnect': () => void;
+  'donatex:connect': (token: string) => void;
+  'donatex:disconnect': () => void;
   'streamerbot:connect': (port: number) => void;
   'streamerbot:disconnect': () => void;
   'streamerbot:refresh': () => void;
@@ -2216,6 +2224,8 @@ export interface IpcInvoke {
   /** Add a YouTube mix / playlist as a background jam; an empty name takes the playlist title. */
   'song:jamAdd': (url: string, name: string) => void;
   'music:control': (source: MusicSourceKind, action: 'play' | 'pause' | 'next') => void;
+  'music:browserPairing': () => string;
+  'music:browserExtension': () => void;
   'subs:check': () => void;
   'subs:clear': () => void;
   'stats:reset': () => void;

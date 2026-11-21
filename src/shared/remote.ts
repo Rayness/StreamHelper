@@ -191,7 +191,7 @@ const CHANNELS: Partial<Record<keyof IpcInvoke, Need>> = {
  * the streamer's window look) and profile bookkeeping, which goes through the profile calls.
  */
 const LOCKED_SETTINGS: readonly SettingsKey[] = [
-  'version', 'language', 'overlayPort', 'twitch', 'donationalerts', 'streamlabs', 'streamelements', 'streamerbot', 'discord', 'telegram',
+  'version', 'language', 'overlayPort', 'twitch', 'donationalerts', 'streamlabs', 'streamelements', 'donatex', 'streamerbot', 'discord', 'telegram',
   'subForStream', 'obs', 'minimizeToTray', 'appearance', 'profiles', 'activeProfileId', 'overlayKindsSeen',
 ];
 

@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { normalizeWorkspaceCards } from '@shared/workspace';
+import { DONATION_PROVIDERS, DONATION_SOURCES } from '@shared/events';
 import type { ConnectionStatus, WorkspaceCard } from '@shared/types';
 import { saveAppearance, useAppearance, useApplyAppearance } from './appearance';
 import { CommandPalette } from './components/CommandPalette';
@@ -35,7 +36,9 @@ function SideStatus() {
   const workspace = useApp((d) => d.settings!.workspace);
   const cards = normalizeWorkspaceCards(workspace.cards);
   const items: { id:WorkspaceCard; label:string; status:ConnectionStatus }[] = [
-    {id:'twitch',label:'Twitch',status:s.twitch.status},{id:'obs',label:'OBS',status:s.obs.status},{id:'kawaki',label:'Kawaki',status:s.kawaki.status},{id:'donationalerts',label:'DonationAlerts',status:s.donationalerts.status},{id:'streamlabs',label:'Streamlabs',status:s.streamlabs.status},{id:'streamelements',label:'StreamElements',status:s.streamelements.status},{id:'streamerbot',label:'Streamer.bot',status:s.streamerbot.status},{id:'discord',label:'Discord',status:s.discord.status},{id:'telegram',label:'Telegram',status:s.telegram.status},
+    {id:'twitch',label:'Twitch',status:s.twitch.status},{id:'obs',label:'OBS',status:s.obs.status},{id:'kawaki',label:'Kawaki',status:s.kawaki.status},
+    ...DONATION_SOURCES.map((id) => ({ id, label: DONATION_PROVIDERS[id].name, status: s[id].status })),
+    {id:'streamerbot',label:'Streamer.bot',status:s.streamerbot.status},{id:'discord',label:'Discord',status:s.discord.status},{id:'telegram',label:'Telegram',status:s.telegram.status},
   ];
   const visible = items.filter((i) => cards.includes(i.id) || i.status !== 'disconnected');
   if (!visible.length) return null;

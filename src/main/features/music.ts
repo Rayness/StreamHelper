@@ -1,43 +1,36 @@
 import { app } from 'electron';
+import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import type { MusicSourceKind, MusicSourcePreference, MusicTrack } from '@shared/types';
 import type { AppContext } from '../core/context';
 import type * as WinRt from '../winrt/generated';
+import { BrowserMusicBridge, browserHostForSession, classifyMusicSession, mediaHost, type MediaSource } from './browserMusic';
 
 type MediaSession = WinRt.GlobalSystemMediaTransportControlsSession;
 type MediaProperties = WinRt.GlobalSystemMediaTransportControlsSessionMediaProperties;
 type Bindings = typeof WinRt;
 
-interface Candidate {
+interface Candidate extends MediaSource {
   session: MediaSession;
   properties: MediaProperties;
-  kind: MusicSourceKind;
+  appId: string;
   title: string;
   artist: string;
   album: string;
   playing: boolean;
 }
 
-const SOURCE_PRIORITY: Record<MusicSourceKind, number> = { spotify: 4, yandex: 3, browser: 2, other: 1 };
+const SOURCE_PRIORITY: Record<MusicSourceKind, number> = { spotify: 5, yandex: 4, youtubeMusic: 3, youtube: 2, browser: 2, other: 1 };
 const POLL_MS = 3_000;
 const RESYNC_MS = 15_000;
 const IDLE_POLL_MS = 15_000;
 
-/** Classify the source ID published by Windows; browser tabs do not expose their URL. */
-export function musicSourceKind(appId: string): MusicSourceKind {
-  const id = appId.toLowerCase();
-  if (id.includes('spotify')) return 'spotify';
-  if (/yandex.*music|music.*yandex|music\.yandex/.test(id)) return 'yandex';
-  if (/chrome|msedge|firefox|browser|opera|vivaldi|brave/.test(id)) return 'browser';
-  return 'other';
-}
-
 /** Active playback wins; within that group auto mode prefers Spotify and Yandex Music. */
-export function chooseMusicCandidate<T extends { kind: MusicSourceKind; playing: boolean }>(
+export function chooseMusicCandidate<T extends { kind: MusicSourceKind; playing: boolean; browser?: boolean }>(
   candidates: readonly T[],
   source: MusicSourcePreference,
 ): T | null {
-  const matches = source === 'auto' || source === 'any' ? candidates : candidates.filter((item) => item.kind === source);
+  const matches = source === 'auto' || source === 'any' ? candidates : candidates.filter((item) => item.kind === source || (source === 'browser' && item.browser));
   return [...matches].sort((a, b) =>
     Number(b.playing) - Number(a.playing) ||
     (source === 'auto' ? SOURCE_PRIORITY[b.kind] - SOURCE_PRIORITY[a.kind] : 0),
@@ -98,50 +91,76 @@ export class MusicService {
   private lastArtwork: string | null = null;
   private lastArtworkAttemptAt = 0;
   private lastPublishAt = 0;
+  private browserHosts = new Map<string, string>();
+  private paused: { token: string; key: string } | null = null;
+  private windowsWork: Promise<unknown> = Promise.resolve();
   private unsubscribe: () => void;
+  readonly browserBridge = new BrowserMusicBridge(() => this.ctx.secrets.get('browserMusicToken'), () => {
+    this.ctx.state.patch('music', { browserConnected: this.browserBridge.snapshot().connected });
+    if (this.manager) void this.refresh();
+  });
 
-  /** Pause the active Windows media session and return its app ID for later resumption. `except` stays playing. */
-  async pauseCurrent(except?: MusicSourceKind): Promise<string | null> {
-    if (!this.manager) return null;
-    const scope = this.bindings?.createProjectedLifetimeScope();
-    try {
-      const preferred = this.ctx.state.current.music.track?.source;
-      const sessions = Array.from(this.manager.getSessions() ?? []).filter((session) => !except || musicSourceKind(session.sourceAppUserModelId) !== except);
-      const playing = sessions.filter((session) =>
-        session.getPlaybackInfo().playbackStatus === this.bindings?.GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing);
-      const session = playing.find((item) => musicSourceKind(item.sourceAppUserModelId) === preferred) ?? playing[0];
-      return session && await session.tryPauseAsync() ? session.sourceAppUserModelId : null;
-    } catch (error) {
-      console.warn('[music] pause failed', error);
-      return null;
-    } finally {
-      scope?.dispose();
-    }
+  /** The generated WinRT bindings share a stack of lifetime scopes. Keep async scopes from overlapping. */
+  private runWindows<T>(operation: () => Promise<T>): Promise<T> {
+    const result = this.windowsWork.then(operation);
+    this.windowsWork = result.catch(() => {});
+    return result;
   }
 
-  async resumeSource(appId: string): Promise<void> {
-    if (!this.manager) return;
-    const scope = this.bindings?.createProjectedLifetimeScope();
-    try {
-      const session = Array.from(this.manager.getSessions() ?? []).find((item) => item.sourceAppUserModelId === appId);
-      await session?.tryPlayAsync();
-    } finally {
-      scope?.dispose();
-    }
+  /** Pause the active Windows media session and remember the specific track for later resumption. */
+  async pauseCurrent(except?: MusicSourceKind): Promise<string | null> {
+    return this.runWindows(async () => {
+      if (!this.manager || this.stopped) return null;
+      const scope = this.bindings?.createProjectedLifetimeScope();
+      try {
+        const playing = (await this.candidates()).filter((item) => item.playing && item.kind !== except);
+        const preferred = this.ctx.settings.get('musicOverlay').source;
+        const target = chooseMusicCandidate(playing, preferred) ?? chooseMusicCandidate(playing, 'auto');
+        if (!target || !await target.session.tryPauseAsync()) return null;
+        const token = randomUUID();
+        this.paused = { token, key: this.sessionKey(target) };
+        return token;
+      } catch (error) {
+        console.warn('[music] pause failed', error);
+        return null;
+      } finally {
+        scope?.dispose();
+      }
+    });
+  }
+
+  async resumeSource(token: string): Promise<void> {
+    return this.runWindows(async () => {
+      if (this.paused?.token !== token) return;
+      const { key } = this.paused;
+      this.paused = null;
+      if (!this.manager || this.stopped) return;
+      const scope = this.bindings?.createProjectedLifetimeScope();
+      try {
+        const matches = (await this.candidates()).filter((item) => this.sessionKey(item) === key);
+        if (matches.length === 1 && !matches[0].playing) await matches[0].session.tryPlayAsync();
+      } finally {
+        scope?.dispose();
+      }
+    });
   }
 
   async control(source: MusicSourceKind, action: 'play' | 'pause' | 'next'): Promise<void> {
-    if (!this.manager) throw new Error('Windows media sessions are unavailable');
-    const scope = this.bindings?.createProjectedLifetimeScope();
-    try {
-      const session = Array.from(this.manager.getSessions() ?? []).find((item) => musicSourceKind(item.sourceAppUserModelId) === source);
-      if (!session) throw new Error(`No ${source} media session found`);
-      const ok = action === 'play' ? await session.tryPlayAsync() : action === 'pause' ? await session.tryPauseAsync() : await session.trySkipNextAsync();
-      if (!ok) throw new Error(`The ${source} player rejected ${action}`);
-      void this.refresh();
-    } finally {
-      scope?.dispose();
-    }
+    await this.runWindows(async () => {
+      if (!this.manager || this.stopped) throw new Error('Windows media sessions are unavailable');
+      const scope = this.bindings?.createProjectedLifetimeScope();
+      try {
+        const candidates = await this.candidates();
+        const exact = candidates.filter((item) => item.kind === source);
+        const session = chooseMusicCandidate(exact.length ? exact : candidates, source)?.session;
+        if (!session) throw new Error(`No ${source} media session found`);
+        const ok = action === 'play' ? await session.tryPlayAsync() : action === 'pause' ? await session.tryPauseAsync() : await session.trySkipNextAsync();
+        if (!ok) throw new Error(`The ${source} player rejected ${action}`);
+      } finally {
+        scope?.dispose();
+      }
+    });
+    void this.refresh();
   }
 
   constructor(private ctx: AppContext, private bindingsRoot = app.getAppPath()) {
@@ -162,7 +181,7 @@ export class MusicService {
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
     this.unsubscribe();
-    this.releaseManager();
+    void this.runWindows(async () => this.releaseManager());
   }
 
   private schedulePoll(): void {
@@ -194,37 +213,66 @@ export class MusicService {
     this.manager = manager;
   }
 
+  private sessionKey(item: Candidate): string {
+    return `${item.appId}\0${item.title}\0${item.artist}\0${item.album}`;
+  }
+
+  private async candidates(): Promise<Candidate[]> {
+    const candidates: Candidate[] = [];
+    for (const session of this.manager?.getSessions() ?? []) {
+      try {
+        const appId = session.sourceAppUserModelId;
+        const properties = await session.tryGetMediaPropertiesAsync();
+        const title = properties?.title?.trim() || '';
+        const artist = properties?.artist?.trim() || '';
+        const album = properties?.albumTitle?.trim() || '';
+        const subtitle = properties?.subtitle?.trim() || '';
+        const playing = session.getPlaybackInfo().playbackStatus === this.bindings?.GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing;
+        candidates.push({ session, properties, appId, title, artist, album, playing, ...classifyMusicSession(appId, { title, artist, album, subtitle }) });
+      } catch { /* One player may disappear during enumeration. */ }
+    }
+    const { connected, tabs } = this.browserBridge.snapshot();
+    if (!connected) this.browserHosts.clear();
+    const singleSession = candidates.filter((item) => item.browser && item.playing).length === 1;
+    const hosts = new Map<string, string>();
+    for (const item of candidates) {
+      if (!item.browser) continue;
+      const key = this.sessionKey(item);
+      const host = item.playing
+        ? browserHostForSession(item.title, tabs, singleSession && item.kind === 'browser' && !item.site)
+        : this.browserHosts.get(key);
+      if (host) {
+        hosts.set(key, host);
+        Object.assign(item, classifyMusicSession(item.appId, {}, host));
+      }
+    }
+    this.browserHosts = hosts;
+    return candidates;
+  }
+
   private async refresh(): Promise<void> {
     if (this.stopped || this.busy) return;
     this.busy = true;
+    try {
+      await this.runWindows(() => this.refreshMedia());
+    } finally {
+      this.busy = false;
+    }
+  }
+
+  private async refreshMedia(): Promise<void> {
+    if (this.stopped) return;
     try {
       if (!this.manager) await this.connect();
       if (this.stopped || !this.manager || !this.bindings) return;
       const scope = this.bindings.createProjectedLifetimeScope();
       try {
-        const sessions = this.manager.getSessions();
-        const candidates: Candidate[] = [];
-        for (const session of sessions ?? []) {
-          try {
-            const properties = await session.tryGetMediaPropertiesAsync();
-            const title = properties?.title?.trim();
-            if (!title) continue;
-            candidates.push({
-              session,
-              properties,
-              kind: musicSourceKind(session.sourceAppUserModelId),
-              title,
-              artist: properties.artist?.trim() || '',
-              album: properties.albumTitle?.trim() || '',
-              playing: session.getPlaybackInfo().playbackStatus === this.bindings.GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing,
-            });
-          } catch { /* One player may disappear during enumeration. */ }
-        }
+        const candidates = (await this.candidates()).filter((item) => item.title);
         const sources = [...new Set(candidates.map((item) => item.kind))];
         const selected = chooseMusicCandidate(candidates, this.ctx.settings.get('musicOverlay').source);
         let track: MusicTrack | null = null;
         if (selected) {
-          const artworkKey = `${selected.session.sourceAppUserModelId}\0${selected.title}\0${selected.artist}\0${selected.album}`;
+          const artworkKey = this.sessionKey(selected);
           if (artworkKey !== this.lastArtworkKey || (!this.lastArtwork && Date.now() - this.lastArtworkAttemptAt >= 60_000)) {
             this.lastArtwork = await artworkDataUrl(this.bindings, selected.properties);
             this.lastArtworkKey = artworkKey;
@@ -232,8 +280,9 @@ export class MusicService {
           }
           track = {
             source: selected.kind,
+            site: selected.site,
             title: selected.title,
-            artist: selected.artist,
+            artist: selected.browser && mediaHost(selected.artist) ? '' : selected.artist,
             album: selected.album,
             artwork: this.lastArtwork,
             playing: selected.playing,
@@ -241,7 +290,7 @@ export class MusicService {
             observedAt: Date.now(),
           };
         }
-        this.publish(track, sources, 'ready', selected?.session.sourceAppUserModelId ?? '');
+        this.publish(track, sources, 'ready', selected?.appId ?? '');
       } finally {
         scope.dispose();
       }
@@ -249,23 +298,22 @@ export class MusicService {
       if (this.ctx.state.current.music.status !== 'unavailable') console.warn('[music] Windows media sessions unavailable', error);
       this.releaseManager();
       this.publish(null, [], 'unavailable');
-    } finally {
-      this.busy = false;
     }
   }
 
   private publish(track: MusicTrack | null, sources: MusicSourceKind[], status: 'ready' | 'unavailable' = 'ready', appId = ''): void {
     if (this.stopped) return;
     const previous = this.ctx.state.current.music;
-    const fingerprint = track ? `${appId}\0${track.source}\0${track.title}\0${track.artist}\0${track.album}\0${track.playing}\0${!!track.artwork}` : '';
+    const fingerprint = track ? `${appId}\0${track.source}\0${track.site ?? ''}\0${track.title}\0${track.artist}\0${track.album}\0${track.playing}\0${!!track.artwork}` : '';
     const now = Date.now();
     const changed = fingerprint !== this.lastFingerprint || status !== previous.status;
     const resync = !!track?.playing && now - this.lastPublishAt >= RESYNC_MS;
     const sourcesChanged = sources.join('|') !== previous.sources.join('|');
-    if (!changed && !resync && !sourcesChanged) return;
+    const browserConnected = this.browserBridge.snapshot().connected;
+    if (!changed && !resync && !sourcesChanged && browserConnected === !!previous.browserConnected) return;
     this.lastFingerprint = fingerprint;
     this.lastPublishAt = now;
-    this.ctx.state.replace('music', { status, track, sources });
+    this.ctx.state.replace('music', { status, track, sources, browserConnected });
     this.ctx.bus.emit('music:changed', track);
   }
 }

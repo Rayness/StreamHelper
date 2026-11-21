@@ -1,11 +1,23 @@
 import { tierLabel } from './template';
-import type { StreamEvent } from './types';
+import type { DonationSource, EventSource, StreamEvent } from './types';
+
+export const DONATION_PROVIDERS: Record<DonationSource, { name: string; badge: string }> = {
+  donationalerts: { name: 'DonationAlerts', badge: 'DA' },
+  streamlabs: { name: 'Streamlabs', badge: 'SL' },
+  streamelements: { name: 'StreamElements', badge: 'SE' },
+  donatex: { name: 'DonateX', badge: 'DonateX' },
+};
+export const DONATION_SOURCES: readonly DonationSource[] = Object.keys(DONATION_PROVIDERS) as DonationSource[];
+
+export function isDonationSource(source: EventSource): source is DonationSource {
+  return Object.hasOwn(DONATION_PROVIDERS, source);
+}
 
 /** Twitch activity has exactly one authority; donation providers only supply donations. */
 export function isTrustedStreamEvent(e: StreamEvent): boolean {
   if (e.source === 'test') return true;
   return e.type === 'donation'
-    ? ['donationalerts', 'streamlabs', 'streamelements'].includes(e.source)
+    ? isDonationSource(e.source)
     : e.source === 'twitch';
 }
 

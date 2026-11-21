@@ -1,5 +1,5 @@
 import type { StreamEvent } from '@shared/types';
-import { formatAmount } from '@shared/events';
+import { DONATION_PROVIDERS, formatAmount, isDonationSource } from '@shared/events';
 import { useClock } from '../hooks';
 import { useT, type TFn } from '../i18n';
 import { call, useApp } from '../store';
@@ -69,8 +69,7 @@ export function EventFeed({ limit = 100, readOnly = false }: { limit?: number; r
               <div className="feed-line">
                 <b>{e.userName}</b> <span>{describeEvent(t, e)}</span>
                 {e.source === 'test' && <span className="pill">{t('feed.test')}</span>}
-                {(e.source === 'donationalerts' || e.source === 'streamlabs') && <span className="pill">{e.source === 'donationalerts' ? 'DA' : 'SL'}</span>}
-                {e.source === 'streamelements' && <span className="pill">SE</span>}
+                {isDonationSource(e.source) && <span className="pill" title={DONATION_PROVIDERS[e.source].name}>{DONATION_PROVIDERS[e.source].badge}</span>}
               </div>
               {msg && <div className="feed-msg">{msg}</div>}
             </div>

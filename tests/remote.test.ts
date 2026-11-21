@@ -20,7 +20,7 @@ describe('remote permissions', () => {
 
   it('never allows logins, files, updates or remote access itself', () => {
     const all = ['stream', 'obs', 'chat', 'alerts', 'songs', 'tts', 'interactive', 'settings'] as const;
-    for (const channel of ['twitch:login', 'da:login', 'yandex:setToken', 'obs:connect', 'media:import', 'song:importLocal', 'update:install', 'report:open',
+    for (const channel of ['twitch:login', 'da:login', 'donatex:connect', 'donatex:disconnect', 'yandex:setToken', 'music:browserPairing', 'music:browserExtension', 'obs:connect', 'media:import', 'song:importLocal', 'update:install', 'report:open',
       'shell:openExternal', 'clipboard:write', 'profiles:delete', 'remote:addModerator', 'remote:link', 'remote:configure', 'constructor', '__proto__']) {
       expect(remoteAllowed(all, channel, [])).toBe(false);
     }
@@ -29,6 +29,7 @@ describe('remote permissions', () => {
   it('checks settings writes per section', () => {
     expect(settingsPermission('overlayPort')).toBeNull();
     expect(settingsPermission('obs')).toBeNull();
+    expect(settingsPermission('donatex')).toBeNull();
     expect(settingsPermission('appearance')).toBeNull();
     expect(settingsPermission('songRequests')).toBe('songs');
     expect(settingsPermission('poll')).toBe('settings');

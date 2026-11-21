@@ -205,6 +205,12 @@ app.whenReady().then(async () => {
   await click('Отмена');
   const toolPack = ['clipper','curse','duel','melody','ducking','stocks','portal','report','shield','focus','shoutout','tts','captions'];
   for (const id of remaining) { await add(id); assert.equal(await js(`document.querySelectorAll('[data-editor-module]').length`),1,'more than one editor mounted'); if (toolPack.includes(id) || id === 'donations') { await delay(400); await capture('module-'+id); }
+    if (id === 'music') {
+      assert(await js(`!!document.querySelector('[data-editor-module="music"] option[value="youtubeMusic"]')`),'YouTube Music source is missing');
+      await js(`[...document.querySelectorAll('[data-editor-module="music"] summary')].find(e=>e.textContent==='Определение вкладки').click()`);
+      await until(`[...document.querySelectorAll('[data-editor-module="music"] details[open] button')].some(b=>b.textContent.trim()==='Скопировать ссылку подключения')`,'browser pairing controls are missing');
+      await capture('music-browser');
+    }
     if (id === 'tts') {
       await fill('[data-editor-module="tts"] input[placeholder="!!!"]','??');
       assert.equal(fixture.settings.get('tts').trigger,'??','TTS trigger edit did not save');
@@ -248,10 +254,15 @@ app.whenReady().then(async () => {
   await click('Подключения');
   await until(`!!document.querySelector('[data-connection-editor]')`,'connections page missing');
   assert.equal(await js(`document.querySelectorAll('[data-add-module]').length`),0,'connections require installing a workspace module');
-  for(const id of ['twitch','donationalerts','streamlabs','streamelements','streamerbot','discord','telegram','obs','kawaki','subforstream']) {
+  const connectionEditors = ['twitch','donationalerts','streamlabs','streamelements','donatex','streamerbot','discord','telegram','obs','kawaki','subforstream'];
+  for(const id of connectionEditors) {
     await js(`document.querySelector('[data-connection="${id}"]').click()`);
     await until(`!!document.querySelector('[data-connection-editor="${id}"]')`,'connection editor missing: '+id);
     assert.equal(await js(`document.querySelectorAll('[data-connection-editor]').length`),1);
+    if (id === 'donatex') {
+      assert(await js(`!!document.querySelector('[data-connection-editor="donatex"] input[type=password]')`), 'DonateX token input is missing or visible');
+      assert(await js(`document.querySelector('[data-connection-editor="donatex"] button[type=submit]').disabled`), 'empty DonateX token can be submitted');
+    }
   }
   await js(`document.querySelector('[data-connection="twitch"]').click()`); await capture('connections');
   // Variables tab: a variable of your own, counters and live built-in values.
@@ -360,6 +371,6 @@ app.whenReady().then(async () => {
   assert.equal(await js(`document.documentElement.lang`),'en');
   const alertGeometryCases = await checkAlertBounds();
   assert.deepEqual(failures,[],'renderer console errors');
-  writeFileSync(join(output,'ui-results.json'), JSON.stringify({passed:true,alertGeometryCases,moduleEditors,connectionEditors:9,checks:['empty workspace','three-page navigation','legacy route gate','search gate','remove/re-add preserves configuration','profile isolation and editor dismissal','individual activity and connection editors','global preferences scope','all 43 module editors','variables tab','designer tab','monitor has no feature configuration inputs','manual song queue','TTS settings, voices and queue controls','safe position settings','close-up live preview','coalesced settings writes','bot trailing spaces','small window layout','real alert DOM geometry','English module workflow','confirmed reset is scoped to current module','reset waits for pending edits','live chat and settings stay in module','local alert queue pause/resume/skip','isolated widget tests with emote rain active','separate connections without installation','fresh profile without losing connections','monitor free grid drag, corner resize, keyboard move, no overlaps, hide and persistence','compact module tiles','test waits for pending form edits','native pointer drag for alert position'],calls:fixture.calls.map(c=>c.channel)},null,2));
-  console.log('UI smoke passed: 44 module editors, 10 connection editors, designer, variables, draggable monitor, fresh profiles and isolated tests. Screenshots: dist/qa');
+  writeFileSync(join(output,'ui-results.json'), JSON.stringify({passed:true,alertGeometryCases,moduleEditors,connectionEditors:connectionEditors.length,checks:['empty workspace','three-page navigation','legacy route gate','search gate','remove/re-add preserves configuration','profile isolation and editor dismissal','individual activity and connection editors','global preferences scope','YouTube Music source and browser pairing','DonateX masked token input','variables tab','designer tab','monitor has no feature configuration inputs','manual song queue','TTS settings, voices and queue controls','safe position settings','close-up live preview','coalesced settings writes','bot trailing spaces','small window layout','real alert DOM geometry','English module workflow','confirmed reset is scoped to current module','reset waits for pending edits','live chat and settings stay in module','local alert queue pause/resume/skip','isolated widget tests with emote rain active','separate connections without installation','fresh profile without losing connections','monitor free grid drag, corner resize, keyboard move, no overlaps, hide and persistence','compact module tiles','test waits for pending form edits','native pointer drag for alert position'],calls:fixture.calls.map(c=>c.channel)},null,2));
+  console.log(`UI smoke passed: ${moduleEditors} module editors, ${connectionEditors.length} connection editors, designer, variables, draggable monitor, fresh profiles and isolated tests. Screenshots: dist/qa`);
 }).catch((error)=>{console.error(error);process.exitCode=1;}).finally(async()=>{alertWindow?.destroy(); await fixture?.stop(); window?.destroy(); app.exit(process.exitCode||0);});

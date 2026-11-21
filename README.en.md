@@ -2,9 +2,9 @@
 
 [Русский](README.md) · [English](README.en.md)
 
-StreamHelper is a Windows desktop app for managing a stream, chat, and OBS browser sources from one place. Current version: **0.15.0**. The interface supports Russian and English.
+StreamHelper is a Windows desktop app for managing a stream, chat, and OBS browser sources from one place. Current version: **0.16.0**. The interface supports Russian and English.
 
-Release **0.15.0** adds automatic shoutouts for streamers who chat and a queue for Twitch's own shoutouts, stream announcements in Telegram with a preview and a Watch button, and live captions in OBS with translation. YouTube song requests no longer get stuck after a player failure, and the Yandex Music connection waits when Yandex asks it to. [Release notes](docs/release-notes-0.15.0.md).
+Release **0.16.0** adds DonateX, a dedicated YouTube Music source, and browser music identification. Song requests, favourites, and background mixes keep their YouTube Music links. [Release notes](docs/release-notes-0.16.0.md).
 
 > **Upgrading from 0.11.x:** "Add to OBS" now puts sources into a nested scene "StreamHelper · <scene>". Sources you already added stay where they are; move them into the group with the button in the OBS module, or turn the group off in **Connections → OBS**. Reconnect Twitch for clips and the raid shield.
 
@@ -32,7 +32,7 @@ These screenshots use fictional demo data; they contain no real accounts or toke
 
 ## Download and first run
 
-1. Download `StreamHelper-Setup-0.15.0.exe` from [release 0.15.0](https://github.com/Rayness/StreamHelper/releases/tag/v0.15.0) or the [update repository](https://github.com/Rayness/StreamHelper-Releases/releases/tag/v0.15.0). The Windows installer is currently unsigned.
+1. Download `StreamHelper-Setup-0.16.0.exe` from [release 0.16.0](https://github.com/Rayness/StreamHelper/releases/tag/v0.16.0) or the [update repository](https://github.com/Rayness/StreamHelper-Releases/releases/tag/v0.16.0). The Windows installer is unsigned.
 2. Open **Connections → Twitch** and sign in as the broadcaster. Authorization uses a device code on Twitch.
 3. If needed, open **Connections → OBS** and enter its WebSocket address, port and password. The usual port is 4455.
 4. Add the features you need: Alerts, Chat, Song Requests or individual activities. Select an added module to configure it and use **Add to OBS** for its browser source.
@@ -68,7 +68,7 @@ In **AI + MCP**, provide your API key, model and endpoint for OpenAI Responses, 
 | Recent events | A compact channel activity feed. |
 | Channel rewards | Recent Twitch custom reward redemptions with viewer, title, cost, and optional response. |
 | Collab | A manually entered list of co-stream guest channels and incoming raids. |
-| Now Playing | Track, artist, artwork, album, and progress from Windows media sessions. Supports Spotify, the Yandex Music app, and browser players. |
+| Now Playing | Track, artist, artwork, album, and progress from Windows media sessions. Sources include Spotify, Yandex Music, YouTube Music, and other browser players. |
 | Song requests | A queue from YouTube, YouTube Music, and Yandex Music for channel rewards, donations, chat commands, and manual requests — by link or “artist - song”. YouTube plays in OBS, Yandex Music plays in your Yandex Music app or site. |
 | Ticker | Scheduled text, card, or lower third. |
 | Banner | Sponsor images and videos with a separate schedule and 14 entrance effects. |
@@ -87,9 +87,11 @@ In **AI + MCP**, provide your API key, model and endpoint for OpenAI Responses, 
 
 **Collaborations:** enter one Twitch guest channel per line. The card updates without reloading OBS. Incoming raids are added when Twitch sends raid events. Shared chat and control of another broadcaster's channel are not connected automatically.
 
-**Music:** open **Overlays → Now Playing** and add the source to OBS. Auto mode selects an active session, preferring Spotify, then the Yandex Music app, then a browser. You can pin a source and adjust the horizontal or vertical layout, artwork and title size, background opacity, accent color, source label, album, and progress. The card hides on pause by default. StreamHelper reads local Windows media sessions, so no Spotify or Yandex sign-in is needed. Yandex Music in Chrome or Edge appears as “Browser” because Windows does not provide the tab URL. If several tabs in one browser play at once, a specific tab cannot be selected.
+**Music:** open **Overlays → Now Playing** and add the source to OBS. Auto mode prioritizes playing sessions, with Spotify, Yandex Music, and YouTube Music first among them. You can pin a source and adjust the horizontal or vertical layout, artwork and title size, background opacity, accent color, source label, album, and progress. The card hides on pause by default.
 
-**Song requests:** open **Overlays → Song requests**, add its separate OBS Browser Source, and enable viewer requests. Set the exact title of a custom Twitch reward; viewers enter a YouTube, YouTube Music or Yandex Music track link, or a song name when search is enabled. For donations, set a minimum in the main currency; the donation message must contain the link. DonationAlerts, Streamlabs, and StreamElements are supported. The queue survives restarts and can advance automatically or be controlled from the app and OBS dock. Choose full-size video, compact visible video beside request details, or queue-only mode with no YouTube video or audio in OBS. Adjust volume, player controls, requester and title labels, queue count, compact video position and size, accent color, and background opacity. YouTube playback requires a visible video; queue-only mode keeps requests ready until you switch back or play them in another player. StreamHelper can pause the active Windows media session and resume it after the queue. The YouTube video must allow embedding and be reachable from the OBS computer.
+If Windows only shows “Browser”, open **Now Playing → Identify browser tabs → Extension folder**. In Chrome or Edge, open the extensions page, enable developer mode, and choose **Load unpacked** to select that folder. Click **Copy pairing link** in StreamHelper and paste it into the **StreamHelper Browser Music** extension popup. The extension sends audible tab domains and titles only to the local app. When a tab cannot be matched to a Windows session, the overlay uses the available Windows metadata.
+
+**Song requests:** open **Overlays → Song requests**, add its separate OBS Browser Source, and enable viewer requests. Set the exact title of a custom Twitch reward; viewers enter a YouTube, YouTube Music or Yandex Music track link, or a song name when search is enabled. For donations, set a minimum in the main currency; the donation message must contain the link. DonationAlerts, Streamlabs, DonateX, and StreamElements are supported. The queue survives restarts and can advance automatically or be controlled from the app and OBS dock. Choose full-size video, compact visible video beside request details, or queue-only mode with no YouTube video or audio in OBS. Adjust volume, player controls, requester and title labels, queue count, compact video position and size, accent color, and background opacity. YouTube playback requires a visible video; queue-only mode keeps requests ready until you switch back or play them in another player. StreamHelper can pause the active Windows media session and resume it after the queue. The YouTube video must allow embedding and be reachable from the OBS computer.
 
 **Favourites:** ♥ on a request or the playing track keeps it in the Favourites on the Background music card. While there are no requests the favourites play in the background; ▶ starts a track right away. You can also add YouTube and Yandex Music links and songs from the computer (“Files from the computer”: they are copied into the app folder and play in the OBS source).
 
@@ -119,6 +121,7 @@ Links are checked with YouTube before queueing: removed, private and embed-block
 | OBS Studio | Local obs-websocket v5. Enable WebSocket Server in OBS and enter its address, port, and password inside its workspace module. |
 | DonationAlerts | Authorize in the app. If the built-in Client ID is unavailable, enter your own under advanced settings. |
 | Streamlabs | Paste your Socket API Token. |
+| DonateX | Copy the external token from the DonateX dashboard → Settings → API and access and paste it into **Connections → DonateX**. Enable DonateX in the source list of any existing goal you want it to count toward. |
 | StreamElements | Paste the Channel ID and JWT from StreamElements → Account → Channels. The app accepts completed, approved Astro tips. |
 | Streamer.bot | Enable its HTTP Server and enter the port (usually 7474) inside its workspace module. Assign actions to quick buttons, hotkeys, or channel rewards. |
 | Discord | Create a text-channel webhook and paste its URL. You can enable live announcements and donation notifications and send a test message. |

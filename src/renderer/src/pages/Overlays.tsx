@@ -1,5 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { defaultAd, defaultBanner, defaultGoal, defaultLabel, defaultTimer, uid } from '@shared/defaults';
+import { DONATION_PROVIDERS, DONATION_SOURCES } from '@shared/events';
+import { MUSIC_SOURCES, youtubeTrackUrl } from '@shared/musicSources';
 import { timerValue } from '@shared/timer';
 import { formatClock } from '@shared/template';
 import type { SongListen as SongListenMode, SongRequest, SongTrack } from '@shared/types';
@@ -10,7 +12,7 @@ import { InstancePicker, OverlayBar, OverlayPreview, pickInstance } from '../com
 import { Button, Card, ColorInput, Field, IconButton, LinesInput, NumberInput, Select, StatusText, Tabs, TextInput, Toggle } from '../components/ui';
 import { useNow } from '../hooks';
 import { FontPicker } from '../components/FontPicker';
-import { useT } from '../i18n';
+import { useT, type TFn } from '../i18n';
 import { CounterDetail, DonationsDetail, HypeDetail, LeadersDetail } from './OverlaysExtra';
 import { call, callOk, navigate, saveSettings, toast, useApp } from '../store';
 
@@ -145,19 +147,18 @@ function MusicDetail() {
   const t = useT();
   const cfg = useApp((d) => d.settings!.musicOverlay);
   const music = useApp((d) => d.state!.music);
+  const remote = useApp((d) => d.remote);
   const set = (patch: Partial<typeof cfg>) => saveSettings('musicOverlay', { ...cfg, ...patch });
   const sourceName = (source: MusicSourceKind) => t(`music.source.${source}`);
+  const detectedName = (source: MusicSourceKind) => source === music.track?.source && music.track.site ? music.track.site : sourceName(source);
   return <>
     <OverlayBar kind="music" name={t('ov.music')} />
     <Split settings={<Card title={t('music.settings')}>
       <p className="muted small">{t('music.help')}</p>
-      <p className="muted small">{music.status === 'unavailable' ? t('music.unavailable') : music.sources.length ? `${t('music.detected')}: ${music.sources.map(sourceName).join(', ')}` : t('music.noSource')}</p>
+      <p className="muted small">{music.status === 'unavailable' ? t('music.unavailable') : music.sources.length ? `${t('music.detected')}: ${music.sources.map(detectedName).join(', ')}` : t('music.noSource')}</p>
       <Field label={t('music.source')} wide><Select value={cfg.source} onChange={(source) => set({ source })} options={[
         { value: 'auto', label: t('music.source.auto') },
-        { value: 'spotify', label: t('music.source.spotify') },
-        { value: 'yandex', label: t('music.source.yandex') },
-        { value: 'browser', label: t('music.source.browser') },
-        { value: 'other', label: t('music.source.other') },
+        ...MUSIC_SOURCES.map((value) => ({ value, label: sourceName(value) })),
         { value: 'any', label: t('music.source.any') },
       ]} /></Field>
       <Field label={t('music.style')}><Select value={cfg.style} onChange={(style) => set({ style })} options={[
@@ -181,8 +182,19 @@ function MusicDetail() {
         <Toggle checked={cfg.showProgress} onChange={(showProgress) => set({ showProgress })} label={t('music.progress')} />
         <Toggle checked={cfg.hideWhenPaused} onChange={(hideWhenPaused) => set({ hideWhenPaused })} label={t('music.hidePaused')} />
       </div></Field>
-      <p className="muted small">{t('music.browserHint')}</p>
-      {music.sources.length > 0 && <Field label={t('music.windowsControl')} wide><div className="stack">{music.sources.map((source) => <div key={source} className="row-gap wrap"><strong>{sourceName(source)}</strong><Button size="sm" onClick={() => void call('music:control', source, 'play')}>{t('music.play')}</Button><Button size="sm" onClick={() => void call('music:control', source, 'pause')}>{t('music.pause')}</Button><Button size="sm" onClick={() => void call('music:control', source, 'next')}>{t('music.next')}</Button></div>)}</div></Field>}
+      {!remote && <details className="settings-disclosure">
+        <summary>{t('music.browserSetup')}</summary>
+        <p className="muted small">{t('music.browserHint')}</p>
+        <StatusText status={music.browserConnected ? 'connected' : 'disconnected'} />
+        <div className="row-gap wrap">
+          <Button icon="folder" onClick={() => void call('music:browserExtension')}>{t('music.browserFolder')}</Button>
+          <Button icon="copy" onClick={async () => {
+            const link = await call('music:browserPairing');
+            if (link && await callOk('clipboard:write', link)) toast('success', 'common.copied');
+          }}>{t('music.browserPair')}</Button>
+        </div>
+      </details>}
+      {music.sources.length > 0 && <Field label={t('music.windowsControl')} wide><div className="stack">{music.sources.map((source) => <div key={source} className="row-gap wrap"><strong>{detectedName(source)}</strong><Button size="sm" onClick={() => void call('music:control', source, 'play')}>{t('music.play')}</Button><Button size="sm" onClick={() => void call('music:control', source, 'pause')}>{t('music.pause')}</Button><Button size="sm" onClick={() => void call('music:control', source, 'next')}>{t('music.next')}</Button></div>)}</div></Field>}
     </Card>} preview={<OverlayPreview kind="music" maxHeight={300} />} />
   </>;
 }
@@ -309,8 +321,14 @@ function FavoriteButton({ item }: { item: Pick<SongRequest, 'id' | 'videoId'> })
   return <IconButton icon="heart" className={`song-fav ${on ? 'active' : ''}`} label={t(on ? 'song.fav.remove' : 'song.fav.add')} onClick={() => void callOk('song:favorite', item.id)} />;
 }
 
-const trackSource = (track: SongTrack) => track.kind === 'local' ? 'song.fav.local' : track.kind === 'yandex' ? 'song.ym.title' : 'song.fav.youtube';
-const trackUrl = (track: SongTrack) => track.kind === 'yandex' ? `https://music.yandex.ru/track/${track.videoId.slice(3)}` : `https://www.youtube.com/watch?v=${track.videoId}`;
+const trackSource = (track: SongTrack) => track.kind === 'local' ? 'song.fav.local' : track.kind === 'yandex' ? 'song.ym.title' : track.kind === 'youtubeMusic' ? 'music.source.youtubeMusic' : 'song.fav.youtube';
+const trackUrl = (track: SongTrack) => track.kind === 'yandex' ? `https://music.yandex.ru/track/${track.videoId.slice(3)}` : youtubeTrackUrl(track.videoId, track.kind);
+function requestService(t: TFn, provider: SongRequest['provider']): string {
+  if (provider === 'youtubeMusic') return ` · ${t('music.source.youtubeMusic')}`;
+  if (provider === 'yandex') return ` · ${t('song.ym.title')}`;
+  return '';
+}
+const openMusicService = (provider: SongRequest['provider']) => provider === 'youtubeMusic' ? 'song.openYoutubeMusic' : provider === 'yandex' ? 'song.ym.open' : 'song.openYoutube';
 /** Offline or blocked cover: keep the empty frame instead of a broken-image icon. */
 const hideBroken = (e: React.SyntheticEvent<HTMLImageElement>) => { e.currentTarget.style.visibility = 'hidden'; };
 type SongSource = 'redemption' | 'donation' | 'chat' | 'manual';
@@ -385,7 +403,7 @@ function SongQueue() {
         <div className={`song-now-card ${state.paused ? 'paused' : ''}`}>
           <TrackCover videoId={current.videoId} cover={current.cover} />
           <div className="song-now-info">
-            <span className="song-eyebrow">{state.paused ? t('song.pausedNow') : t('song.now')}{current.provider === 'yandex' ? ` · ${t('song.ym.title')}` : ''}</span>
+            <span className="song-eyebrow">{state.paused ? t('song.pausedNow') : t('song.now')}{requestService(t, current.provider)}</span>
             <strong title={current.url}>{current.title ?? current.url}</strong>
             <span className="muted small">{current.userName} · {source(current.source)}</span>
           </div>
@@ -434,13 +452,13 @@ function SongQueue() {
             <TrackCover videoId={item.videoId} cover={item.cover} lazy />
             <div className="song-item-info">
               <strong title={item.url}>{item.title ?? item.url}</strong>
-              <span className="muted small">{item.userName} · {source(item.source)}{item.provider === 'yandex' ? ` · ${t('song.ym.title')}` : ''}</span>
+              <span className="muted small">{item.userName} · {source(item.source)}{requestService(t, item.provider)}</span>
             </div>
             <div className="song-item-actions">
               <IconButton icon="play" label={t('song.playNow')} disabled={!playable(item)} onClick={() => void call('song:play', item.id)} />
               <IconButton icon="chevron" className="song-up" label={t('song.playNext')} disabled={i === 0} onClick={() => void call('song:move', item.id, 0)} />
               <FavoriteButton item={item} />
-              <IconButton icon="external" label={t(item.provider === 'yandex' ? 'song.ym.open' : 'song.openYoutube')} onClick={() => void call('shell:openExternal', item.url)} />
+              <IconButton icon="external" label={t(openMusicService(item.provider))} onClick={() => void call('shell:openExternal', item.url)} />
               <IconButton icon="lock" label={t('song.banTrack')} onClick={() => void call('song:banVideo', item.videoId)} />
               {item.source !== 'manual' && <IconButton icon="ban" label={t('song.banUser', { user: item.userName })} onClick={() => void call('song:banUser', item.userName)} />}
               <IconButton icon="x" label={t('common.delete')} onClick={() => void call('song:remove', item.id)} />
@@ -561,7 +579,7 @@ function SongBackground() {
               <TextInput value={jam.name} onChange={(name) => set({ jams: jams.map((item) => item.id === jam.id ? { ...item, name: name.slice(0, 60) } : item) })} />
             </div>
             <div className="song-item-actions">
-              <IconButton icon="external" label={t('song.openYoutube')} onClick={() => void call('shell:openExternal', jam.videoId ? `https://www.youtube.com/watch?v=${jam.videoId}&list=${jam.listId}` : `https://www.youtube.com/playlist?list=${jam.listId}`)} />
+              <IconButton icon="external" label={t(openMusicService(jam.provider))} onClick={() => void call('shell:openExternal', youtubeTrackUrl(jam.videoId ?? '', jam.provider, jam.listId))} />
               <IconButton icon="x" label={t('common.delete')} onClick={() => set({ jams: jams.filter((item) => item.id !== jam.id), backgroundJamId: jamId === jam.id ? '' : cfg.backgroundJamId })} />
             </div>
           </li>
@@ -579,12 +597,12 @@ function SongBackground() {
           <li key={track.videoId} data-bg-track={track.videoId} className={playing === track.videoId ? 'playing' : ''} onDoubleClick={() => void callOk('song:favoritePlay', track.videoId)}>
             <TrackCover videoId={track.videoId} cover={track.cover} lazy />
             <div className="song-item-info">
-              <strong>{track.title ?? `https://youtu.be/${track.videoId}`}</strong>
+              <strong>{track.title ?? (track.kind === 'local' ? track.file ?? track.videoId.slice('local:'.length) : trackUrl(track))}</strong>
               <span className="muted small">{playing === track.videoId ? t('song.bg.now') : t(trackSource(track))}</span>
             </div>
             <div className="song-item-actions">
               <IconButton icon="play" label={t('song.fav.play')} onClick={() => void callOk('song:favoritePlay', track.videoId)} />
-              {track.kind !== 'local' && <IconButton icon="external" label={t(track.kind === 'yandex' ? 'song.ym.open' : 'song.openYoutube')} onClick={() => void call('shell:openExternal', trackUrl(track))} />}
+              {track.kind !== 'local' && <IconButton icon="external" label={t(openMusicService(track.kind))} onClick={() => void call('shell:openExternal', trackUrl(track))} />}
               <IconButton icon="x" label={t('common.delete')} onClick={() => void call('song:favoriteRemove', track.videoId)} />
             </div>
           </li>
@@ -1207,7 +1225,10 @@ function GoalsDetail() {
                         <NumberInput value={g.donationMaxAmount ?? 0} min={0} onChange={(donationMaxAmount) => update({ donationMaxAmount })} />
                       </Field>
                       <Field label={t('goals.sources')} wide>
-                        <div className="row-gap wrap">{(['donationalerts', 'streamlabs', 'streamelements'] as const).map((source) => <Toggle key={source} checked={(g.donationSources ?? []).includes(source)} onChange={(on) => update({ donationSources: on ? [...(g.donationSources ?? []), source] : (g.donationSources ?? []).filter((x) => x !== source) })} label={source === 'donationalerts' ? 'DonationAlerts' : source === 'streamlabs' ? 'Streamlabs' : 'StreamElements'} />)}</div>
+                        <div className="row-gap wrap">{DONATION_SOURCES.map((source) => {
+                          const selected = g.donationSources ?? DONATION_SOURCES;
+                          return <Toggle key={source} checked={selected.includes(source)} onChange={(on) => update({ donationSources: on ? [...selected, source] : selected.filter((item) => item !== source) })} label={DONATION_PROVIDERS[source].name} />;
+                        })}</div>
                       </Field>
                     </>}
                     <Field label={t('goals.showAmounts')}><Toggle checked={g.showAmounts ?? true} onChange={(showAmounts) => update({ showAmounts })} /></Field>

@@ -457,6 +457,25 @@ describe('song requests', () => {
     expect(musicLinkInText(`https://music.youtube.com/watch?v=${first}`)).toMatchObject({ kind: 'youtube', videoId: first });
   });
 
+  it('keeps YouTube Music links through playback, favourites and background mixes', async () => {
+    const { ctx, service, lookup } = setup();
+    const url = `https://music.youtube.com/watch?v=${first}`;
+    const message = () => service.overlayMessage as Extract<typeof service.overlayMessage, { type: 'song' }>;
+    service.setPlayerConnected(true);
+    await service.request(`${url}&si=share`, 'Ann', 'chat', 'ytm');
+    await vi.waitFor(() => expect(message().request).toMatchObject({ provider: 'youtubeMusic', videoId: first, url }));
+    expect(lookup).toHaveBeenCalledWith(first);
+    expect(service.toggleFavorite('ytm')).toBe(true);
+    expect(ctx.settings.get('songRequests').backgroundTracks).toEqual([{ videoId: first, kind: 'youtubeMusic', title: 'Song title' }]);
+    expect(await service.playerFinished('ytm', message().nonce!)).toBe(true);
+    expect(ctx.settings.get('songQueue')).toEqual([]);
+    const mix = `https://music.youtube.com/watch?v=${second}&list=RD${second}`;
+    await service.addJam(mix);
+    const [jam] = ctx.settings.get('songRequests').jams;
+    ctx.settings.set('songRequests', { ...ctx.settings.get('songRequests'), backgroundEnabled: true, backgroundJamId: jam.id });
+    await vi.waitFor(() => expect(message()).toMatchObject({ background: true, request: { provider: 'youtubeMusic', playlistId: `RD${second}`, url: mix } }));
+  });
+
   it('reads videos from a YouTube search response, without live streams and long videos', () => {
     const video = (videoId: string, length?: string) => ({ videoRenderer: { videoId, title: { runs: [{ text: 'Artist - ' }, { text: videoId }] }, ...(length ? { lengthText: { simpleText: length } } : {}) } });
     const data = { contents: { sections: [{ items: [{ channelRenderer: { channelId: 'x' } }, video(first, '3:45'), video('aaaaaaaaaaa'), video('bbbbbbbbbbb', '1:02:00'), video(second, '4:01'), video(first, '3:45')] }] } };

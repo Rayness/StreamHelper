@@ -1,4 +1,5 @@
 import { normalizeWorkspaceCards, normalizeMonitorLayout } from './workspace';
+import { DONATION_SOURCES } from './events';
 import { defaultEventStudio, normalizeEventStudio } from './eventStudio';
 import type {
   AppearanceSettings,
@@ -264,7 +265,7 @@ export function defaultGoal(lang: Language): Goal {
     textColor: '#ffffff',
     donationMinAmount: 0,
     donationMaxAmount: 0,
-    donationSources: ['donationalerts', 'streamlabs', 'streamelements'],
+    donationSources: [...DONATION_SOURCES],
     showPercent: true,
     showAmounts: true,
     fontFamily: 'Montserrat',
@@ -821,6 +822,7 @@ export function defaultSettings(lang: Language): Settings {
     donationalerts: { clientId: DEFAULT_DA_CLIENT_ID, enabled: false },
     streamlabs: { enabled: false },
     streamelements: { enabled: false, channelId: '' },
+    donatex: { enabled: false },
     streamerbot: { enabled: false, port: 7474 },
     discord: { enabled: false, notifyLive: true, notifyOffline: false, notifyDonations: true },
     telegram: defaultTelegram(lang),

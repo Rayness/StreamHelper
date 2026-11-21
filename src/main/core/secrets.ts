@@ -32,12 +32,14 @@ export interface SecretsData {
   kawaki?: KawakiSession;
   streamlabsSocketToken?: string;
   streamelementsJwt?: string;
+  donatexToken?: string;
   discordWebhookUrl?: string;
   telegramBotToken?: string;
   /** The live announcement in Telegram, so a restart mid-stream neither posts again nor loses it. */
   telegramPost?: { startedAt: number; chatId: string; messageId: number; photo: boolean; pinned: boolean; endedAt?: number };
   /** Lets the captions microphone page (in Chrome or Edge) send what it heard. */
   captionsToken?: string;
+  browserMusicToken?: string;
   obsPassword?: string;
   dockToken?: string;
   /** Remote access for moderators: each moderator signs in with their own key. */

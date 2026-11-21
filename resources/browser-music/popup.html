@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>StreamHelper Browser Music</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { font: 14px system-ui, sans-serif; margin: 16px; width: 285px; }
+    h1 { font-size: 16px; margin: 0 0 10px; }
+    p { line-height: 1.4; }
+    input { width: 100%; box-sizing: border-box; padding: 6px; margin: 0 0 10px; }
+    button { padding: 6px 10px; }
+    #status:empty { display: none; }
+  </style>
+</head>
+<body>
+  <h1>StreamHelper Browser Music</h1>
+  <form>
+    <p id="hint"></p>
+    <input id="link" type="password" required aria-labelledby="hint" autocomplete="off" spellcheck="false">
+    <button id="connect" type="submit"></button>
+  </form>
+  <button id="disconnect" type="button" hidden></button>
+  <p id="status" role="status"></p>
+  <script src="popup.js"></script>
+</body>
+</html>

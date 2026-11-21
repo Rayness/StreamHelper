@@ -5,6 +5,7 @@ import type { MusicService } from './music';
 import { hasPermission } from '../bot/permissions';
 import { parseCommand } from '../bot/variables';
 import { donationAmount } from '@shared/events';
+import { youtubeMusicLink, youtubeTrackUrl } from '@shared/musicSources';
 
 const VIDEO_ID = /^[A-Za-z0-9_-]{11}$/;
 
@@ -219,7 +220,7 @@ export function trackOf(item: SongRequest): SongTrack {
     return { videoId: item.videoId, kind: 'yandex', ...(item.title ? { title: item.title } : {}), ...(item.cover ? { cover: item.cover } : {}),
       ...(item.yandexAlbumId ? { albumId: item.yandexAlbumId } : {}), ...(item.durationMs ? { durationMs: item.durationMs } : {}) };
   }
-  return { videoId: item.videoId, ...(item.title ? { title: item.title } : {}) };
+  return { videoId: item.videoId, ...(item.provider === 'youtubeMusic' ? { kind: item.provider } : {}), ...(item.title ? { title: item.title } : {}) };
 }
 
 export interface SearchHit { videoId: string; title: string }
@@ -639,15 +640,17 @@ export class SongRequestService {
 
   add(url: string, userName = 'Streamer', source: SongRequest['source'] = 'manual', id = randomBytes(10).toString('hex'), extra: Extra = {}): void {
     const remote = extra.provider === 'yandex' && !!extra.yandexTrackId;
+    const youtubeMusic = !remote && youtubeMusicLink(url);
     const videoId = remote ? `ym:${extra.yandexTrackId}` : youtubeVideoId(url);
     if (!videoId) throw new Error('Send a single YouTube video link');
     const queue = this.ctx.settings.get('songQueue');
     if (queue.length >= Math.max(1, this.ctx.settings.get('songRequests').maxQueue)) throw new Error('Song request queue is full');
     if (queue.some((item) => item.videoId === videoId)) throw new Error('This video is already in the queue');
     const request: SongRequest = {
-      id, videoId, url: remote ? yandexUrl({ trackId: extra.yandexTrackId!, albumId: extra.yandexAlbumId }) : `https://www.youtube.com/watch?v=${videoId}`, userName, source, requestedAt: Date.now(),
+      id, videoId, url: remote ? yandexUrl({ trackId: extra.yandexTrackId!, albumId: extra.yandexAlbumId }) : youtubeTrackUrl(videoId, youtubeMusic ? 'youtubeMusic' : undefined), userName, source, requestedAt: Date.now(),
       ...(extra.title ? { title: extra.title } : {}), ...(extra.redemption ? { redemption: extra.redemption } : {}),
       ...(remote ? { provider: 'yandex' as const, yandexTrackId: extra.yandexTrackId, ...(extra.yandexAlbumId ? { yandexAlbumId: extra.yandexAlbumId } : {}), ...(extra.cover ? { cover: extra.cover } : {}), ...(extra.durationMs ? { durationMs: extra.durationMs } : {}) } : {}),
+      ...(youtubeMusic ? { provider: 'youtubeMusic' as const } : {}),
     };
     this.ctx.settings.set('songQueue', [...queue, request]);
     void this.maybeStart();
@@ -839,7 +842,7 @@ export class SongRequestService {
       return { ...base, provider: 'yandex', yandexTrackId: trackId, url: yandexUrl({ trackId, albumId: track.albumId }),
         ...(track.albumId ? { yandexAlbumId: track.albumId } : {}), ...(track.cover ? { cover: track.cover } : {}), ...(track.durationMs ? { durationMs: track.durationMs } : {}) };
     }
-    return { ...base, url: `https://www.youtube.com/watch?v=${track.videoId}` };
+    return { ...base, provider: track.kind, url: youtubeTrackUrl(track.videoId, track.kind) };
   }
 
   /** Nothing plays any more: the Yandex Music app gets the streamer's own music back. */
@@ -859,8 +862,8 @@ export class SongRequestService {
     if (jam) {
       // The overlay walks the mix itself and remembers where a request interrupted it.
       if (this.bgFailed.has(jam.listId) || cfg.videoLayout === 'queue' || !this.ctx.state.current.songRequests.playerConnected) return this.releaseIdleRemote();
-      const url = jam.videoId ? `https://www.youtube.com/watch?v=${jam.videoId}&list=${jam.listId}` : `https://www.youtube.com/playlist?list=${jam.listId}`;
-      this.background = { id: `bg_${randomBytes(6).toString('hex')}`, videoId: jam.videoId ?? '', playlistId: jam.listId, url, userName: '', source: 'manual', requestedAt: Date.now(), title: jam.name };
+      const url = youtubeTrackUrl(jam.videoId ?? '', jam.provider, jam.listId);
+      this.background = { id: `bg_${randomBytes(6).toString('hex')}`, videoId: jam.videoId ?? '', playlistId: jam.listId, url, provider: jam.provider, userName: '', source: 'manual', requestedAt: Date.now(), title: jam.name };
     } else {
       const tracks = (cfg.backgroundTracks ?? []).filter((track) => !this.bgFailed.has(track.videoId) && this.trackReady(track));
       if (!tracks.length) return this.releaseIdleRemote();
@@ -1015,7 +1018,7 @@ export class SongRequestService {
     if (check && !check.ok) throw new Error(this.reason(check.reason));
     if (exists()) return;
     const cfg = this.ctx.settings.get('songRequests');
-    this.ctx.settings.set('songRequests', { ...cfg, backgroundTracks: [...(cfg.backgroundTracks ?? []), { videoId, ...(check?.title ? { title: check.title } : {}) }] });
+    this.ctx.settings.set('songRequests', { ...cfg, backgroundTracks: [...(cfg.backgroundTracks ?? []), { videoId, ...(youtubeMusicLink(url) ? { kind: 'youtubeMusic' } : {}), ...(check?.title ? { title: check.title } : {}) }] });
   }
 
   /** Add a YouTube mix or public playlist the streamer can switch the background music to. */
@@ -1034,7 +1037,7 @@ export class SongRequestService {
     if (exists()) return;
     const cfg = this.ctx.settings.get('songRequests');
     const jams = cfg.jams ?? [];
-    const jam: SongJam = { id: randomBytes(6).toString('hex'), name: (name.trim() || title || `${this.ru ? 'Джем' : 'Jam'} ${jams.length + 1}`).slice(0, 60), ...parsed };
+    const jam: SongJam = { id: randomBytes(6).toString('hex'), name: (name.trim() || title || `${this.ru ? 'Джем' : 'Jam'} ${jams.length + 1}`).slice(0, 60), ...parsed, ...(youtubeMusicLink(url) ? { provider: 'youtubeMusic' } : {}) };
     this.ctx.settings.set('songRequests', { ...cfg, jams: [...jams, jam] });
   }
 

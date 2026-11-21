@@ -16,7 +16,7 @@ const hashFile = async (path, algorithm, encoding) => { const hash=createHash(al
 (async () => {
   const packaged = JSON.parse(asar.extractFile(archive,'package.json').toString());
   assert.equal(packaged.version,version);
-  let codeFiles=0,overlayFiles=0;
+  let codeFiles=0,overlayFiles=0,browserExtensionFiles=0;
   for (const file of files(join(root,'out'))) {
     const path=relative(root,file);
     assert.equal(digest(asar.extractFile(archive,path)),digest(readFileSync(file)),`Packaged code mismatch: ${path}`);
@@ -27,9 +27,15 @@ const hashFile = async (path, algorithm, encoding) => { const hash=createHash(al
     assert.equal(digest(readFileSync(join(output,'win-unpacked/resources/overlays',path))),digest(readFileSync(file)),`Packaged overlay mismatch: ${path}`);
     overlayFiles++;
   }
+  for (const file of files(join(root,'resources/browser-music'))) {
+    const path=relative(join(root,'resources/browser-music'),file);
+    assert.equal(digest(readFileSync(join(output,'win-unpacked/resources/browser-music',path))),digest(readFileSync(file)),`Packaged browser extension mismatch: ${path}`);
+    browserExtensionFiles++;
+  }
   const listing=asar.listPackage(archive).map(p=>p.replace(/^[/\\]/,''));
   assert(!listing.some(p=>p.endsWith('secrets.bin')),'Secrets must not be packaged');
   assert(listing.includes(join('src','main','winrt','generated','index.js')),'Windows media bindings missing');
+  assert(listing.includes(join('node_modules','@microsoft','signalr','package.json')),'DonateX SignalR client missing');
   const natives=listing.filter(p=>p.endsWith('.node'));
   assert(natives.length>0,'Native modules missing');
   assert(natives.some(p=>p.includes('win32-x64')),'Windows x64 native module missing');
@@ -42,11 +48,16 @@ const hashFile = async (path, algorithm, encoding) => { const hash=createHash(al
   }
   const manifest=readFileSync(join(output,'latest.yml'),'utf8');
   assert.equal(/^version: (.+)$/m.exec(manifest)[1],version);
-  const installer=join(output,`StreamHelper-Setup-${version}.exe`);
+  const installerName=`StreamHelper-Setup-${version}.exe`;
+  const installer=join(output,installerName);
   assert.equal(await hashFile(installer,'sha512','base64'),/^sha512: (.+)$/m.exec(manifest)[1],'Installer SHA512 mismatch');
   const sha256=await hashFile(installer,'sha256','hex');
-  assert(readFileSync(join(output,'SHA256SUMS.txt'),'utf8').startsWith(sha256+'  '),'Installer SHA256 mismatch');
-  const result={ passed:true,version,codeFiles,overlayFiles,nativeFiles:natives.length,installerSha256:sha256 };
+  const checksums=readFileSync(join(output,'SHA256SUMS.txt'),'utf8').trim().split(/\r?\n/);
+  for (const name of [installerName,`${installerName}.blockmap`,'latest.yml']) {
+    const sha=name===installerName?sha256:await hashFile(join(output,name),'sha256','hex');
+    assert(checksums.includes(`${sha}  ${name}`),`Release asset SHA256 mismatch: ${name}`);
+  }
+  const result={ passed:true,version,codeFiles,overlayFiles,browserExtensionFiles,nativeFiles:natives.length,installerSha256:sha256 };
   writeFileSync(join(output,'package-verification.json'),JSON.stringify(result,null,2));
   console.log(JSON.stringify(result,null,2));
 })().catch(error=>{console.error(error);process.exitCode=1;});

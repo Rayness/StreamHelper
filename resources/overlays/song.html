@@ -83,7 +83,7 @@
     function armStart(){clearTimeout(startTimer);startTimer=setTimeout(startTimeout,START_WAIT_MS)}
     function startTimeout(){
       startTimer=null;
-      if(!active||reported||active.paused||active.request.provider)return;
+      if(!active||reported||active.paused||active.request.provider==='yandex'||active.request.provider==='local')return;
       let state=null;try{state=player&&playerReady?player.getPlayerState():null}catch(_){/* player still loading */}
       // Buffering means YouTube is answering, just slowly: give it more time instead of starting over.
       if(state!==null&&state===YT.PlayerState.BUFFERING&&Date.now()-startedAt<BUFFERING_MAX_MS){armStart();return}
