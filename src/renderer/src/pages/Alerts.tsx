@@ -154,7 +154,7 @@ export function Alerts() {
             <p className="muted small">{t(tier ? 'alerts.tierStyleHint' : 'alerts.sharedStyleHint')}</p>
             {!tier && <OverlayStylePresets kind="alerts" compact />}
             <div className="form">
-              <Field label={t('common.font')} hint={t('common.fontHint')}>
+              <Field label={t('common.font')} hint={t('common.fontHint')} wide>
                 <FontPicker value={style.fontFamily} onChange={(fontFamily) => setStyle({ fontFamily })} />
               </Field>
               <Field label={t('common.fontSize')}>
@@ -221,7 +221,7 @@ export function Alerts() {
                   onPointerMove={(e) => { if (step !== 'position' || !e.currentTarget.hasPointerCapture(e.pointerId)) return; const r=e.currentTarget.getBoundingClientRect(); setStyle({x:Math.round(Math.max(0,Math.min(100,(e.clientX-r.left)/r.width*100))),y:Math.round(Math.max(0,Math.min(100,(e.clientY-r.top)/r.height*100)))}); }}
                   onPointerUp={(e) => { if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId); }}
                   onKeyDown={(e) => { if (step !== 'position' || !e.key.startsWith('Arrow')) return; e.preventDefault(); const delta=e.shiftKey ? 5 : 1; setStyle({x:Math.max(0,Math.min(100,style.x+(e.key==='ArrowRight'?delta:e.key==='ArrowLeft'?-delta:0))),y:Math.max(0,Math.min(100,style.y+(e.key==='ArrowDown'?delta:e.key==='ArrowUp'?-delta:0)))}); }}>
-                  <ScaledFrame key={previewKey} src={`${overlayUrl}/overlay/alerts?preview=1`} width={1920} height={1080} zoomToAlert={detailPreview && step !== 'position'} maxHeight={420} message={{ type: 'alert', alert: previewAlert }} />
+                  <ScaledFrame key={previewKey} src={`${overlayUrl}/overlay/alerts?preview=1`} width={1920} height={1080} zoomToAlert={detailPreview && step !== 'position'} maxHeight={520} message={{ type: 'alert', alert: previewAlert }} />
                   {step === 'position' && <span className="alert-position-pin" style={{left:`${style.x}%`,top:`${style.y}%`}}>+</span>}
                 </div>
                 {step === 'position' && <p className="muted small">{t('alerts.dragPosition')}</p>}

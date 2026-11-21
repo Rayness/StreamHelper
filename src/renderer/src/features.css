@@ -2,7 +2,7 @@
    Loaded after styles.css and built on its tokens. */
 
 .page-wide {
-  max-width: 1640px;
+  max-width: none;
 }
 .stack-lg {
   display: flex;
@@ -216,8 +216,8 @@
 }
 .ov-split {
   display: grid;
-  grid-template-columns: minmax(0, 1.25fr) minmax(300px, 0.75fr);
-  gap: 18px;
+  grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr);
+  gap: 20px;
   align-items: start;
 }
 .ov-split.stacked {

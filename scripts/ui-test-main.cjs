@@ -152,6 +152,10 @@ app.whenReady().then(async () => {
   await click('2. Оформление');
   assert.equal(await js(`document.querySelectorAll('[data-overlay-preset]').length`),5,'5 curated overlay style presets missing');
   await capture('alerts-appearance');
+  await window.setSize(2560,1440); await delay(150);
+  assert(await js(`document.querySelector('.workspace-single').getBoundingClientRect().width`) > 2100,'maximized layout should fill wide screens');
+  await capture('alerts-wide');
+  await window.setSize(1360,900); await delay(100);
   await js(`document.querySelector('[data-nav="dashboard"]').click()`);
   await until(`!!document.querySelector('.monitor-grid')`,'monitor missing');
   assert.equal(await js(`!!document.querySelector('[data-testid="live-topbar"]')`),true,'live broadcast topbar missing on Live Panel');

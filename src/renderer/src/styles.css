@@ -450,7 +450,8 @@ p {
 
 .page {
   padding: 26px 30px 40px;
-  max-width: 1400px;
+  width: 100%;
+  max-width: none;
   display: flex;
   flex-direction: column;
   gap: 16px;
